@@ -39,8 +39,8 @@
 ## 4. Service Mesh / xDS Connection Failure
 
 - **症状**：sidecar 起不来、`8502` xDS 拉不到配置、服务间 mTLS 握手失败。
-- **原因**：`primary_datacenter` 未设（CA 根缺失）；gRPC 8502/8503 被拦；Envoy 版本不兼容（2.0 需 Envoy 1.37.x）；ACL 缺 `mesh:write`（2.0.4 起附 EnvoyExtension 需它）。
-- **修复**：确认主 DC 与 CA 复制正常；放开 8502/8503；对齐 Envoy 版本；补 `mesh:write` 权限。详见 [Mesh](/docs/CS/Framework/consul/mesh.md)。
+- **原因**：`primary_datacenter` 未设（CA 根缺失）；gRPC 8502/8503 被拦；Envoy 版本不兼容（2.x 需 Envoy 1.37.x+）；ACL 缺 `mesh:write`（2.x 的 Envoy escape-hatch 通道需要它）。
+- **修复**：确认主 DC 与 CA 复制正常（2.x 的 CA 协调失败不再阻塞 leader，转入后台重试，看 `Failed to initialize Connect CA` 日志）；放开 8502/8503；对齐 Envoy 版本；补 `mesh:write` 权限。另注：2.x 的 state-of-the-world xDS 已废弃（返回 not implemented），过旧的 Envoy 只会说 SOTW ADS 而连不上，必须用支持 delta xDS 的 Envoy。详见 [Mesh](/docs/CS/Framework/consul/mesh.md)。
 
 ## 5. Snapshot Restore Failure
 
@@ -56,8 +56,8 @@
 
 ## 7. KV Value Too Large
 
-- **症状**：`consul kv put` 报值超限。
-- **原因**：单 value 超过 **512KB** 限制。
+- **症状**：`consul kv put` 报值超限，或日志出现 `Attempting to apply large raft entry`。
+- **原因**：单 value 超过 **512KB** 限制；未超限的大值会走 Raft 分片提交（`raftchunking.ChunkingApply`），提交延迟变高。
 - **修复**：大对象外置对象存储，KV 只存指针/元数据。详见 [KV](/docs/CS/Framework/consul/kv.md)。
 
 ## 8. Leader Flapping (Frequent Leadership Changes)
@@ -80,13 +80,13 @@
 
 ## Links
 
-- [Consul（架构与启动流程）](/docs/CS/Framework/consul/Consul.md)
-- [架构深潜](/docs/CS/Framework/consul/architecture.md)
+- [Consul（枢纽与架构）](/docs/CS/Framework/consul/Consul.md)
 - [数据模型](/docs/CS/Framework/consul/data_model.md)
 - [配置参考](/docs/CS/Framework/consul/config.md)
 - [Raft（共识）](/docs/CS/Framework/consul/raft.md)
 - [Serf（成员发现）](/docs/CS/Framework/consul/serf.md)
 - [KV（存储）](/docs/CS/Framework/consul/kv.md)
+- [Session 与锁](/docs/CS/Framework/consul/Session.md)
 - [Security（安全）](/docs/CS/Framework/consul/security.md)
 - [Mesh（服务网格）](/docs/CS/Framework/consul/mesh.md)
 - [Cluster（集群运维）](/docs/CS/Framework/consul/cluster.md)

@@ -44,14 +44,14 @@ digraph framework_index {
 - [ZooKeeper](/docs/CS/Framework/ZooKeeper/README.md)：经典协调底座，Zab 共识、znode树、watch 与 session 配方。
 - [Nacos](/docs/CS/Framework/nacos/README.md)：配置中心 + 注册中心，AP（Distro）与 CP（JRaft）双模式。
 - [Apollo](/docs/CS/Framework/Apollo/Apollo.md)：携程出品的分布式**配置管理中心**，定位是「配置发布平台」——app/env/cluster/namespace 四维坐标、修改与发布双权限、灰度分支、编辑审计。已拆为**枢纽 + 分册**（[Architecture](/docs/CS/Framework/Apollo/Architecture.md) / [Client](/docs/CS/Framework/Apollo/Client.md) / [Config Push](/docs/CS/Framework/Apollo/Config_Push.md) / [Namespace](/docs/CS/Framework/Apollo/Namespace.md) / [Portal](/docs/CS/Framework/Apollo/Portal.md) / [Storage](/docs/CS/Framework/Apollo/Storage.md) / [Deployment and Ops](/docs/CS/Framework/Apollo/Deployment_and_Ops.md)），四条判定线是「四维坐标先问维度、服务端唯一外部依赖 MySQL、推送是通知+拉取两段式、Java 客户端已拆到独立仓库 apollo-java」。版本基线：服务端 3.0.0（Java 17，database-discovery 默认），客户端线独立演进。
-- [Consul](/docs/CS/Framework/consul/README.md)：服务网络平台，服务发现 + 服务网格（Envoy mTLS）+ 多DC 联邦，另有成员发现（Serf）与网关专篇。
-- [Eureka](/docs/CS/Framework/eureka/README.md)：Netflix 注册中心，AP 自注册/续约。枢纽 + Server/Client 两端 + [注册表](/docs/CS/Framework/eureka/registry.md)（写路径与剔除）、[缓存](/docs/CS/Framework/eureka/cache.md)、[自我保护](/docs/CS/Framework/eureka/self_preservation.md)、[集群复制](/docs/CS/Framework/eureka/replication.md) 四条主线，配套 REST 契约、传输层、[配置](/docs/CS/Framework/eureka/config.md)、[调优](/docs/CS/Framework/eureka/tuning.md) 与 [排障](/docs/CS/Framework/eureka/troubleshooting.md)。
+- [Consul](/docs/CS/Framework/consul/Consul.md)：服务网络平台，服务发现 + 服务网格（Envoy mTLS）+ 多DC 联邦；另有成员发现（Serf）、KV/Session 锁、网关与安全专篇，源码级核自 v2.1.0。
+- [Eureka](/docs/CS/Framework/eureka/README.md)：Netflix 注册中心，AP 自注册/续约。枢纽 + Server/Client 两端 + [注册表](/docs/CS/Framework/eureka/registry.md)（写路径与剔除）、[缓存](/docs/CS/Framework/eureka/cache.md)、[自我保护](/docs/CS/Framework/eureka/self_preservation.md)、[集群复制](/docs/CS/Framework/eureka/replication.md) 四条主线，配套 REST 契约、传输层、[配置](/docs/CS/Framework/eureka/config.md)、[调优](/docs/CS/Framework/eureka/tuning.md) 与 [排障](/docs/CS/Framework/eureka/troubleshooting.md)；[停止维护与结构性不足](/docs/CS/Framework/eureka/shortcomings.md) 为源码级分析专页。
 - [BookKeeper](/docs/CS/Framework/BookKeeper/BookKeeper.md)：可独立部署的 **append-only 分布式日志存储**（WAL / 消息存储底座，[Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md) 的存储引擎）。枢纽 + [Ledger](/docs/CS/Framework/BookKeeper/Ledger.md)（元数据与 fencing/recovery）、[Write](/docs/CS/Framework/BookKeeper/Write.md)（quorum 与 ensemble change）、[Read](/docs/CS/Framework/BookKeeper/Read.md)（LAC 与 speculative read）、[Storage](/docs/CS/Framework/BookKeeper/Storage.md)（journal/entry log/index 与 GC）、[Cluster](/docs/CS/Framework/BookKeeper/Cluster.md)（元数据布局与 auto-recovery）、[Ops](/docs/CS/Framework/BookKeeper/Ops.md)（配置与运维）。
 
 ## Service Governance and Operations
 
 - [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)：RPC 框架，SPI 扩展、自定义协议、服务治理与注册发现。
-- [Sentinel](/docs/CS/Framework/Sentinel/Sentinel.md)：流量治理（限流、熔断、热点、系统自适应保护）。
+- [Sentinel](/docs/CS/Framework/Sentinel/Sentinel.md)：流量治理（限流、熔断、热点、系统自适应保护、集群流控与动态数据源）。
 - [Seata](/docs/CS/Framework/Seata/Seata.md)：分布式事务（AT / TCC / XA）。
 - [HSF](/docs/CS/Framework/HSF/HSF.md)、[SOFARegistry](/docs/CS/Framework/SOFARegistry.md)：阿里 Sofas 中间件体系（RPC 框架与注册中心）。
 - [Hippo4j](/docs/CS/Framework/Hippo4j.md)：动态线程池与监控告警。

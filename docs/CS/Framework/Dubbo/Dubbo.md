@@ -1,3 +1,5 @@
+# Apache Dubbo 3.3.6 Architecture and Principles
+
 ## Introduction
 
 [Apache Dubbo](http://dubbo.apache.org/) 是一款易用、高性能的 WEB 和 RPC 框架，同时为构建企业级微服务提供服务发现、流量治理、可观测、认证鉴权等能力、工具与最佳实践。
@@ -51,6 +53,55 @@ Fig.1. Architecture
 - **Dubbo 数据面**。代表集群部署的所有 Dubbo 进程，进程之间通过 RPC 协议实现数据交换，Dubbo 定义了微服务应用开发与调用规范并负责完成数据传输的编解码工作。数据面内部分为**服务消费者**（发起业务调用或 RPC 通信的 Dubbo 进程）与**服务提供者**（接收业务调用或 RPC 通信的 Dubbo 进程）。
 
 从数据面视角，Dubbo 帮助解决了微服务实践中的以下问题：作为服务开发框架约束了微服务定义、开发与调用的规范，定义了服务治理流程及适配模式；作为 RPC 通信协议实现解决服务间数据传输的编解码问题。
+
+下面是把「一次消费方调用」展开后的核心调用链。`Cluster` 把 `Directory` 里的多个 `Invoker` 伪装成一个，内部固定按 **Router 筛子集 → LoadBalance 选一个 → 失败由 Cluster 容错重试** 的顺序执行——这三个抽象的职责边界是最常被讲错的地方：
+
+```dot
+digraph DubboCallChain {
+  rankdir=TB;
+  node [shape=box, style=rounded];
+
+  subgraph cluster_control {
+    label="控制面 / Control Plane";
+    reg [label="Registry\nNacos / ZooKeeper\n地址注册与推送"];
+    meta [label="MetadataReport\n接口↔应用名映射"];
+  }
+
+  subgraph cluster_consumer {
+    label="消费侧 / Consumer";
+    proxy [label="Proxy\nJavassistProxyFactory\nInvocation 封装"];
+    cluster [label="Cluster\nFailoverCluster\n伪装多 Invoker 为 1"];
+    dir [label="Directory\nRegistryDirectory\nList<Invoker>"];
+    router [label="Router\n*StateRouter\n筛子集"];
+    lb [label="LoadBalance\nRandomLoadBalance\n选一个"];
+  }
+
+  subgraph cluster_provider {
+    label="提供侧 / Provider";
+    pfilter [label="Filter 链\nFilter.Listener"];
+    service [label="Service 实现\n反射 / Wrapper 调用"];
+  }
+
+  subgraph cluster_transport {
+    label="传输 / Protocol + Remoting";
+    proto [label="Protocol\nexport / refer\nDubboProtocol / Triple"];
+    exch [label="Exchange\nHeaderExchanger\n同步转异步"];
+    trans [label="Transport\nNettyTransporter\nCodec2 编解码"];
+  }
+
+  reg -> dir [label="订阅 / 推送"];
+  meta -> dir [label="接口→应用名"];
+  proxy -> cluster;
+  cluster -> dir;
+  dir -> router [label="bitList"];
+  router -> lb [label="子集"];
+  lb -> proto [label="选中 Invoker"];
+  proto -> exch -> trans;
+  trans -> pfilter [label="请求上行"];
+  pfilter -> service;
+  service -> pfilter [label="结果下行"];
+}
+```
 
 Dubbo 从设计上**不绑定任何一款特定通信协议**，HTTP/2、REST、gRPC、JsonRPC、Thrift、Hessian2 等几乎所有主流的通信协议 Dubbo 都可以提供支持——但要注意 3.3.6 主仓库里实际存在的协议模块远少于这个列表，见 [Architecture](/docs/CS/Framework/Dubbo/Architecture.md?id=protocol-matrix-and-its-336-status)。
 

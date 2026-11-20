@@ -56,7 +56,7 @@ BSL 本身允许复制、修改、再分发与非生产使用；**生产使用**
 
 ## IBM Impact
 
-- **Licensor 变更**：2026-03-18 起 LICENSE 写 IBM 为 Licensor，许可文本与 4 年 Change Date 不变。
+- **Licensor 变更**：2026-03-18 起 LICENSE 写 IBM 为 Licensor，许可文本与 4 年 Change Date 不变。v2.x 源码里可直接看到证据——每个文件版权头为 `Copyright IBM Corp. 2024, 2026`，SPDX 标识 `SPDX-License-Identifier: BUSL-1.1`。
 - **支持模型（从 2.0 / 2026-04 起）**：Consul Enterprise 转入 IBM **Support Cycle-2（SC2）**——"2 + 1 + 3"：2 年基础支持 + 1 年关键扩展支持 + 3 年持续支持（无新修复）。社区版无合同支持，补丁只随仍在维护的分支取。
 - **版本化方案**：从 2.0 起采用 IBM 的 **V.M.F** 节奏（每年 4 月 Version、10 月 Modification、每月 Fix），与旧 semantic versioning 不同。
 

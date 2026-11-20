@@ -137,6 +137,7 @@ digraph Replication {
 ## Links
 
 - [Eureka](/docs/CS/Framework/eureka/Eureka.md)
+- [Shortcomings](/docs/CS/Framework/eureka/shortcomings.md?id=best-effort-replication)
 - [Registry](/docs/CS/Framework/eureka/registry.md)
 - [Self Preservation](/docs/CS/Framework/eureka/self_preservation.md)
 - [REST API](/docs/CS/Framework/eureka/rest_api.md)

@@ -2,6 +2,15 @@
 
 ## Introduction
 
+Nacos Service Registry（服务发现子系统）回答一个问题：服务实例把「我在哪、还活着吗」写到哪里，消费者又如何从任意节点读到全量实例列表。它与 [Config Center](/docs/CS/Framework/nacos/config.md) 同进程部署，却选了**相反的一致性模型**——这正是理解整套命名的钥匙。
+
+> 版本基线：Nacos 3.2.4（commit 2c587c0，Java 17 / Spring Boot 3）。以下片段均取自该 tag，行号不落正文。
+
+三点先放在前面，它们最容易被旧资料带偏：
+
+- **「临时 / 持久实例走不同协议」不是一句口号，而是 `isEphemeral()` 的真实分流**：临时实例（默认）走 AP 的 Distro + 内存注册表，持久实例走 CP 的 JRaft。同一个 `registerInstance` 入口会在 `ClientOperationService` 的两个实现间分道扬镳。
+- **读请求不转发**：每台节点内存里都有全量实例，读直接本地返回；只有写请求才按责任分片转发。这与「写主读从」的直觉相反。
+- **3.x 的注册入口已经是 v2 Client 模型**：`ServiceManager.registerInstance` / `KeyBuilder.buildInstanceListKey` / `ConsistencyService.listen` 这套 v1 双写监听在 3.2.4 已全部移除；HTTP 注册/发现也收敛到 `InstanceControllerV3`（`/v3`）。下文遇到旧资料会逐处用 `> [!WARNING]` 标注。
 
 ### Data Model
 
@@ -27,7 +36,45 @@
 
 ## Client Registry
 
+一次服务发现跨越 client 与 server 两侧，注册（写）与订阅（读）走的是两条截然不同的路径。把主链路先画出来，后文各小节只是把每个方框展开：
 
+```dot
+digraph NamingFlow {
+  rankdir=TB;
+  node [shape=box, style=rounded];
+
+  subgraph cluster_client {
+    label="客户端 / client";
+    reg [label="NacosNamingService\nregisterInstance"];
+    proxy [label="NamingClientProxyDelegate\n按 isEphemeral 分流"];
+    grpc [label="NamingGrpcClientProxy\nInstanceRequest (gRPC)"];
+    http [label="NamingHttpClientProxy\n/v3 HTTP (持久实例兜底)"];
+    sub [label="subscribe + ServiceInfoHolder\n本地缓存 + UpdateTask"];
+  }
+
+  subgraph cluster_server {
+    label="服务端 / naming";
+    handler [label="InstanceRequestHandler\n(InstanceControllerV3 for HTTP)"];
+    op [label="ClientOperationService\n临时=Distro / 持久=JRaft"];
+    store [label="ServiceStorage\n从 publisherIndexes 聚合全量"];
+    distro [label="DistroClientDataProcessor\nsyncToAllServer"];
+    rpush [label="PushDelayTask → UDP/gRPC push\n触发客户端更新"];
+  }
+
+  reg -> proxy;
+  proxy -> grpc [label="ephemeral"];
+  proxy -> http [label="persistent 且服务端不支持 gRPC"];
+  grpc -> handler;
+  http -> handler;
+  handler -> op;
+  op -> distro [label="临时实例事件"];
+  op -> store [label="索引变更"];
+  sub -> handler [label="SubscribeServiceRequest"];
+  store -> handler [label="本地全量返回"];
+  op -> rpush [label="ServiceChangedEvent"];
+  rpush -> sub [label="变更推送"];
+}
+```
 
 <!-- tabs:start -->
 
@@ -132,14 +179,22 @@ public interface NamingClientProxy extends Closeable {
 }
 
 public class NamingClientProxyDelegate implements NamingClientProxy {
+    @Override
+    public void registerService(String serviceName, String groupName, Instance instance) throws NacosException {
+        getExecuteClientProxy(instance).registerService(serviceName, groupName, instance);
+    }
+
     private NamingClientProxy getExecuteClientProxy(Instance instance) {
-        if (instance.isEphemeral() || grpcClientProxy.isAbilitySupportedByServer(AbilityKey.SERVER_SUPPORT_PERSISTENT_INSTANCE_BY_GRPC)) {
+        if (instance.isEphemeral() || grpcClientProxy.isAbilitySupportedByServer(
+            AbilityKey.SERVER_PERSISTENT_INSTANCE_BY_GRPC)) {
             return grpcClientProxy;
         }
         return httpClientProxy;
     }
 }
 ```
+
+注意这里的能力键是 `AbilityKey.SERVER_PERSISTENT_INSTANCE_BY_GRPC`：也就是说持久实例**也能**走 gRPC，前提是服务端声明支持；只有对接不支持该能力的服务端时才回退到 HTTP proxy。所以「临时=gRPC、持久=HTTP」只是常见情形，不是硬编码规则。
 
 
 ### grpc
@@ -807,24 +862,45 @@ public class NamingMetadataManager extends SmartSubscriber {
 ```
 
 
-persistentClientOperationServiceImpl
+持久实例走 CP：注册被包装成一条 Raft 写请求交给 `CPProtocol`。注意它 `extends RequestProcessor4CP`——它同时是 JRaft 状态机的请求处理器，`onApply` 时才真正落盘：
+
 ```java
-@Component(”persistentClientOperationServiceImpl“)
-public class PersistentClientOperationServiceImpl extends RequestProcessor4CP implements ClientOperationService {
-@Override
+@Component
+public class PersistentClientOperationServiceImpl extends RequestProcessor4CP
+    implements ClientOperationService {
+
+    private final PersistentIpPortClientManager clientManager;
+    private final Serializer serializer = SerializeFactory.getDefault();
+    private final CPProtocol protocol;
+
+    public PersistentClientOperationServiceImpl(final PersistentIpPortClientManager clientManager) {
+        this.clientManager = clientManager;
+        this.protocol = ApplicationUtils.getBean(ProtocolManager.class).getCpProtocol();
+        this.protocol.addRequestProcessors(Collections.singletonList(this));
+    }
+
+    @Override
     public void registerInstance(Service service, Instance instance, String clientId) {
         Service singleton = ServiceManager.getInstance().getSingleton(service);
+        if (singleton.isEphemeral()) {
+            throw new NacosRuntimeException(NacosException.INVALID_PARAM,
+                String.format(
+                    "Current service %s is ephemeral service, can't register persistent instance.",
+                    singleton.getGroupedServiceName()));
+        }
         final InstanceStoreRequest request = new InstanceStoreRequest();
         request.setService(service);
         request.setInstance(instance);
         request.setClientId(clientId);
         final WriteRequest writeRequest = WriteRequest.newBuilder().setGroup(group())
-                .setData(ByteString.copyFrom(serializer.serialize(request))).setOperation(DataOperation.ADD.name())
-                .build();
-        
+            .setData(ByteString.copyFrom(serializer.serialize(request)))
+            .setOperation(DataOperation.ADD.name())
+            .build();
+
         try {
             protocol.write(writeRequest);
-            Loggers.RAFT.info(”Client registered. service={}, clientId={}, instance={}“, service, clientId, instance);
+            Loggers.RAFT.info("Client registered. service={}, clientId={}, instance={}", service,
+                clientId, instance);
         } catch (Exception e) {
             throw new NacosRuntimeException(NacosException.SERVER_ERROR, e);
         }
@@ -832,88 +908,119 @@ public class PersistentClientOperationServiceImpl extends RequestProcessor4CP im
 }
 ```
 
+与临时实例的关键差别：临时实例写的是 `EphemeralClient` 的内存 `publishers` 并发布事件；持久实例把 `InstanceStoreRequest` 序列化后交给 JRaft，`isEphemeral()` 的方向在这里正好反过来检查——不允许往持久服务注册临时实例。
+
 
 
 
 #### DistroFilter
 
 
+写请求若打到非责任节点，由前置的 `DistroFilter` 透明转发。它只拦带 `@CanDistro` 注解的 Controller 方法（`DistroTagGenerator.getResponsibleTag` 在 3.x 产出的责任标签就是 `ip:port` 形式的 clientId），再用**取模哈希**（不是一致性哈希）判定本机是否责任节点：
+
 ```java
-public class DistroFilter implements Filter {
+@Override
+public void doFilter(ServletRequest servletRequest, ServletResponse servletResponse,
+    FilterChain filterChain)
+    throws IOException, ServletException {
+    ReuseHttpServletRequest req =
+        new ReuseHttpServletRequest((HttpServletRequest) servletRequest);
+    HttpServletResponse resp = (HttpServletResponse) servletResponse;
 
-    @Override
-    public void doFilter(ServletRequest servletRequest, ServletResponse servletResponse, FilterChain filterChain)
-            throws IOException, ServletException {
-        ReuseHttpServletRequest req = new ReuseHttpServletRequest((HttpServletRequest) servletRequest);
-        HttpServletResponse resp = (HttpServletResponse) servletResponse;
+    String urlString = req.getRequestURI();
 
-        String urlString = req.getRequestURI();
-        if (StringUtils.isNotBlank(req.getQueryString())) {
-            urlString += ”?“+req.getQueryString();
+    if (StringUtils.isNotBlank(req.getQueryString())) {
+        urlString += "?" + req.getQueryString();
+    }
+
+    try {
+        Method method = controllerMethodsCache.getMethod(req);
+
+        String path = new URI(req.getRequestURI()).getPath();
+        if (method == null) {
+            throw new NoSuchMethodException(req.getMethod() + " " + path);
         }
 
+        if (!method.isAnnotationPresent(CanDistro.class)) {
+            filterChain.doFilter(req, resp);
+            return;
+        }
+        String distroTag = distroTagGenerator.getResponsibleTag(req);
+
+        if (distroMapper.responsible(distroTag)) {
+            filterChain.doFilter(req, resp);
+            return;
+        }
+
+        // proxy request to other server if necessary:
+        String userAgent = req.getHeader(HttpHeaderConsts.USER_AGENT_HEADER);
+
+        if (StringUtils.isNotBlank(userAgent)
+            && userAgent.contains(UtilsAndCommons.NACOS_SERVER_HEADER)) {
+            // This request is sent from peer server, should not be redirected again:
+            Loggers.SRV_LOG.error("receive invalid redirect request from peer {}",
+                req.getRemoteAddr());
+            resp.sendError(HttpServletResponse.SC_BAD_REQUEST,
+                "receive invalid redirect request from peer " + req.getRemoteAddr());
+            return;
+        }
+
+        final String targetServer = distroMapper.mapSrv(distroTag);
+        // ... 复制 header / body / params
+        RestResult<String> result = HttpClient
+            .request(HTTP_PREFIX + targetServer + req.getRequestURI(), headerList, paramsValue,
+                body,
+                PROXY_CONNECT_TIMEOUT, PROXY_READ_TIMEOUT, StandardCharsets.UTF_8.name(),
+                req.getMethod());
+        String data = result.ok() ? result.getData() : result.getMessage();
         try {
-            Method method = controllerMethodsCache.getMethod(req);
-
-            String path = new URI(req.getRequestURI()).getPath();
-            if (!method.isAnnotationPresent(CanDistro.class)) {
-                filterChain.doFilter(req, resp);
-                return;
-            }
-            String distroTag = distroTagGenerator.getResponsibleTag(req);
-
-            if (distroMapper.responsible(distroTag)) {
-                filterChain.doFilter(req, resp);
-                return;
-            }
-
-            // proxy request to other server if necessary:
-            String userAgent = req.getHeader(HttpHeaderConsts.USER_AGENT_HEADER);
-
-            if (StringUtils.isNotBlank(userAgent) && userAgent.contains(UtilsAndCommons.NACOS_SERVER_HEADER)) {
-                // This request is sent from peer server, should not be redirected again:
-                Loggers.SRV_LOG.error(”receive invalid redirect request from peer {
-                }“,req.getRemoteAddr());
-                resp.sendError(HttpServletResponse.SC_BAD_REQUEST,
-                        ”receive invalid redirect request from peer “ + req.getRemoteAddr());
-                return;
-            }
-
-            final String targetServer = distroMapper.mapSrv(distroTag);
-
-            List<String> headerList = new ArrayList<>(16);
-            Enumeration<String> headers = req.getHeaderNames();
-            while (headers.hasMoreElements()) {
-                String headerName = headers.nextElement();
-                headerList.add(headerName);
-                headerList.add(req.getHeader(headerName));
-            }
-
-            final String body = IoUtils.toString(req.getInputStream(), StandardCharsets.UTF_8.name());
-            final Map<String, String> paramsValue = HttpClient.translateParameterMap(req.getParameterMap());
-
-            RestResult<String> result = HttpClient
-                    .request(HTTP_PREFIX + targetServer + req.getRequestURI(), headerList, paramsValue, body,
-                            PROXY_CONNECT_TIMEOUT, PROXY_READ_TIMEOUT, StandardCharsets.UTF_8.name(), req.getMethod());
-            String data = result.ok() ? result.getData() : result.getMessage();
-            try {
-                WebUtils.response(resp, data, result.getCode());
-            } catch (Exception ignore) {
-                Loggers.SRV_LOG.warn(”[DISTRO - FILTER] request failed: “+distroMapper.mapSrv(distroTag) + urlString);
-            }
-        } catch (AccessControlException e) {
-            resp.sendError(HttpServletResponse.SC_FORBIDDEN, ”access denied: “+ExceptionUtil.getAllExceptionMsg(e));
-        } catch (NoSuchMethodException e) {
-            resp.sendError(HttpServletResponse.SC_NOT_IMPLEMENTED,
-                    ”no such api:“+req.getMethod() + ”:“+req.getRequestURI());
-        } catch (Exception e) {
-            Loggers.SRV_LOG.warn(”[DISTRO - FILTER] Server failed: “,e);
-            resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
-                    ”Server failed, “ + ExceptionUtil.getAllExceptionMsg(e));
+            WebUtils.response(resp, data, result.getCode());
+        } catch (Exception ignore) {
+            Loggers.SRV_LOG.warn("[DISTRO-FILTER] request failed: "
+                + distroMapper.mapSrv(distroTag) + urlString);
         }
+    } catch (SecurityException e) {
+        resp.sendError(HttpServletResponse.SC_FORBIDDEN,
+            "access denied: " + ExceptionUtil.getAllExceptionMsg(e));
+    } catch (NoSuchMethodException e) {
+        resp.sendError(HttpServletResponse.SC_NOT_IMPLEMENTED,
+            "no such api:" + req.getMethod() + ":" + req.getRequestURI());
+    } catch (Exception e) {
+        Loggers.SRV_LOG.warn("[DISTRO-FILTER] Server failed: ", e);
+        resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+            "Server failed, " + ExceptionUtil.getAllExceptionMsg(e));
     }
 }
 ```
+
+`User-Agent` 里带 `NACOS-SERVER` 的请求会被拒绝再次转发——这是防止两个责任节点互相「踢皮球」形成环路的保护。真实责任判定在 `DistroMapper.responsible`：
+
+```java
+public boolean responsible(String responsibleTag) {
+    final List<String> servers = healthyList;
+    if (!switchDomain.isDistroEnabled() || EnvUtil.getStandaloneMode()) {
+        return true;
+    }
+    if (CollectionUtils.isEmpty(servers)) {
+        // means distro config is not ready yet
+        return false;
+    }
+    String localAddress = EnvUtil.getLocalAddress();
+    int index = servers.indexOf(localAddress);
+    int lastIndex = servers.lastIndexOf(localAddress);
+    if (lastIndex < 0 || index < 0) {
+        return true;
+    }
+    int target = distroHash(responsibleTag) % servers.size();
+    return target >= index && target <= lastIndex;
+}
+
+private int distroHash(String responsibleTag) {
+    return Math.abs(responsibleTag.hashCode() % Integer.MAX_VALUE);
+}
+```
+
+`index <= target <= lastIndex` 的写法是为了容忍同一地址在列表里出现多次（多网卡）；`healthyList` 在 `onEvent(MembersChangeEvent)` 里被 `Collections.sort` 排序，保证所有节点算出的哈希槽位一致——排序这一步是「各节点对责任归属达成共识」的关键，不能省。
 
 ### InstanceController
 
@@ -1060,6 +1167,82 @@ public class DistroClientDataProcessor extends SmartSubscriber implements Distro
 
 ### verify
 
+校验不是「附带在心跳里」这么笼统——它是一个独立的定时任务 `DistroVerifyTimedTask`，由 `DistroProtocol.startVerifyTask()` 按 `DistroConfig.getVerifyIntervalMillis()` 周期调度，默认 **5000ms**（配置项 `nacos.core.protocol.distro.data.verify.intervalMs`）。它对每个 `DistroDataStorage` 类型取出校验摘要（只发元信息，控制网络量级），为每个其它节点投一个 `DistroVerifyExecuteTask`：
+
+```java
+private void startVerifyTask() {
+    GlobalExecutor.schedulePartitionDataTimedSync(
+        new DistroVerifyTimedTask(memberManager, distroComponentHolder,
+            distroTaskEngineHolder.getExecuteWorkersManager()),
+        DistroConfig.getInstance().getVerifyIntervalMillis());
+}
+```
+
+```java
+public void run() {
+    try {
+        List<Member> targetServer = serverMemberManager.allMembersWithoutSelf();
+        for (String each : distroComponentHolder.getDataStorageTypes()) {
+            verifyForDataStorage(each, targetServer);
+        }
+    } catch (Exception e) {
+        Loggers.DISTRO.error("[DISTRO-FAILED] verify task failed.", e);
+    }
+}
+
+private void verifyForDataStorage(String type, List<Member> targetServer) {
+    DistroDataStorage dataStorage = distroComponentHolder.findDataStorage(type);
+    if (!dataStorage.isFinishInitial()) {
+        Loggers.DISTRO.warn(
+            "data storage {} has not finished initial step, do not send verify data",
+            dataStorage.getClass().getSimpleName());
+        return;
+    }
+    List<DistroData> verifyData = dataStorage.getVerifyData();
+    if (null == verifyData || verifyData.isEmpty()) {
+        return;
+    }
+    for (Member member : targetServer) {
+        DistroTransportAgent agent = distroComponentHolder.findTransportAgent(type);
+        if (null == agent) {
+            continue;
+        }
+        executeTaskExecuteEngine.addTask(member.getAddress() + type,
+            new DistroVerifyExecuteTask(agent, verifyData, member.getAddress(), type));
+    }
+}
+```
+
+反直觉点：**校验失败不是「等下个周期再修」，而是零延迟立即补发**。收到对方 `verify` 结果不一致后发布 `ClientVerifyFailedEvent`，`DistroClientDataProcessor` 直接调 `syncToTarget(..., 0L)`，绕开正常的 `syncDelayMillis`：
+
+```java
+private void syncToVerifyFailedServer(ClientEvent.ClientVerifyFailedEvent event) {
+    Client client = clientManager.getClient(event.getClientId());
+    if (isInvalidClient(client)) {
+        return;
+    }
+    DistroKey distroKey = new DistroKey(client.getClientId(), TYPE);
+    // Verify failed data should be sync directly.
+    distroProtocol.syncToTarget(distroKey, DataOperation.ADD, event.getTargetServer(), 0L);
+}
+```
+
+服务端收到 verify 后只是问「这个 clientId 你还活着吗」——`processVerifyData` 调 `clientManager.verifyClient(clientId)`，命中就顺带刷新一次 `ClientBeatUpdateTask` 的续约时间：
+
+```java
+public boolean processVerifyData(DistroData distroData, String sourceAddress) {
+    DistroClientVerifyInfo verifyData = ApplicationUtils.getBean(Serializer.class)
+            .deserialize(distroData.getContent(), DistroClientVerifyInfo.class);
+    if (clientManager.verifyClient(verifyData.getClientId())) {
+        return true;
+    }
+    Loggers.DISTRO.info("client {} is invalid, get new client from {}", verifyData.getClientId(), sourceAddress);
+    return false;
+}
+```
+
+`DistroProtocol.onVerify` 本体（按 `resourceType` 找 processor 分发）：
+
 ```java
 @Component
 public class DistroProtocol {
@@ -1114,8 +1297,16 @@ public class EphemeralIpPortClientManager implements ClientManager {
 
 
 #### ClientChangedEvent
-遍历所有的member
+
+触发同步的事件来自 `DistroClientDataProcessor.onEvent`（它订阅 `ClientChangedEvent` / `ClientDisconnectEvent` / `ClientVerifyFailedEvent`）。**注意同步有两道门**：`isInvalidClient` 只放行「临时 + 本机负责」的 client——持久实例的同步由 JRaft 负责，非本机负责的实例由责任节点同步，这里都直接跳过；这也是为什么每个事件都只需向「其它所有节点」广播一次：
+
 ```java
+private boolean isInvalidClient(Client client) {
+    // Only ephemeral data sync by Distro, persist client should sync by raft.
+    return null == client || !client.isEphemeral()
+        || !clientManager.isResponsibleClient(client);
+}
+
 private void syncToAllServer(ClientEvent event) {
         Client client = event.getClient();
         if (isInvalidClient(client)) {
@@ -1731,6 +1922,10 @@ Ribbon 退场后，「双注册 + 聚合订阅」这条链路在 Spring Boot 3/4
 ## Links
 
 - [Nacos](/docs/CS/Framework/nacos/Nacos.md)
+- [Nacos Client SDK and Best Practices](/docs/CS/Framework/nacos/client.md)
+- [Nacos Storage and Persistence](/docs/CS/Framework/nacos/storage.md)
+- [Nacos Operations and Tuning](/docs/CS/Framework/nacos/tuning.md)
+- [Nacos Troubleshooting](/docs/CS/Framework/nacos/troubleshooting.md)
 
 
 ## References

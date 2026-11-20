@@ -31,7 +31,7 @@ Consul 的运维可观测性来自 **telemetry**（指标导出）+ **健康检�
 | `/v1/agent/health` | 本 agent 健康（不依赖 leader） | 无 |
 | `/v1/status/peers` | Raft peer 列表 | 无 |
 
-2.0 起健康检查语义沿用：写路径依赖 leader，读（目录）可走本地 stale。
+2.0 起健康检查语义沿用：写路径依赖 leader，读（目录）可走本地 stale。2.x 补充两个观测点：① FSM 快照耗时（`fsm.persist` / `snapshot created` 日志，2.x 快照新增 resource storage 部分会更重）；② xDS 用 delta 推送后，可关注 `consul.xds.*` 相关指标看 sidecar 配置收敛延迟。
 
 ## Agent Cache
 
@@ -47,7 +47,7 @@ client agent 缓存 catalog / health 结果（[Discovery](/docs/CS/Framework/con
 
 ## Links
 
-- [Consul（架构与启动流程）](/docs/CS/Framework/consul/Consul.md)
+- [Consul（枢纽与架构）](/docs/CS/Framework/consul/Consul.md)
 - [Raft（共识）](/docs/CS/Framework/consul/raft.md)
 - [Serf（成员发现）](/docs/CS/Framework/consul/serf.md)
 - [Troubleshooting（故障排查）](/docs/CS/Framework/consul/troubleshooting.md)

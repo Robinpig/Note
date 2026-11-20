@@ -1,3 +1,5 @@
+# Dubbo ThreadPool: Dispatcher Models and Defaults
+
 ## Introduction
 
 Dubbo 的线程模型分两层：**Dispatcher** 决定「哪些通道事件交给业务线程池」，**ThreadPool** 决定「这个业务线程池长什么样」。两层的默认值都不在配置文件里，而在 SPI 注解与常量类里，因此极容易被记反。
@@ -8,7 +10,7 @@ Dubbo 的线程模型分两层：**Dispatcher** 决定「哪些通道事件交�
 - **「`threads=0` 或负值表示自动」**——不成立。`threads` 只有「读多少就是多少」的语义，`0` 就是 0；在全部线程池参数里，**只有 `iothreads` 会在非正值时回落默认值，只有 `queues` 有三态语义**。
 - **「消费端也用 `fixed`，和 Provider 一样」**——不成立。消费端线程池默认 `cached`，而且是**全应用共享的一个池**；更反直觉的是，**同步调用根本不占这个池**，业务代码实际跑在发起调用的线程上。
 
-版本基线：Apache Dubbo **3.3.6**，源码 tag `dubbo-3.3.6`。本文所有 SPI 名、默认值、行号均取自该 tag 的官方源码文件。`Dispatcher` / `ChannelHandler` / `Transporter` 的接口结构已在 [remoting.md](/docs/CS/Framework/Dubbo/remoting.md) 展开，本文不重复，只聚焦线程模型选型、线程池参数默认值与消费端线程模型。
+版本基线：Apache Dubbo **3.3.6**，源码 tag `dubbo-3.3.6`。本文所有 SPI 名、默认值均取自该 tag 的官方源码文件。`Dispatcher` / `ChannelHandler` / `Transporter` 的接口结构已在 [remoting.md](/docs/CS/Framework/Dubbo/remoting.md) 展开，本文不重复，只聚焦线程模型选型、线程池参数默认值与消费端线程模型。
 
 ## Dispatcher: Five Dispatch Models
 
@@ -17,7 +19,7 @@ Dubbo 的线程模型分两层：**Dispatcher** 决定「哪些通道事件交�
 `Dispatcher` 的 SPI 默认扩展名是 `all`：
 
 ```java
-// dubbo-remoting/dubbo-remoting-api/src/main/java/org/apache/dubbo/remoting/Dispatcher.java:28-40
+// dubbo-remoting/dubbo-remoting-api/src/main/java/org/apache/dubbo/remoting/Dispatcher.java
 @SPI(value = AllDispatcher.NAME, scope = ExtensionScope.FRAMEWORK)
 public interface Dispatcher {
 
@@ -25,7 +27,7 @@ public interface Dispatcher {
      * dispatch the message to threadpool.
      */
     @Adaptive({Constants.DISPATCHER_KEY, "dispather", "channel.handler"})
-    // The last two parameters are reserved for compatibility with the old configuration
+  // The last two parameters are reserved for compatibility with the old configuration
     ChannelHandler dispatch(ChannelHandler handler, URL url);
 }
 ```
@@ -63,7 +65,7 @@ connection=org.apache.dubbo.remoting.transport.dispatcher.connection.ConnectionO
 `direct` 与 `execution` 都会在特定条件下**不使用业务线程池**，直接在 IO 线程上调用下游 handler：
 
 ```java
-// dubbo-remoting/dubbo-remoting-api/.../transport/dispatcher/direct/DirectChannelHandler.java:38-48
+// dubbo-remoting/dubbo-remoting-api/.../transport/dispatcher/direct/DirectChannelHandler.java
 @Override
 public void received(Channel channel, Object message) throws RemotingException {
     ExecutorService executor = getPreferredExecutorService(message);
@@ -80,7 +82,7 @@ public void received(Channel channel, Object message) throws RemotingException {
 ```
 
 ```java
-// dubbo-remoting/dubbo-remoting-api/.../transport/dispatcher/execution/ExecutionChannelHandler.java:44-63（节选）
+// dubbo-remoting/dubbo-remoting-api/.../transport/dispatcher/execution/ExecutionChannelHandler.java（节选）
 @Override
 public void received(Channel channel, Object message) throws RemotingException {
     ExecutorService executor = getPreferredExecutorService(message);
@@ -114,7 +116,7 @@ public void received(Channel channel, Object message) throws RemotingException {
 ### `@SPI` Defaults to fixed, `limited` Is a Dead Constant
 
 ```java
-// dubbo-common/src/main/java/org/apache/dubbo/common/threadpool/ThreadPool.java:29-38
+// dubbo-common/src/main/java/org/apache/dubbo/common/threadpool/ThreadPool.java
 @SPI(value = "fixed", scope = ExtensionScope.FRAMEWORK)
 public interface ThreadPool {
 
@@ -130,7 +132,7 @@ public interface ThreadPool {
 ```
 
 > [!WARNING]
-> 打假：**「默认线程池是 `limited`」不成立。** `CommonConstants.java:133` 确实定义了 `String DEFAULT_THREADPOOL = "limited";`，但对整棵源码树检索 `DEFAULT_THREADPOOL`，命中只有三处：常量自身定义、`dubbo-compatible` 里的同名历史常量、以及测试 `PerformanceServerTest` 的 import 与使用。**没有任何 main 代码消费它。** 判断真实默认值要看 `@SPI`：Provider 走 `fixed`，Consumer 走 `cached`（下一节）。
+> 打假：**「默认线程池是 `limited`」不成立。** `CommonConstants.java` 确实定义了 `String DEFAULT_THREADPOOL = "limited";`，但对整棵源码树检索 `DEFAULT_THREADPOOL`，命中只有三处：常量自身定义、`dubbo-compatible` 里的同名历史常量、以及测试 `PerformanceServerTest` 的 import 与使用。**没有任何 main 代码消费它。** 判断真实默认值要看 `@SPI`：Provider 走 `fixed`，Consumer 走 `cached`（下一节）。
 
 SPI 注册文件共 4 个扩展名：
 
@@ -152,7 +154,7 @@ eager=org.apache.dubbo.common.threadpool.support.eager.EagerThreadPool
 | `eager` | `corethreads`=0 / `threads`=**Integer.MAX_VALUE** | `alive`=60s | `AbortPolicyWithReport` | 队列优先扩容而非排队 |
 
 > [!NOTE]
-> **`threads` 的默认值 200 只属于 `fixed` 与 `limited`。** `cached` 与 `eager` 在源码里用的是 `url.getParameter(THREADS_KEY, Integer.MAX_VALUE)`（`CachedThreadPool.java:55`、`EagerThreadPool.java` 同），即「不配就无上限」。把「Dubbo 默认 200 线程」当成所有线程池的默认值会算错消费端容量。
+> **`threads` 的默认值 200 只属于 `fixed` 与 `limited`。** `cached` 与 `eager` 在源码里用的是 `url.getParameter(THREADS_KEY, Integer.MAX_VALUE)`（`CachedThreadPool.java`、`EagerThreadPool.java` 同），即「不配就无上限」。把「Dubbo 默认 200 线程」当成所有线程池的默认值会算错消费端容量。
 
 `eager` 的特殊之处在队列：它把 `queues <= 0` 归一成 `1` 再构造 `TaskQueue`，由 `EagerThreadPoolExecutor` 在 core 线程忙时**优先创建新线程**而不是入队，用来对抗「core 已满、任务却在无界队列里排队导致 max 形同虚设」的问题。
 
@@ -161,7 +163,7 @@ eager=org.apache.dubbo.common.threadpool.support.eager.EagerThreadPool
 只有 `queues` 是三态。以 `FixedThreadPool` 为例：
 
 ```java
-// dubbo-common/.../threadpool/support/fixed/FixedThreadPool.java:48-61（节选）
+// dubbo-common/.../threadpool/support/fixed/FixedThreadPool.java（节选）
 int threads = url.getParameter(THREADS_KEY, DEFAULT_THREADS);
 int queues = url.getParameter(QUEUES_KEY, DEFAULT_QUEUES);
 
@@ -195,7 +197,7 @@ if (queues == 0) {
 `eager` 之所以要自造 `EagerThreadPoolExecutor` 而非复用 JDK `ThreadPoolExecutor` + `SynchronousQueue`，核心就在 `TaskQueue` 的 `offer` 钩子与 `execute` 的「放回队列」逻辑。构造时 `queues <= 0` 被规整成 `1`：
 
 ```java
-// dubbo-common/.../threadpool/support/eager/EagerThreadPool.java:54-63
+// dubbo-common/.../threadpool/support/eager/EagerThreadPool.java
 TaskQueue<Runnable> taskQueue = new TaskQueue<>(queues <= 0 ? 1 : queues);
 EagerThreadPoolExecutor executor = new EagerThreadPoolExecutor(
         cores, threads, alive, TimeUnit.MILLISECONDS, taskQueue,
@@ -205,27 +207,27 @@ taskQueue.setExecutor(executor);
 ```
 
 ```java
-// dubbo-common/.../threadpool/support/eager/TaskQueue.java:44-63
+// dubbo-common/.../threadpool/support/eager/TaskQueue.java
 public boolean offer(Runnable runnable) {
     int currentPoolThreadSize = executor.getPoolSize();
     if (executor.getActiveCount() < currentPoolThreadSize) {
-        return super.offer(runnable);          // 有空闲 worker，直接入队让其消费
+        return super.offer(runnable);  // 有空闲 worker，直接入队让其消费
     }
     if (currentPoolThreadSize < executor.getMaximumPoolSize()) {
-        return false;                          // 关键：返回 false 让 executor 新建 worker，而不是排队
+        return false;  // 关键：返回 false 让 executor 新建 worker，而不是排队
     }
-    return super.offer(runnable);              // 已达 max，才真正入队
+    return super.offer(runnable);  // 已达 max，才真正入队
 }
 ```
 
 ```java
-// dubbo-common/.../threadpool/support/eager/EagerThreadPoolExecutor.java:38-57
+// dubbo-common/.../threadpool/support/eager/EagerThreadPoolExecutor.java
 public void execute(Runnable command) {
     try {
         super.execute(command);
     } catch (RejectedExecutionException rx) {
         final TaskQueue queue = (TaskQueue) super.getQueue();
-        if (!queue.retryOffer(command, 0, TimeUnit.MILLISECONDS)) {   // 被拒后强行塞回队列
+        if (!queue.retryOffer(command, 0, TimeUnit.MILLISECONDS)) {  // 被拒后强行塞回队列
             throw new RejectedExecutionException("Queue capacity is full.", rx);
         }
     }
@@ -246,18 +248,18 @@ public void execute(Runnable command) {
 四种线程池实现**全部**把同一个 `AbortPolicyWithReport(name, url)` 作为 `RejectedExecutionHandler` 传入，主源码里**不存在** `CallerRunsPolicy`（网上「Dubbo 用 CallerRuns 兜底」的说法在 3.3.6 不成立）：
 
 ```java
-// FixedThreadPool.java:70 / CachedThreadPool.java:76 / LimitedThreadPool.java:72 / EagerThreadPool.java:62
-new AbortPolicyWithReport(name, url)   // 均为 AbortPolicyWithReport
+// FixedThreadPool.java / CachedThreadPool.java / LimitedThreadPool.java / EagerThreadPool.java
+new AbortPolicyWithReport(name, url)  // 均为 AbortPolicyWithReport
 ```
 
-`AbortPolicyWithReport`（`AbortPolicyWithReport.java:57-132`）继承 `ThreadPoolExecutor.AbortPolicy`，`rejectedExecution` 内依次：
+`AbortPolicyWithReport`（`AbortPolicyWithReport.java`）继承 `ThreadPoolExecutor.AbortPolicy`，`rejectedExecution` 内依次：
 
 1. 打 `COMMON_THREAD_POOL_EXHAUSTED` warn 日志，输出「`Thread pool is EXHAUSTED!`」并带 Pool Size / active / core / max / largest、Task 完成数、executor 状态与 `url`；
 2. 若 `DUMP_ENABLE`（默认 `true`）则 `dumpJStack()`——**限流为每 10 分钟一次**（`TEN_MINUTES_MILLS = 10*60*1000`），并用 `Semaphore(1)` 防并发 dump，写出 `Dubbo_JStack.log.<date>` 到 `user.home` 或 `DUMP_DIRECTORY`；
 3. `dispatchThreadPoolExhaustedEvent(msg)` 通知 SPI 注册的 `ThreadPoolExhaustedListener`（key `thread_pool_exhausted_listeners`）；
 4. 最后 `throw new RejectedExecutionException(msg)`（继承 `AbortPolicy` 的抛异常行为）。
 
-唯一使用「裸」`ThreadPoolExecutor.AbortPolicy`（不报栈、不 dump）的是 `FrameworkExecutorRepository` 里的框架内调度器（`FrameworkExecutorRepository.java:83,99,121`），与业务线程池无关。
+唯一使用「裸」`ThreadPoolExecutor.AbortPolicy`（不报栈、不 dump）的是 `FrameworkExecutorRepository` 里的框架内调度器（`FrameworkExecutorRepository.java`），与业务线程池无关。
 
 ## Consumer Thread Model
 
@@ -265,10 +267,10 @@ new AbortPolicyWithReport(name, url)   // 均为 AbortPolicyWithReport
 
 ### Where the Default `cached` Comes From
 
-Provider 与 Consumer 走的是两套默认。`CommonConstants.java:133,135` 分别定义：
+Provider 与 Consumer 走的是两套默认。`CommonConstants.java` 分别定义：
 
 ```java
-// dubbo-common/src/main/java/org/apache/dubbo/common/constants/CommonConstants.java:133-135
+// dubbo-common/src/main/java/org/apache/dubbo/common/constants/CommonConstants.java
 String DEFAULT_THREADPOOL = "limited";
 String DEFAULT_CLIENT_THREADPOOL = "cached";
 ```
@@ -276,7 +278,7 @@ String DEFAULT_CLIENT_THREADPOOL = "cached";
 前者是上文说的死常量，后者被 `AbstractClient.initExecutor` 真实消费：
 
 ```java
-// dubbo-remoting/dubbo-remoting-api/.../transport/AbstractClient.java:145-156（节选）
+// dubbo-remoting/dubbo-remoting-api/.../transport/AbstractClient.java（节选）
 private void initExecutor(URL url) {
     ExecutorRepository executorRepository = ExecutorRepository.getInstance(url.getOrDefaultApplicationModel());
 
@@ -290,16 +292,16 @@ private void initExecutor(URL url) {
 }
 ```
 
-注意用的是 `addParameterIfAbsent`：**只有 URL 上完全没有 `threadpool` 时才填 `cached`**，用户显式配置优先。Triple 协议的流式调用另有 `TripleProtocol.getOrCreateStreamExecutor`（:197-199）用同样的 `DEFAULT_CLIENT_THREADPOOL` 兜底。
+注意用的是 `addParameterIfAbsent`：**只有 URL 上完全没有 `threadpool` 时才填 `cached`**，用户显式配置优先。Triple 协议的流式调用另有 `TripleProtocol.getOrCreateStreamExecutor`用同样的 `DEFAULT_CLIENT_THREADPOOL` 兜底。
 
 ### The Consumer Thread Pool Is Globally Shared
 
 `DefaultExecutorRepository` 对消费者返回一个固定 key，所有消费者共用一个池：
 
 ```java
-// dubbo-common/.../threadpool/manager/DefaultExecutorRepository.java:149-157
+// dubbo-common/.../threadpool/manager/DefaultExecutorRepository.java
 private String getConsumerKey(ServiceModel serviceModel) {
-    // Consumer's executor is sharing globally, key=Integer.MAX_VALUE
+  // Consumer's executor is sharing globally, key=Integer.MAX_VALUE
     return MAX_KEY;
 }
 ```
@@ -313,7 +315,7 @@ private String getConsumerKey(ServiceModel serviceModel) {
 这是最容易被忽略的一点。`AbstractInvoker.getCallbackExecutor` 在同步模式下返回 `ThreadlessExecutor`：
 
 ```java
-// dubbo-rpc/dubbo-rpc-api/src/main/java/org/apache/dubbo/rpc/protocol/AbstractInvoker.java:340-346
+// dubbo-rpc/dubbo-rpc-api/src/main/java/org/apache/dubbo/rpc/protocol/AbstractInvoker.java
 protected ExecutorService getCallbackExecutor(URL url, Invocation inv) {
     if (InvokeMode.SYNC == RpcUtils.getInvokeMode(getUrl(), inv)) {
         return new ThreadlessExecutor();
@@ -333,11 +335,11 @@ protected ExecutorService getCallbackExecutor(URL url, Invocation inv) {
 Dubbo 协议下，`connections` 默认 `0` 表示**共享连接**：
 
 ```java
-// dubbo-rpc/dubbo-rpc-dubbo/.../protocol/dubbo/DubboProtocol.java:452-472（节选）
+// dubbo-rpc/dubbo-rpc-dubbo/.../protocol/dubbo/DubboProtocol.java（节选）
 private ClientsProvider getClients(URL url) {
     int connections = url.getParameter(CONNECTIONS_KEY, 0);
-    // whether to share connection
-    // if not configured, connection is shared, otherwise, one connection for one service
+  // whether to share connection
+  // if not configured, connection is shared, otherwise, one connection for one service
     if (connections == 0) {
         String shareConnectionsStr = ... url.getParameter(SHARE_CONNECTIONS_KEY, ...)
                 ... : ConfigurationUtils.getProperty(..., SHARE_CONNECTIONS_KEY, DEFAULT_SHARE_CONNECTIONS);
@@ -353,7 +355,7 @@ private ClientsProvider getClients(URL url) {
 `connections != 0` 时 `DataStore` 独占连接；`connections == 0` 时读 `shareconnections`，默认值 `"1"`：
 
 ```java
-// dubbo-rpc/dubbo-rpc-dubbo/src/main/java/org/apache/dubbo/rpc/protocol/dubbo/Constants.java:21-27
+// dubbo-rpc/dubbo-rpc-dubbo/src/main/java/org/apache/dubbo/rpc/protocol/dubbo/Constants.java
 String SHARE_CONNECTIONS_KEY = "shareconnections";
 
 /**
@@ -366,7 +368,7 @@ String DEFAULT_SHARE_CONNECTIONS = "1";
 `getSharedClient` 按 `url.getAddress()` 缓存 `SharedClientsProvider`，命中时调用 `increaseCount()` 复用同一个实例，未命中才新建：
 
 ```java
-// dubbo-rpc/dubbo-rpc-dubbo/.../protocol/dubbo/DubboProtocol.java:483-495（节选）
+// dubbo-rpc/dubbo-rpc-dubbo/.../protocol/dubbo/DubboProtocol.java（节选）
 private SharedClientsProvider getSharedClient(URL url, int connectNum) {
     String key = url.getAddress();
     int expectedConnectNum = Math.max(connectNum, 1);
@@ -403,14 +405,14 @@ private SharedClientsProvider getSharedClient(URL url, int connectNum) {
 `iothreads` 与业务线程池无关，它控制 Netty EventLoop 线程数，默认：
 
 ```java
-// dubbo-remoting/dubbo-remoting-api/src/main/java/org/apache/dubbo/remoting/Constants.java:118
+// dubbo-remoting/dubbo-remoting-api/src/main/java/org/apache/dubbo/remoting/Constants.java
 int DEFAULT_IO_THREADS = Math.min(Runtime.getRuntime().availableProcessors() + 1, 32);
 ```
 
 取值走 `getPositiveParameter`，即 **0 或负值会回落到默认**：
 
 ```java
-// dubbo-common/src/main/java/org/apache/dubbo/common/URL.java:772-778
+// dubbo-common/src/main/java/org/apache/dubbo/common/URL.java
 public int getPositiveParameter(String key, int defaultValue) {
     if (defaultValue <= 0) {
         throw new IllegalArgumentException("defaultValue <= 0");
@@ -423,7 +425,7 @@ public int getPositiveParameter(String key, int defaultValue) {
 Netty 服务端在 `NettyServer` 里用它初始化 worker group：
 
 ```java
-// dubbo-remoting/dubbo-remoting-netty4/.../transport/netty4/NettyServer.java:157-160（节选）
+// dubbo-remoting/dubbo-remoting-netty4/.../transport/netty4/NettyServer.java（节选）
 bossGroup = new NioEventLoopGroup(1, new DefaultThreadFactory("NettyServerBoss", true));
 workerGroup = new NioEventLoopGroup(
         getUrl().getPositiveParameter(IO_THREADS_KEY, Constants.DEFAULT_IO_THREADS),
@@ -437,40 +439,40 @@ workerGroup = new NioEventLoopGroup(
 
 | 项 | 默认值 | 来源 | 是否被 `getPositiveParameter` 兜底 |
 | :--- | :--- | :--- | :--- |
-| Dispatcher 扩展名 | `all` | `Dispatcher.java:28` `@SPI(AllDispatcher.NAME)` | — |
-| ThreadPool 扩展名（Provider） | `fixed` | `ThreadPool.java:29` `@SPI("fixed")` | — |
-| ThreadPool 扩展名（Consumer） | `cached` | `CommonConstants.java:135` `DEFAULT_CLIENT_THREADPOOL` | — |
-| `threads`（fixed / limited） | `200` | `CommonConstants.java:111` `DEFAULT_THREADS` | 否，0 就是 0 |
-| `threads`（cached / eager） | `Integer.MAX_VALUE` | `CachedThreadPool.java:55` | 否 |
-| `corethreads` | `0` | `CommonConstants.java:109` | 否 |
-| `queues` | `0` → `SynchronousQueue` | `CommonConstants.java:141` `DEFAULT_QUEUES` | 否，三态语义 |
-| `alive` | `60000` ms | `CommonConstants.java:143` `DEFAULT_ALIVE` | 否 |
-| `threadname` | `Dubbo` | `CommonConstants.java:107` `DEFAULT_THREAD_NAME` | — |
-| `iothreads` | `min(CPU+1, 32)` | `remoting/Constants.java:118` `DEFAULT_IO_THREADS` | **是**，≤0 回落默认 |
-| `connections`（Dubbo 协议） | `0`（共享连接） | `DubboProtocol.java:453` | — |
-| `shareconnections` | `1` | `dubbo-rpc-dubbo/Constants.java:27` | — |
-| 拒绝策略（fixed/cached/limited/eager） | `AbortPolicyWithReport`（含 jstack dump，10 分钟限流） | `AbortPolicyWithReport.java:57-132` | — |
-| `eager` 队列容量（queues<=0 规整） | `1`（仅作 offer 钩子交接槽） | `EagerThreadPool.java:54` | — |
+| Dispatcher 扩展名 | `all` | `Dispatcher.java` `@SPI(AllDispatcher.NAME)` | — |
+| ThreadPool 扩展名（Provider） | `fixed` | `ThreadPool.java` `@SPI("fixed")` | — |
+| ThreadPool 扩展名（Consumer） | `cached` | `CommonConstants.java` `DEFAULT_CLIENT_THREADPOOL` | — |
+| `threads`（fixed / limited） | `200` | `CommonConstants.java` `DEFAULT_THREADS` | 否，0 就是 0 |
+| `threads`（cached / eager） | `Integer.MAX_VALUE` | `CachedThreadPool.java` | 否 |
+| `corethreads` | `0` | `CommonConstants.java` | 否 |
+| `queues` | `0` → `SynchronousQueue` | `CommonConstants.java` `DEFAULT_QUEUES` | 否，三态语义 |
+| `alive` | `60000` ms | `CommonConstants.java` `DEFAULT_ALIVE` | 否 |
+| `threadname` | `Dubbo` | `CommonConstants.java` `DEFAULT_THREAD_NAME` | — |
+| `iothreads` | `min(CPU+1, 32)` | `remoting/Constants.java` `DEFAULT_IO_THREADS` | **是**，≤0 回落默认 |
+| `connections`（Dubbo 协议） | `0`（共享连接） | `DubboProtocol.java` | — |
+| `shareconnections` | `1` | `dubbo-rpc-dubbo/Constants.java` | — |
+| 拒绝策略（fixed/cached/limited/eager） | `AbortPolicyWithReport`（含 jstack dump，10 分钟限流） | `AbortPolicyWithReport.java` | — |
+| `eager` 队列容量（queues<=0 规整） | `1`（仅作 offer 钩子交接槽） | `EagerThreadPool.java` | — |
 
 ## ThreadlessExecutor: No Thread of Its Own
 
-消费端异步调用里有一个反直觉的设计：**`ThreadlessExecutor` 自己不起任何线程**（`dubbo-common/.../threadpool/ThreadlessExecutor.java:40`，`extends AbstractExecutorService`）。它内部只有一个 `ConcurrentLinkedQueue<Runnable>`（`:47`）和一个 `AtomicReference<Object> waiter`（`:54`）。
+消费端异步调用里有一个反直觉的设计：**`ThreadlessExecutor` 自己不起任何线程**（`dubbo-common/.../threadpool/ThreadlessExecutor.java`，`extends AbstractExecutorService`）。它内部只有一个 `ConcurrentLinkedQueue<Runnable>`和一个 `AtomicReference<Object> waiter`。
 
 ```java
-// ThreadlessExecutor.java:56-90  (waitAndDrain)
+// ThreadlessExecutor.java  (waitAndDrain)
 public void waitAndDrain(long deadline) throws InterruptedException {
     Runnable runnable = queue.poll();
     if (runnable == null) {
-        if (waiter.compareAndSet(null, Thread.currentThread())) {   // 标记「当前线程在等」
+        if (waiter.compareAndSet(null, Thread.currentThread())) {  // 标记「当前线程在等」
             while ((runnable = queue.poll()) == null && waiter.get() == Thread.currentThread()) {
-                LockSupport.parkNanos(this, restTime);              // 把自己(LockSupport)停住，不占线程池
+                LockSupport.parkNanos(this, restTime);  // 把自己(LockSupport)停住，不占线程池
             }
         }
     }
-    do { if (runnable != null) runnable.run(); }                     // 在【调用方线程】上直接跑回调
+    do { if (runnable != null) runnable.run(); }  // 在【调用方线程】上直接跑回调
     while ((runnable = queue.poll()) != null);
 }
-// :95  execute(Runnable): queue.add(run); LockSupport.unpark(waiter);  ← 响应回来时唤醒调用线程
+// execute(Runnable): queue.add(run); LockSupport.unpark(waiter);  ← 响应回来时唤醒调用线程
 ```
 
 它的工作模型：消费端发起异步调用后，**调用线程**调 `waitAndDrain` 把自己 `LockSupport.park` 住（不占任何线程池线程）；等响应从 IO 线程回来，IO 线程把回调 `execute` 进队列并 `unpark` 唤醒调用线程，**回调在「原本发起调用的用户线程」上执行**。这样异步结果的后续处理不会额外消耗线程池线程、也省一次线程切换——这正是 Dubbo 异步能扛高并发的关键之一。
@@ -483,14 +485,14 @@ public void waitAndDrain(long deadline) throws InterruptedException {
 服务端并发上限 `executes` 不是在线程池层做的，而是由一个 **Filter** 用信号量式计数拦截——`ExecuteLimitFilter`：
 
 ```java
-// dubbo-rpc-api/.../rpc/filter/ExecuteLimitFilter.java:40-53
-@Activate(group = CommonConstants.PROVIDER, value = EXECUTES_KEY)   // ← 服务端、按 executes 激活
+// dubbo-rpc-api/.../rpc/filter/ExecuteLimitFilter.java
+@Activate(group = CommonConstants.PROVIDER, value = EXECUTES_KEY)  // ← 服务端、按 executes 激活
 public class ExecuteLimitFilter implements Filter, Filter.Listener {
     public Result invoke(Invoker<?> invoker, Invocation invocation) throws RpcException {
         int max = url.getMethodParameter(methodName, EXECUTES_KEY, 0);
-        if (!RpcStatus.beginCount(url, methodName, max)) {           // 超过 executes → 直接拒绝
+        if (!RpcStatus.beginCount(url, methodName, max)) {  // 超过 executes → 直接拒绝
             throw new RpcException(
-                RpcException.LIMIT_EXCEEDED_EXCEPTION,               // ← 是 RpcException 子类，不是专用异常
+                RpcException.LIMIT_EXCEEDED_EXCEPTION,  // ← 是 RpcException 子类，不是专用异常
                 "Failed to invoke method ... greater than <dubbo:service executes=\"" + max + "\" />");
         }
         ...
@@ -498,20 +500,20 @@ public class ExecuteLimitFilter implements Filter, Filter.Listener {
 }
 ```
 
-计数由 `RpcStatus` 维护，按 `URL + methodName` 两级 `ConcurrentHashMap`（`RpcStatus.java:36-38`）记录每个方法当前并发数：`beginCount(url, methodName, max)`（`:101`）原子自增并判断是否超 `max`，`endCount(url, methodName, elapsed, succeeded)`（`:130`）在 `invoker.invoke` 之后（含 `onResponse`）归还计数。
+计数由 `RpcStatus` 维护，按 `URL + methodName` 两级 `ConcurrentHashMap`（`RpcStatus.java`）记录每个方法当前并发数：`beginCount(url, methodName, max)`原子自增并判断是否超 `max`，`endCount(url, methodName, elapsed, succeeded)`在 `invoker.invoke` 之后（含 `onResponse`）归还计数。
 
 > [!WARNING]
 > `executes`（服务端）与 `actives`（消费端）又一次**不对称**：`executes` 由 `ExecuteLimitFilter`（group=PROVIDER）在**服务端**拦截，`actives` 由 `ActiveLimitFilter`（group=CONSUMER）在**消费端**拦截（见 [Filter](#two-chain-systems-filter-vs-clusterfilter)）。在 Provider 上配 `actives` 不会触发任何限制——那里只有 `executes` 生效。
 
 ## InvokeMode
 
-调用模式在 `InvokeMode` 枚举（`dubbo-rpc-api/.../rpc/InvokeMode.java:19-22`）定义，只有三个值：
+调用模式在 `InvokeMode` 枚举（`dubbo-rpc-api/.../rpc/InvokeMode.java`）定义，只有三个值：
 
 ```java
 public enum InvokeMode {
-    SYNC,     // 同步：发出去后阻塞等结果
-    ASYNC,    // 异步：立即返回 Future / CompletableFuture
-    FUTURE;   // Future 模式（先拿 Future，后续 get）
+    SYNC,  // 同步：发出去后阻塞等结果
+    ASYNC,  // 异步：立即返回 Future / CompletableFuture
+    FUTURE;  // Future 模式（先拿 Future，后续 get）
 }
 ```
 

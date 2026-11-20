@@ -7,7 +7,7 @@ Claude Code 的记忆分两套互补机制，都在每次会话开始时加载�
 
 外加两套相邻能力：`.claude/rules/` 把指令按路径拆分，AGENTS.md 支持让你复用给别的编码 agent 写的指令文件。压缩与上下文窗口的通用原理见 [Compaction](/docs/CS/AI/LLM/Agent/Theory/Compaction.md)，本文讲 Claude Code 的实现。
 
-事实基线：`@anthropic-ai/claude-code` **2.1.302**（2026-10-16），官方 memory 页（2026-10-18 核实）。
+事实基线：`@anthropic-ai/claude-code` **2.1.326**，按 2.1.326 的 CHANGELOG（2.1.302→2.1.326 区间）逐条核实，官方 memory 页作补充。
 
 ## CLAUDE.md vs Auto Memory
 
@@ -20,6 +20,8 @@ Claude Code 的记忆分两套互补机制，都在每次会话开始时加载�
 | 用途 | 编码标准、工作流、项目架构 | 你的偏好、你给的纠正、代码里推不出的项目上下文 |
 
 ⚠️ 两者都是 **context 不是 enforced configuration**——Claude 把它们当上下文而非强制配置对待。要无条件阻断某个动作，用 `PreToolUse` hook（见 [Hooks](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Hooks.md)），不要指望 CLAUDE.md。
+
+反直觉的两层含义：**写进去不等于被执行**（只是强倾向的引导，不是硬约束），也**写进去不等于被读到**——超大嵌套 CLAUDE.md 只加载开头（见 How Files Load）。所以「把规则写进 CLAUDE.md」既不等于强制生效，也不保证全文进上下文；需要硬保证时分别用 hook 和把文件控制在大小限制内。
 
 subagent 也可以维护自己的 auto memory。
 
@@ -45,6 +47,8 @@ managed settings 里也可以直接用 `claudeMd` 键写组织级指令（只在
 - 工作目录**子目录**里的 CLAUDE.md 不随启动加载：Claude 读/写/编辑该子目录里某个文件时才加载（Bash 里 `cat`/`head` 单文件也算读）。
 - 块级 HTML 注释（`<!-- ... -->`）在注入上下文前被剥掉，代码块内的注释保留——可以用来给人写维护备注而不花 token。
 - monorepo 里被别的团队的 CLAUDE.md 打扰，用 `claudeMdExcludes` 按路径/glob 跳过。
+- **大小上限**（2.1.309+）：超过大小限制的嵌套 CLAUDE.md 现在**只加载开头**，不再整份注入；此前读取这种超大嵌套文件下的内容会陷入反复压缩（反复把上下文撑满又总结）。代价是后半段指令根本不进上下文——Nested 文件要控制体积，别把关键规则压在尾部。
+- 写操作注意：Claude 只看过开头时，不会再整份覆盖超大 CLAUDE.md / rules / @ 引入文件，而是要求读全文或就地编辑（2.1.312+）。
 
 ### Import Syntax
 
@@ -85,11 +89,15 @@ Claude Code 原生读仓库里的 AGENTS.md——那是给别的编码 agent 用
 
 上下文窗口装着对话历史、文件内容、命令输出、CLAUDE.md、auto memory、已加载 skill 与系统指令。装满时自动管理：**先清较早的工具输出，不够再总结对话**。要点：
 
-- 模型侧基线：Sonnet 5/5.5、Fable 5/5.1、Opus 4.7 及以上**原生 1M 窗口**（无 `[1m]` 变体名），自动压缩默认在约 **967K token** 触发；旧的「200K」说法已过时。
-- `/compact` 手动触发，`PreCompact` / `PostCompact` 两个 hook 事件可介入前后；官方建议别抢在自动压缩之前手动 compact，留给任务间的自然断点。
-- 想控制压缩保留什么，在 CLAUDE.md 里加「Compact Instructions」一节，或 `/compact focus on the API changes` 带焦点压缩。
-- 单个文件/工具输出大到每次总结后立刻填满上下文时，Claude Code 尝试几次后停止自动压缩并报 thrashing 错误。
-- `/context` 看空间占用；MCP 工具定义默认延迟加载，skill 按需加载——两者都不进常驻上下文。
+- **窗口按模型分档**：Sonnet 5/5.5、Fable 5/5.1、Opus 4.7 及以上**原生 1M 窗口**（无 `[1m]` 变体名），自动压缩默认约在 **967K token** 触发——这是 1M 窗口模型的口径，不是所有模型的通用常量。
+- **无法识别的模型 ID**：2.1.323 起假定的默认窗口从 200K 改为 **1M**；要更早压缩用 `/autocompact`，要保留旧的 200K 用 `CLAUDE_CODE_DISABLE_1M_CONTEXT=1`。其他厂商窗口更小的模型一旦填满，可能每轮都失败直到 `/clear`，所以要在填满前就设该变量。2.1.325 起 `CLAUDE_CODE_MAX_CONTEXT_TOKENS` 也能设定「无法识别但以 `claude-` 开头」的模型窗口（如网关的 `claude-sonnet-latest`）。
+- **请求上限**：2.1.326 起 `max_tokens` 超过模型上限时不再直接报错，改用 API 报告的最大值重试。
+- **手动压缩**：`/compact` 触发，`PreCompact` / `PostCompact` 两个 hook 事件可介入前后；官方建议别抢在自动压缩之前手动 compact，留给任务间的自然断点。想控制保留什么，在 CLAUDE.md 里加「Compact Instructions」一节，或 `/compact focus on the API changes` 带焦点压缩。
+- **Idle compaction（空闲压缩）**：终端里 200K+ token 的会话空闲约 54 分钟后、在 1 小时提示缓存过期前被摘要，下一条消息不必重读全量；`CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS` 改这个下限，settings.json 里 `"idleCompaction": false` 关闭。2.1.314 起扩展到 VS Code 与 Claude Desktop 的 Code tab（200K+ token 空闲会话被摘要，缓存过期后摘要用于下一条消息），同一版本也覆盖关闭遥测的订阅用户，以及 Bedrock / Vertex / Foundry / LLM 网关（前提是 1 小时提示缓存开启）。
+- **摘要生成**：2.1.311 起，模型回复里没有摘要时，Claude Code 通常会**再要一次摘要**才替换对话；`DISABLE_COMPACT` 只能关不能重新打开压缩。2.1.326 修了 Bedrock / Vertex / Foundry 及关闭遥测时压缩曾把你的某条消息当摘要、或漏掉 Claude 最后一条回复的问题。
+- **压缩后的 skill 状态**：2.1.304 起压缩后会**重新发送 skill 列表**给 Claude；`/reload-skills` 现在只发送新增或有变化的 skills。2.1.326 起 plan mode 下自动压缩用**正在回答你的模型**（如 `opusplan` 下的 Opus），可能更贵。
+- **Thrashing**：单个文件/工具输出大到每次总结后立刻填满上下文时，Claude Code 尝试几次后停止自动压缩并报 thrashing 错误。
+- **用量查看**：`/context` 看空间占用；MCP 工具定义默认延迟加载、skill 按需加载，都不进常驻上下文。2.1.319 起 `/context` 给 Claude 读的表格每个列表只留最大的 10 行，按需加载的 MCP 工具在被真正调用前每个 server 只占一行。2.1.326 起 `/update-config` 的上下文占用从约 93000 降到约 13000 tokens。
 
 细节（触发公式、保留策略、压缩与 skill 状态的关系、各家对比）见 [Compaction 理论篇](/docs/CS/AI/LLM/Agent/Theory/Compaction.md)。
 

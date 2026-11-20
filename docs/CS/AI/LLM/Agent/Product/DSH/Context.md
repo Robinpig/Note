@@ -1,4 +1,6 @@
-> 版本基线：核实于 2026-10-06。上下文、记忆、知识三者围绕 Session Log 协同，共享一条约束：**模型看到的内容必须有可追踪来源，且能从会话记录重建**。
+> 版本基线：v0.2.2-rc.3（`E:/Projects/deepseek-harness-dsh-v0.2.2-rc.3`）。上下文、记忆、知识三者围绕 Session Log 协同，共享一条约束：**模型看到的内容必须有可追踪来源，且能从会话记录重建**。
+
+> 版本基线：v0.2.2-rc.3。模型侧 adapter seam 与 system prompt 分节装配见 [DSH LLM Adapter & Context](/docs/CS/AI/LLM/Agent/Product/DSH/LlmAdapter.md)；session 事件与 surface 折叠见 [DSH Session & Persistence](/docs/CS/AI/LLM/Agent/Product/DSH/SessionPersistence.md)。
 
 ## Introduction
 
@@ -23,15 +25,49 @@ SystemPrompt.assemble() 组装上下文
 
 - `SystemPrompt.assemble()` 收集 `sections`（稳定提示）、`contexts`（动态环境）、`tools`、`variables`，各插件只注册自己的内容，每次生成本轮快照
 - **避免重复注入**：`RuntimeContextProjection` 比较本轮与上轮快照——不变则沿用，变化才生成新上下文消息写入 Session（省 token + 保留状态变化轨迹；投影状态可从 Session 恢复，重启不重复注入）
-- **三层结构**：**Log**（完整原始事件）→ **Surface**（当前参与派生的事件视图）→ **Messages**（发给模型的协议消息）。`deriveMessages()` 是唯一出口——模型输入不是各模块临时修改的消息数组，而是会话记录的派生
+- **三层结构**：**Log**（完整原始事件）→ **Surface**（当前参与派生的事件视图）→ **Messages**（发给模型的协议消息）。`deriveMessages()` 是唯一出口——模型输入不是各模块临时修改的消息数组，而是会话记录的派生（实现见 [Session & Persistence](/docs/CS/AI/LLM/Agent/Product/DSH/SessionPersistence.md)）
 - `buildRequest()` 同时记录 `request/header` 和 `request/context`：可回答"模型当时看到了哪些历史/哪版系统提示/哪些工具/异常是推理问题还是输入问题"
+
+runtime-context 的快照注入用 `deepEqualJson` 去重、无变化不注入，且覆盖式替换（不是流水追加）——`packages/core/agent-loop/src/runtime-context.ts`：
+
+```ts
+  project(sections: readonly ContextSnapshotSection[]): UserMessage | undefined {
+    const previous = this.retained?.sections
+    if (this.retained === undefined && sections.length === 0) return
+    if (previous !== undefined && deepEqualJson(previous, sections)) return
+    const snapshot = sections.length === 0
+      ? CLEARED
+      : `<\system-reminder>\n${intro}\n\n${body}\n<\/system-reminder>`
+    return createUserMessage({ content: [{ type: 'text', text: snapshot }], source: { kind: SOURCE, form: 'snapshot', sections } })
+  }
+```
 
 ## Memory Compaction (Compaction = Session Memory)
 
 跨 Session 的长期记忆目前**没有形成完整系统**，现有记忆能力是 Compaction——服务于当前会话的连续运行。
 
 - **只改 Surface**：摘要作为 replacement 节点遮蔽旧历史，原始事件留盘（比"删除前 N 条"安全：可审计压缩范围和摘要来源）——但**模型无法取回**，召回工具（`recall_history` 式）仍是 proposed 状态的 Agent Note
-- **触发**：`floor(min(W × thresholdRatio, W − O − headroomTokens))`，默认 `thresholdRatio = 0.8`、`headroomTokens = 65536`（`W` 上下文窗口、`O` 单次请求输出预留）。两个入口——`agent/pre-step` 的 `pressure` 前瞻检查 + `agent/request-error` 的 `context-overflow` 兜底（后者绕过常规阈值与保留策略，`maxOverflowRetries` 默认 1）
+- **触发**：`floor(min(W × thresholdRatio, W − O − headroomTokens))`，默认 `thresholdRatio = 0.8`、`headroomTokens = 65536`（`W` 上下文窗口、`O` 单次请求输出预留）。两个入口——`agent/pre-step` 的 `pressure` 前瞻检查 + `agent/request-error` 的 `context-overflow` 兜底（后者绕过常规阈值与保留策略，`maxOverflowRetries` 默认 1）。源码双入口（`packages/compaction/compaction-basic/src/index.ts`）：
+
+```ts
+  override async compactIfNeeded(agent: Agent, trigger: CompactionTrigger, signal: AbortSignal): Promise<CompactionResult | null> {
+    const header = agent.session.requestHeader()
+    if (header === undefined || routedTarget(agent.session) === undefined) return null
+    switch (trigger) {
+      case 'pressure':
+        return this.compactPressure(agent, header, signal, false)
+      case 'context-overflow': {
+        this.ctx.get('toolResultPruner')?.pruneSession(agent.session)
+        const measurement = this.ctx.tokenMeter.measure(agent.session)
+        const range = selectCompactableRange(agent.session, measurement, 0)
+        if (range === null) return null
+        return this.compactRegion(range.start, range.end, agent, signal)
+      }
+      default:
+        assertNever(trigger, 'compaction trigger')
+    }
+  }
+```
 - **区域选择**：优先折叠旧历史、保留近期（`retainRatio = 0.16`，按 `W − O` 计）；`validateSurfaceRegion()` 校验不切开 tool-call/tool-result 配对；surface 节点 0 的 `system/message` 永不被遮蔽
 - **摘要固定模板**（8 节，以源码为准）：`Primary Request and Intent / Key Technical Concepts / Files and Code / Errors and Fixes / Pending Jobs / Current Work / Next Step / Critical Context`——防摘要退化成流畅但执行接不上的对话概述
 - **替换事务**：`compaction/start` → 摘要 → `user/message`（`surfaceOp: replace`，`sourceEventSeqs` 关联被覆盖事件）→ `compaction/end`；三个 compaction 事件**仅写日志、绝不进 surface**，摘要由那条 `user/message` 承载；压缩失败时旧 surface 继续可用
@@ -54,10 +90,12 @@ DSH **没有传统统一向量知识库**。知识入口 = 文件路径引用 + 
 
 - [DSH 主入口](/docs/CS/AI/LLM/Agent/Product/DSH/DSH.md)
 - [DSH Agent Loop](/docs/CS/AI/LLM/Agent/Product/DSH/AgentLoop.md)
+- [DSH LLM Adapter & Context](/docs/CS/AI/LLM/Agent/Product/DSH/LlmAdapter.md)
+- [DSH Session & Persistence](/docs/CS/AI/LLM/Agent/Product/DSH/SessionPersistence.md)
 - [Compaction 理论（通用机制与各家对比）](/docs/CS/AI/LLM/Agent/Theory/Compaction.md)
-- [DSH 的上下文管理、记忆和知识库剖析](https://mp.weixin.qq.com/s/RG5oQ6rpNDNn7Fwo9GoqIA)
 
 ## References
 
-- [DSH 的上下文管理、记忆和知识库剖析](https://mp.weixin.qq.com/s/RG5oQ6rpNDNn7Fwo9GoqIA)
-- [DSH 的宝藏之一：Session 持久化的设计](https://mp.weixin.qq.com/s/uH3vuY9nNCmp-q4yUtRRYA)
+1. [deepseek-ai/deepseek-harness（v0.2.2-rc.3）compaction](https://github.com/deepseek-ai/deepseek-harness/tree/v0.2.2-rc.3/packages/compaction)
+2. [DSH 的上下文管理、记忆和知识库剖析](https://mp.weixin.qq.com/s/RG5oQ6rpNDNn7Fwo9GoqIA)
+3. [DSH 的宝藏之一：Session 持久化的设计](https://mp.weixin.qq.com/s/uH3vuY9nNCmp-q4yUtRRYA)

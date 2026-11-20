@@ -1,3 +1,5 @@
+# Dubbo Protocol: Codec, Header and Timeout
+
 ## Introduction
 
 Dubbo 协议（`dubbo://`）的报文格式是理解整个 RPC 框架的解剖标本：一个固定 16 字节的二进制头，加上变长 body，请求与响应共用同一套头结构。很多面试题和博客会渲染一个细节——「序列化类型标识在请求包和响应包里的位置不一样」，用来体现协议设计的精妙。**这个说法是错的**：3.3.6 源码里请求与响应的序列化 id 都放在 `header[2]` 的低 5 位，位置完全相同；真正的差异是 `header[3]`——响应包用它放 status，请求包不使用。
@@ -7,7 +9,7 @@ Dubbo 协议（`dubbo://`）的报文格式是理解整个 RPC 框架的解剖�
 - **协议层（Codec）与 RPC 层（Protocol）是两套体系。** `ExchangeCodec`/`DubboCodec` 负责 16 字节头与 body 的编解码，属于 `dubbo-remoting` 体系；`DubboProtocol` 负责 Invoker 的 export/refer，属于 `dubbo-rpc` 体系。谈论「Dubbo 协议」时必须先分清说的是哪一层。
 - **3.3.6 的 `dubbo-rpc/` 下只有 4 个模块**，网上「Dubbo 支持 hessian/rmi/webservice/thrift 协议」的资料描述的都是旧版本——这些协议实现已整体迁到 `org.apache.dubbo.extensions`，主仓库里不是「标了废弃」，而是**整个模块都不存在**。
 
-本文所有结论来自 Apache Dubbo **3.3.6** 官方源码（`apache/dubbo` 仓库 tag `dubbo-3.3.6`），默认值一律标注文件与行号，网上流传但与源码不符的说法会在文中显式标出。
+本文所有结论来自 Apache Dubbo **3.3.6** 官方源码（`apache/dubbo` 仓库 tag `dubbo-3.3.6`），默认值均逐文件核对自源码、贴真实片段，网上流传但与源码不符的说法会在文中显式标出。
 
 ## Dubbo Protocol Message Format
 
@@ -16,19 +18,19 @@ Dubbo 协议（`dubbo://`）的报文格式是理解整个 RPC 框架的解剖�
 头部长度是常量 16，magic number 是 `0xdabb`：
 
 ```java
-// dubbo-remoting/dubbo-remoting-api/.../exchange/codec/ExchangeCodec.java:60-69
-protected static final int HEADER_LENGTH = 16;           // :60 头固定 16 字节
-protected static final short MAGIC = (short) 0xdabb;     // :62 魔数
-protected static final byte MAGIC_HIGH = Bytes.short2bytes(MAGIC)[0];  // :63 0xda
-protected static final byte MAGIC_LOW = Bytes.short2bytes(MAGIC)[1];    // :64 0xbb
-protected static final byte FLAG_REQUEST = (byte) 0x80;  // :66 请求/响应标志位
-protected static final byte FLAG_TWOWAY = (byte) 0x40;   // :67 twoway 标志位
-protected static final byte FLAG_EVENT = (byte) 0x20;    // :68 事件标志位
-protected static final int SERIALIZATION_MASK = 0x1f;    // :69 序列化 id 掩码，占低 5 位
+// dubbo-remoting/dubbo-remoting-api/.../exchange/codec/ExchangeCodec.java
+protected static final int HEADER_LENGTH = 16;  // 头固定 16 字节
+protected static final short MAGIC = (short) 0xdabb;  // 魔数
+protected static final byte MAGIC_HIGH = Bytes.short2bytes(MAGIC)[0];  // 0xda
+protected static final byte MAGIC_LOW = Bytes.short2bytes(MAGIC)[1];  // 0xbb
+protected static final byte FLAG_REQUEST = (byte) 0x80;  // 请求/响应标志位
+protected static final byte FLAG_TWOWAY = (byte) 0x40;  // twoway 标志位
+protected static final byte FLAG_EVENT = (byte) 0x20;  // 事件标志位
+protected static final int SERIALIZATION_MASK = 0x1f;  // 序列化 id 掩码，占低 5 位
 ```
 
 > [!NOTE]
-> `MAGIC_HIGH` / `MAGIC_LOW` 的写法是 `Bytes.short2bytes(MAGIC)[0]` / `[1]`（`ExchangeCodec.java:63-64`）——`Bytes` 类里**没有** `bytes2high` / `bytes2low` 方法，只有 `short2bytes`（`dubbo-common/.../io/Bytes.java:71-93`）。这里取数组下标而非移位，是因为 `0xdabb` 的高字节恰好是 `0xda`、低字节是 `0xbb`，与 `Bytes.short2bytes` 的写出顺序（大端）一致。
+> `MAGIC_HIGH` / `MAGIC_LOW` 的写法是 `Bytes.short2bytes(MAGIC)[0]` / `[1]`（`ExchangeCodec.java`）——`Bytes` 类里**没有** `bytes2high` / `bytes2low` 方法，只有 `short2bytes`（`dubbo-common/.../io/Bytes.java`）。这里取数组下标而非移位，是因为 `0xdabb` 的高字节恰好是 `0xda`、低字节是 `0xbb`，与 `Bytes.short2bytes` 的写出顺序（大端）一致。
 
 完整头部布局：
 
@@ -43,27 +45,27 @@ protected static final int SERIALIZATION_MASK = 0x1f;    // :69 序列化 id 掩
 请求编码的核心三行：
 
 ```java
-// dubbo-remoting/dubbo-remoting-api/.../exchange/codec/ExchangeCodec.java:257-277（encodeRequest 摘录）
+// dubbo-remoting/dubbo-remoting-api/.../exchange/codec/ExchangeCodec.java（encodeRequest 摘录）
 byte[] header = new byte[HEADER_LENGTH];
-Bytes.short2bytes(MAGIC, header);                                 // :262 魔数写入 [0..1]
-header[2] = (byte) (FLAG_REQUEST | serialization.getContentTypeId());  // :265 请求标志 + 序列化 id（低 5 位）
-if (req.isTwoWay()) header[2] |= FLAG_TWOWAY;                     // :268 twoway 按位或
-if (req.isEvent()) header[2] |= FLAG_EVENT;                       // :271 event 按位或
-Bytes.long2bytes(req.getId(), header, 4);                         // :275 request id
-Bytes.int2bytes(body.length, header, 12);                         // body 长度
+Bytes.short2bytes(MAGIC, header);  // 魔数写入 [0..1]
+header[2] = (byte) (FLAG_REQUEST | serialization.getContentTypeId());  // 请求标志 + 序列化 id（低 5 位）
+if (req.isTwoWay()) header[2] |= FLAG_TWOWAY;  // twoway 按位或
+if (req.isEvent()) header[2] |= FLAG_EVENT;  // event 按位或
+Bytes.long2bytes(req.getId(), header, 4);  // request id
+Bytes.int2bytes(body.length, header, 12);  // body 长度
 ```
 
 响应编码：
 
 ```java
-// dubbo-remoting/dubbo-remoting-api/.../exchange/codec/ExchangeCodec.java:310-327（encodeResponse 摘录）
+// dubbo-remoting/dubbo-remoting-api/.../exchange/codec/ExchangeCodec.java（encodeResponse 摘录）
 byte[] header = new byte[HEADER_LENGTH];
-Bytes.short2bytes(MAGIC, header);                     // :317 魔数写入 [0..1]
-header[2] = serialization.getContentTypeId();         // :319 注意：响应没有 FLAG_REQUEST，序列化 id 同样在低 5 位
-if (res.isHeartbeat()) header[2] |= FLAG_EVENT;       // :320-322 心跳响应置 event 位
-header[3] = status;                                   // :324-325 status，如 OK=20 / SERVICE_ERROR=70 / SERVER_ERROR=80
-Bytes.long2bytes(res.getId(), header, 4);             // :327 与请求相同的 request id
-Bytes.int2bytes(body.length, header, 12);             // [12..15] body 长度
+Bytes.short2bytes(MAGIC, header);  // 魔数写入 [0..1]
+header[2] = serialization.getContentTypeId();  // 注意：响应没有 FLAG_REQUEST，序列化 id 同样在低 5 位
+if (res.isHeartbeat()) header[2] |= FLAG_EVENT;  // 心跳响应置 event 位
+header[3] = status;  // status，如 OK=20 / SERVICE_ERROR=70 / SERVER_ERROR=80
+Bytes.long2bytes(res.getId(), header, 4);  // 与请求相同的 request id
+Bytes.int2bytes(body.length, header, 12);  // [12..15] body 长度
 ```
 
 > [!WARNING]
@@ -74,7 +76,7 @@ Bytes.int2bytes(body.length, header, 12);             // [12..15] body 长度
 ### Protocol Version
 
 ```java
-// dubbo-common/src/main/java/org/apache/dubbo/common/Version.java:46
+// dubbo-common/src/main/java/org/apache/dubbo/common/Version.java
 public static final String DEFAULT_DUBBO_PROTOCOL_VERSION = "2.0.2";
 ```
 
@@ -83,13 +85,13 @@ public static final String DEFAULT_DUBBO_PROTOCOL_VERSION = "2.0.2";
 ### DubboCodec: Bridge from Exchange Layer to RPC Layer
 
 ```java
-// dubbo-rpc/dubbo-rpc-dubbo/.../codec/DubboCodec.java:61-63
-public class DubboCodec extends ExchangeCodec {       // :61 ExchangeCodec 的子类
-    public static final String NAME = "dubbo";        // :63 协议名
+// dubbo-rpc/dubbo-rpc-dubbo/.../codec/DubboCodec.java
+public class DubboCodec extends ExchangeCodec {  // ExchangeCodec 的子类
+    public static final String NAME = "dubbo";  // 协议名
 }
 ```
 
-`DubboCodec` 继承 `ExchangeCodec`（`DubboCodec.java:61`），复用 16 字节头的编解码，只覆写 body 的序列化/反序列化。网络层挂载的编解码器是 `DubboCountCodec`（负责拆包粘包并把解码计数带出来），它内部委托给 `DubboCodec`。
+`DubboCodec` 继承 `ExchangeCodec`（`DubboCodec.java`），复用 16 字节头的编解码，只覆写 body 的序列化/反序列化。网络层挂载的编解码器是 `DubboCountCodec`（负责拆包粘包并把解码计数带出来），它内部委托给 `DubboCodec`。
 
 ### Object Order of Request body
 
@@ -110,19 +112,19 @@ body 按 `DubboCodec` 中 `encodeRequestData` 的写入顺序固定为六个元�
 
 | 值 | 常量（`Response.java`） | 含义 |
 | :--- | :--- | :--- |
-| 20 | `OK`（`:26`） | 正常响应 |
-| 30 | `CLIENT_TIMEOUT`（`:36`） | 客户端超时 |
-| 31 | `SERVER_TIMEOUT`（`:41`） | 服务端超时 |
-| 40 | `BAD_REQUEST`（`:51`） | 请求不合法（如反序列化失败） |
-| 60 | `SERVICE_NOT_FOUND`（`:61`） | 服务不存在 |
-| 70 | `SERVICE_ERROR`（`:66`） | 服务层业务异常 |
-| 80 | `SERVER_ERROR`（`:71`） | 服务端内部错误 |
-| 90 | `CLIENT_ERROR`（`:76`） | 客户端错误 |
+| 20 | `OK` | 正常响应 |
+| 30 | `CLIENT_TIMEOUT` | 客户端超时 |
+| 31 | `SERVER_TIMEOUT` | 服务端超时 |
+| 40 | `BAD_REQUEST` | 请求不合法（如反序列化失败） |
+| 60 | `SERVICE_NOT_FOUND` | 服务不存在 |
+| 70 | `SERVICE_ERROR` | 服务层业务异常 |
+| 80 | `SERVER_ERROR` | 服务端内部错误 |
+| 90 | `CLIENT_ERROR` | 客户端错误 |
 
 > [!WARNING]
-> 网上流传的「25 = CLIENT_TIMEOUT / 27 = SERVER_TIMEOUT / 31 = BAD_REQUEST / 35 = BAD_RESPONSE / 50 = SERVICE_NOT_FOUND / 60 = SERVICE_ERROR / 70 = SERVER_ERROR」这组取值**全部对不上源码**。3.3.6 的 `Response` 只有上表这 8 个常量，**没有 `BAD_RESPONSE` 这个常量**（响应不合法复用 `BAD_REQUEST = 40`），也没有 `50` 与 `35` 这两个值。另外 `Response` 的默认状态是 `OK`（`Response.java:87`，`private byte mStatus = OK;`）。
+> 网上流传的「25 = CLIENT_TIMEOUT / 27 = SERVER_TIMEOUT / 31 = BAD_REQUEST / 35 = BAD_RESPONSE / 50 = SERVICE_NOT_FOUND / 60 = SERVICE_ERROR / 70 = SERVER_ERROR」这组取值**全部对不上源码**。3.3.6 的 `Response` 只有上表这 8 个常量，**没有 `BAD_RESPONSE` 这个常量**（响应不合法复用 `BAD_REQUEST = 40`），也没有 `50` 与 `35` 这两个值。另外 `Response` 的默认状态是 `OK`（`Response.java`，`private byte mStatus = OK;`）。
 
-解码侧对 status 的判断很直接：非 `OK` 时响应 body 携带的是异常对象而非调用结果，`DefaultFuture.completeExceptionally` 走异常路径。服务端处理请求时若来不及构造业务结果，`DubboProtocol` 也会主动构造带异常 status 的 `Response` 回写。具体路径见 `HeaderExchangeHandler.handleRequest`（`exchange/support/header/HeaderExchangeHandler.java:90-118`）：业务 `reply()` 的 future 正常完成则 `res.setStatus(Response.OK)`，抛异常则 `res.setStatus(Response.SERVICE_ERROR)`；而请求本身解码失败时（`req.isBroken()`）直接回 `Response.BAD_REQUEST`（`:96-108`）。
+解码侧对 status 的判断很直接：非 `OK` 时响应 body 携带的是异常对象而非调用结果，`DefaultFuture.completeExceptionally` 走异常路径。服务端处理请求时若来不及构造业务结果，`DubboProtocol` 也会主动构造带异常 status 的 `Response` 回写。具体路径见 `HeaderExchangeHandler.handleRequest`（`exchange/support/header/HeaderExchangeHandler.java`）：业务 `reply()` 的 future 正常完成则 `res.setStatus(Response.OK)`，抛异常则 `res.setStatus(Response.SERVICE_ERROR)`；而请求本身解码失败时（`req.isBroken()`）直接回 `Response.BAD_REQUEST`。
 
 ### Half-Packet and Sticky-Packet: Practice of NEED_MORE_INPUT
 
@@ -135,19 +137,19 @@ Dubbo 协议的 TCP 流没有分隔符，拆包完全依赖解码器的状态判
 一个常见的想当然是「`Codec2` 继承自老的 `Codec`」——不成立。二者是**平行的两个 `@SPI` 接口**：
 
 ```java
-// dubbo-remoting/dubbo-remoting-api/.../remoting/codec/Codec2.java:26-38
+// dubbo-remoting/dubbo-remoting-api/.../remoting/codec/Codec2.java
 @SPI
-public interface Codec2 {                       // :26-27 独立 @SPI，不继承任何接口
+public interface Codec2 {  // 独立 @SPI，不继承任何接口
     void encode(Channel channel, ChannelBuffer buffer, Object message) throws IOException;
     Object decode(Channel channel, ChannelBuffer buffer) throws IOException;
-    enum DecodeResult {                          // :33-37
-        NEED_MORE_INPUT,                         // 数据不足，暂停读等待下次
-        SKIP_SOME_INPUT                          // 跳过部分脏数据
+    enum DecodeResult {
+        NEED_MORE_INPUT,  // 数据不足，暂停读等待下次
+        SKIP_SOME_INPUT  // 跳过部分脏数据
     }
 }
 
-// dubbo-remoting/dubbo-remoting-api/.../remoting/codec/Codec.java:32
-@Deprecated                                     // 老 Codec 已废弃
+// dubbo-remoting/dubbo-remoting-api/.../remoting/codec/Codec.java
+@Deprecated  // 老 Codec 已废弃
 public interface Codec { ... }
 ```
 
@@ -157,8 +159,8 @@ public interface Codec { ... }
 
 **`Codec2` 接口不存在 `encodeRequestData` / `decodeBody` 这两个方法**。这两个名字属于实现类的 `protected` 方法，而非 SPI 接口契约：
 
-- `decodeBody`：`ExchangeCodec.java:152` 的 `protected` 方法，子类 `DubboCodec` 覆写以解析 RPC body；
-- `encodeRequestData`：`ExchangeCodec.java:522-530` 的 `protected` 方法，同样由 `DubboCodec` 覆写。
+- `decodeBody`：`ExchangeCodec.java` 的 `protected` 方法，子类 `DubboCodec` 覆写以解析 RPC body；
+- `encodeRequestData`：`ExchangeCodec.java` 的 `protected` 方法，同样由 `DubboCodec` 覆写。
 
 SPI 接口只声明 `encode` / `decode` 两个方法加一个 `DecodeResult` 枚举。把 protected 实现方法当成接口方法写进文档，会导致对「自定义编解码器需要实现什么」产生错误预期——自定义 Codec 实现的是 `Codec2.encode/decode`，拆包状态机（粘包/半包处理）也要自己在 `decode` 里用 `NEED_MORE_INPUT` 表达。
 
@@ -197,10 +199,10 @@ dubbo=org.apache.dubbo.rpc.protocol.dubbo.DubboCountCodec
 传输层只认识字节，把字节变成「可回复的消息」的是 `ExchangeHandler`：
 
 ```java
-// dubbo-remoting/dubbo-remoting-api/.../exchange/ExchangeHandler.java:28,38
-public interface ExchangeHandler extends ChannelHandler, TelnetHandler {   // :28
-    // 核心方法：收到 twoway 请求后由实现方产出响应对象，框架负责编码回写
-    CompletableFuture<Object> reply(ExchangeChannel channel, Object request) throws RemotingException;  // :38
+// dubbo-remoting/dubbo-remoting-api/.../exchange/ExchangeHandler.java
+public interface ExchangeHandler extends ChannelHandler, TelnetHandler {
+  // 核心方法：收到 twoway 请求后由实现方产出响应对象，框架负责编码回写
+    CompletableFuture<Object> reply(ExchangeChannel channel, Object request) throws RemotingException;
 }
 ```
 
@@ -209,18 +211,18 @@ public interface ExchangeHandler extends ChannelHandler, TelnetHandler {   // :2
 ### HeaderExchangeHandler Dispatch
 
 ```java
-// dubbo-remoting/dubbo-remoting-api/.../exchange/support/HeaderExchangeHandler.java:49
+// dubbo-remoting/dubbo-remoting-api/.../exchange/support/HeaderExchangeHandler.java
 public class HeaderExchangeHandler implements ChannelHandlerDelegate {
-    // 收到 Response（客户端侧）：交给 DefaultFuture 完成对应的 future
-    // :63-65
+  // 收到 Response（客户端侧）：交给 DefaultFuture 完成对应的 future
+
     DefaultFuture.received(channel, response);
 
-    // 收到 twoway Request（服务端侧）：调 handler.reply() 并回写
-    // :88-110
+  // 收到 twoway Request（服务端侧）：调 handler.reply() 并回写
+
     CompletableFuture<Object> future = handler.reply(channel, request);
     future.whenComplete((result, t) -> {
         Response res = new Response(request.getId());
-        // ... 组装响应并 channel.send(res)
+  // ... 组装响应并 channel.send(res)
     });
 }
 ```
@@ -231,8 +233,8 @@ public class HeaderExchangeHandler implements ChannelHandlerDelegate {
 
 ```java
 // dubbo-remoting/dubbo-remoting-api/.../exchange/support/DefaultFuture.java
-private static final Map<Long, Channel> CHANNELS = new ConcurrentHashMap<>();     // :58 request id -> channel
-private static final Map<Long, DefaultFuture> FUTURES = new ConcurrentHashMap<>(); // :63 request id -> future
+private static final Map<Long, Channel> CHANNELS = new ConcurrentHashMap<>();  // request id -> channel
+private static final Map<Long, DefaultFuture> FUTURES = new ConcurrentHashMap<>(); // request id -> future
 ```
 
 两张静态表构成了 Dubbo 的请求-响应映射：发请求时以全局自增 id 建 `DefaultFuture` 入表，收到响应按 id 出表并 `complete`。这也是单连接多路复用不会串包的保证——id 全局唯一，表按 id 索引。
@@ -246,22 +248,22 @@ private static final Map<Long, DefaultFuture> FUTURES = new ConcurrentHashMap<>(
 ### 3.3.6 Actual Implementation: HashedWheelTimer + Single Future Single Timeout
 
 ```java
-// dubbo-remoting/dubbo-remoting-api/.../exchange/support/DefaultFuture.java:65-67
+// dubbo-remoting/dubbo-remoting-api/.../exchange/support/DefaultFuture.java
 private static final HashedWheelTimer TIMEOUT_TIMER = new HashedWheelTimer(
-    new NamedThreadFactory("dubbo-future-timeout", true),   // 守护线程
-    30, TimeUnit.MILLISECONDS);                             // tick 间隔 30ms
+    new NamedThreadFactory("dubbo-future-timeout", true),  // 守护线程
+    30, TimeUnit.MILLISECONDS);  // tick 间隔 30ms
 
-// :107-110 每个 future 创建时挂一个独立 timeout
+// 每个 future 创建时挂一个独立 timeout
 timeoutCheckTask = new TimeoutCheckTask(id);
 timeout = TIMEOUT_TIMER.newTimeout(timeoutCheckTask, future.getTimeout(), TimeUnit.MILLISECONDS);
 ```
 
-每个 `DefaultFuture` 创建时独立注册一个 `newTimeout(task, future.getTimeout(), MILLISECONDS)`（`:107-110`），超时检查任务 `TimeoutCheckTask` 在 `:311-348`：触发后把 future 从 `FUTURES`/`CHANNELS` 移除，标记 `TIMEOUT` 并唤醒等待线程。30ms 是时间轮的 **tick 精度**（到期检查的分辨率），不是「扫描周期」——时间轮按到期时间哈希到槽位，不存在全表遍历。这是 O(1) 的定时器模型，与「扫描全部 future」的 O(n) 模型是两回事。
+每个 `DefaultFuture` 创建时独立注册一个 `newTimeout(task, future.getTimeout(), MILLISECONDS)`，超时检查任务 `TimeoutCheckTask` 在 ：触发后把 future 从 `FUTURES`/`CHANNELS` 移除，标记 `TIMEOUT` 并唤醒等待线程。30ms 是时间轮的 **tick 精度**（到期检查的分辨率），不是「扫描周期」——时间轮按到期时间哈希到槽位，不存在全表遍历。这是 O(1) 的定时器模型，与「扫描全部 future」的 O(n) 模型是两回事。
 
 ### Default Timeout Value
 
 ```java
-// dubbo-common/src/main/java/org/apache/dubbo/constants/CommonConstants.java:147
+// dubbo-common/src/main/java/org/apache/dubbo/constants/CommonConstants.java
 int DEFAULT_TIMEOUT = 1000;  // 默认方法调用超时 1000ms
 ```
 
@@ -319,14 +321,14 @@ injvm=org.apache.dubbo.rpc.protocol.injvm.InjvmProtocol
 `org.apache.dubbo.rpc.Protocol` 是框架与具体协议实现之间的 SPI 边界，两个核心方法都是 `@Adaptive`，由 adaptive 扩展按 URL 的 `protocol` 参数分发：
 
 ```java
-// dubbo-rpc/dubbo-rpc-api/src/main/java/org/apache/dubbo/rpc/Protocol.java:58-117
+// dubbo-rpc/dubbo-rpc-api/src/main/java/org/apache/dubbo/rpc/Protocol.java
 @SPI(value = "dubbo", scope = ExtensionScope.FRAMEWORK)
 public interface Protocol {
-    int getDefaultPort();                                    // :66 未配端口时由实现提供（dubbo=20880, tri=50051）
-    @Adaptive <T> Exporter<T> export(Invoker<T> invoker);    // :82 服务端暴露
-    @Adaptive <T> Invoker<T> refer(Class<T> type, URL url);  // :100 消费端引用
-    void destroy();                                          // 销毁全部 export/refer
-    default List<ProtocolServer> getServers() { return Collections.emptyList(); } // :115 3.3 新增
+    int getDefaultPort();  // 未配端口时由实现提供（dubbo=20880, tri=50051）
+    @Adaptive <T> Exporter<T> export(Invoker<T> invoker);  // 服务端暴露
+    @Adaptive <T> Invoker<T> refer(Class<T> type, URL url);  // 消费端引用
+    void destroy();  // 销毁全部 export/refer
+    default List<ProtocolServer> getServers() { return Collections.emptyList(); } // 3.3 新增
 }
 ```
 
@@ -356,20 +358,20 @@ qos=org.apache.dubbo.qos.protocol.QosProtocolWrapper      # ← 仅当 dubbo-qos
 包裹顺序由 `org.apache.dubbo.common.extension.support.WrapperComparator` 决定，机制在 `ExtensionLoader.createExtension` 里：
 
 ```java
-// dubbo-common/.../common/extension/ExtensionLoader.java:789-800
+// dubbo-common/.../common/extension/ExtensionLoader.java
 List<Class<?>> wrapperClassesList = new ArrayList<>();
 if (cachedWrapperClasses != null) {
     wrapperClassesList.addAll(cachedWrapperClasses);
-    wrapperClassesList.sort(WrapperComparator.COMPARATOR);   // :792 按 order 升序
-    Collections.reverse(wrapperClassesList);                    // :793 翻转为降序
+    wrapperClassesList.sort(WrapperComparator.COMPARATOR);  // 按 order 升序
+    Collections.reverse(wrapperClassesList);  // 翻转为降序
 }
 if (CollectionUtils.isNotEmpty(wrapperClassesList)) {
     for (Class<?> wrapperClass : wrapperClassesList) {
         ...
-        instance = (T) wrapperClass.getConstructor(type).newInstance(instance);   // :800 依次包裹
+        instance = (T) wrapperClass.getConstructor(type).newInstance(instance);  // 依次包裹
 ```
 
-`WrapperComparator.parseOrder`（`dubbo-common/.../extension/support/WrapperComparator.java:70-86`）先读 `@Activate(order=...)`，其次读 `@Wrapper(order=...)`，都没有则 order 为 0。
+`WrapperComparator.parseOrder`（`dubbo-common/.../extension/support/WrapperComparator.java`）先读 `@Activate(order=...)`，其次读 `@Wrapper(order=...)`，都没有则 order 为 0。
 
 包裹方向的推导（**这一步容易搞反**）：`sort` 是**升序**（`WrapperComparator.compare` 返回 `n1 > n2 ? 1 : -1`），`reverse` 后数组变成**按 order 降序**，而 `for` 循环**按数组顺序依次包裹**（每次 `new` 出新 wrapper 把上一个包进去）。因此**数组里第一个被包的成为最内层、最后一个成为最外层**——也就是 **order 值越小越靠外**。
 
@@ -385,35 +387,35 @@ if (CollectionUtils.isNotEmpty(wrapperClassesList)) {
 | `QosProtocolWrapper` | 200 | 内层 | QoS 协议入口（`dubbo-plugin/dubbo-qos`，仅当该模块在 classpath） |
 
 ```java
-// dubbo-cluster/.../cluster/filter/ProtocolFilterWrapper.java:35
-@Activate(order = 100)               // 中层：负责构建 Filter 链
+// dubbo-cluster/.../cluster/filter/ProtocolFilterWrapper.java
+@Activate(order = 100)  // 中层：负责构建 Filter 链
 public class ProtocolFilterWrapper implements Protocol { ... }
 
-// dubbo-rpc/.../rpc/protocol/ProtocolListenerWrapper.java:46
-@Activate(order = 200)               // 内层：包裹 Exporter/Invoker 监听器
+// dubbo-rpc/.../rpc/protocol/ProtocolListenerWrapper.java
+@Activate(order = 200)  // 内层：包裹 Exporter/Invoker 监听器
 public class ProtocolListenerWrapper implements Protocol { ... }
 
-// dubbo-rpc/.../rpc/protocol/InvokerCountWrapper.java:27
-@Activate(order = Integer.MIN_VALUE + 1000)   // 最外层
+// dubbo-rpc/.../rpc/protocol/InvokerCountWrapper.java
+@Activate(order = Integer.MIN_VALUE + 1000)  // 最外层
 public class InvokerCountWrapper implements Protocol { ... }
 ```
 
 > [!NOTE]
-> **order 相同的 wrapper 之间没有语义顺序。** `ProtocolSecurityWrapper` / `ProtocolListenerWrapper` / `QosProtocolWrapper` 三者 order 都是 200，而 `cachedWrapperClasses` 是 `ConcurrentHashSet`（`ExtensionLoader.java:1400`），其迭代顺序不是按 order 排的；`Collections.sort` 是稳定排序但 `reverse` 会把同 order 元素的相对次序也一并倒转。因此这三者的嵌套先后**取决于 Class 的哈希分布**，不要依赖它。
+> **order 相同的 wrapper 之间没有语义顺序。** `ProtocolSecurityWrapper` / `ProtocolListenerWrapper` / `QosProtocolWrapper` 三者 order 都是 200，而 `cachedWrapperClasses` 是 `ConcurrentHashSet`（`ExtensionLoader.java`），其迭代顺序不是按 order 排的；`Collections.sort` 是稳定排序但 `reverse` 会把同 order 元素的相对次序也一并倒转。因此这三者的嵌套先后**取决于 Class 的哈希分布**，不要依赖它。
 
 消费端的最终 Invoker 由外到内是：`ReferenceCountInvokerWrapper` → Filter 链 → `ListenerInvokerWrapper` → 真实 Invoker。服务端侧 Filter 链作用在 **Invoker** 上（`ProtocolFilterWrapper.export` 先 `buildInvokerChain` 再交给内层 `protocol.export`），`ListenerExporterWrapper` 作用在 **Exporter** 上。
 
 > [!WARNING]
-> 「Wrapper 类」的判定**不靠命名约定，靠构造器签名**：`ExtensionLoader.isWrapperClass`（`:1409-1420`）检查该类是否存在唯一一个「参数类型 == 被扩展的接口类型」的构造器。`loadClass` 在 `:1286-1289` 先判 `isWrapperClass(clazz)`，命中就 `cacheWrapperClass(clazz)` 而**不注册成可按名获取的扩展**——所以 SPI 文件里的 `listener=` / `filter=` 这些名字**取不到**（`getExtension("listener")` 会失败），它们只用于让类被加载进 wrapper 缓存。反之 `mock=` / `injvm=` / `dubbo=` 对应的类没有单参 `Protocol` 构造器，是正常扩展点，仍可按名获取。3.3.6 里**没有**「SPI 扩展名以 `wrapper` 开头就自动包裹」这种规则。
+> 「Wrapper 类」的判定**不靠命名约定，靠构造器签名**：`ExtensionLoader.isWrapperClass`检查该类是否存在唯一一个「参数类型 == 被扩展的接口类型」的构造器。`loadClass` 在  先判 `isWrapperClass(clazz)`，命中就 `cacheWrapperClass(clazz)` 而**不注册成可按名获取的扩展**——所以 SPI 文件里的 `listener=` / `filter=` 这些名字**取不到**（`getExtension("listener")` 会失败），它们只用于让类被加载进 wrapper 缓存。反之 `mock=` / `injvm=` / `dubbo=` 对应的类没有单参 `Protocol` 构造器，是正常扩展点，仍可按名获取。3.3.6 里**没有**「SPI 扩展名以 `wrapper` 开头就自动包裹」这种规则。
 
-各 wrapper 都用同一道守卫把注册中心地址排除在外：`if (UrlUtils.isRegistry(url)) return protocol.xxx(url);` —— 当 URL 是注册中心地址（`registry://`）时直接透传，只对本协议地址（`dubbo://`、`tri://` 等）套链。`ProtocolListenerWrapper.export` 还有一处特例：`protocol` 为 `injvm` 时额外追加 `InjvmExporterListener`（`ProtocolListenerWrapper.java:68-73`）。
+各 wrapper 都用同一道守卫把注册中心地址排除在外：`if (UrlUtils.isRegistry(url)) return protocol.xxx(url);` —— 当 URL 是注册中心地址（`registry://`）时直接透传，只对本协议地址（`dubbo://`、`tri://` 等）套链。`ProtocolListenerWrapper.export` 还有一处特例：`protocol` 为 `injvm` 时额外追加 `InjvmExporterListener`（`ProtocolListenerWrapper.java`）。
 
 ## buildInvokerChain Filter Group and Order
 
 `ProtocolFilterWrapper` 不再自己排序 Filter，而是委托给 3.3 新增的 `FilterChainBuilder` SPI：
 
 ```java
-// dubbo-cluster/.../cluster/filter/ProtocolFilterWrapper.java:52-73
+// dubbo-cluster/.../cluster/filter/ProtocolFilterWrapper.java
 public <T> Exporter<T> export(Invoker<T> invoker) {
     if (UrlUtils.isRegistry(invoker.getUrl())) return protocol.export(invoker);
     FilterChainBuilder builder = getFilterChainBuilder(invoker.getUrl());
@@ -429,27 +431,27 @@ public <T> Invoker<T> refer(Class<T> type, URL url) {
 `DefaultFilterChainBuilder.buildInvokerChain` 决定 Filter 集合的核心只有一行：
 
 ```java
-// dubbo-cluster/.../cluster/filter/DefaultFilterChainBuilder.java:44-65
+// dubbo-cluster/.../cluster/filter/DefaultFilterChainBuilder.java
 List<Filter> filters = ScopeModelUtil.getExtensionLoader(Filter.class, moduleModels.get(0))
-        .getActivateExtension(url, key, group);   // key=service.filter / reference.filter, group=provider / consumer
+        .getActivateExtension(url, key, group);  // key=service.filter / reference.filter, group=provider / consumer
 ```
 
 `getActivateExtension(url, key, group)` 的过滤与排序规则：
 
-- **group 过滤**：只保留 `@Activate(group = PROVIDER)`（如 `TimeoutFilter`，`dubbo-rpc/.../filter/TimeoutFilter.java:38`）或 `group = CONSUMER`（如 `ActiveLimitFilter`，`@Activate(group = CONSUMER, value = ACTIVES_KEY)`）的 Filter，group 不匹配的直接排除。判定在 `ExtensionLoader.isMatchGroup`（`:461-469`）：传入的 group 为空则**全部匹配**；Filter 声明了 group 则用 `Set.contains` 精确匹配；**Filter 一个 group 都没声明（`@Activate` 的 `group()` 默认为 `{}`）时反而一律不匹配**——所以不写 group 的 Filter 只能在 `group == null` 的场景（如 `getActivateExtension(url, key)`）被激活。
+- **group 过滤**：只保留 `@Activate(group = PROVIDER)`（如 `TimeoutFilter`，`dubbo-rpc/.../filter/TimeoutFilter.java`）或 `group = CONSUMER`（如 `ActiveLimitFilter`，`@Activate(group = CONSUMER, value = ACTIVES_KEY)`）的 Filter，group 不匹配的直接排除。判定在 `ExtensionLoader.isMatchGroup`：传入的 group 为空则**全部匹配**；Filter 声明了 group 则用 `Set.contains` 精确匹配；**Filter 一个 group 都没声明（`@Activate` 的 `group()` 默认为 `{}`）时反而一律不匹配**——所以不写 group 的 Filter 只能在 `group == null` 的场景（如 `getActivateExtension(url, key)`）被激活。
 - **order 排序**：同一 group 内按 `@Activate(order = ...)` 升序串成责任链，越小越靠前（越靠近真实 Invoker）。比较器是 `ActivateComparator`（`dubbo-common/.../extension/support/ActivateComparator.java`），`before`/`after` 优先于 `order`，order 相同时按类名 `getSimpleName()` 字典序兜底（详见 [Filter](/docs/CS/Framework/Dubbo/Filter.md)）。
-- **key 显式指定**：URL 上的 `service.filter` / `reference.filter` 可强制包含/排除（`-` 前缀表示排除）某些 Filter；两者 key 的常量是 `CommonConstants.SERVICE_FILTER_KEY = "service.filter"`（`:359`）与 `REFERENCE_FILTER_KEY = "reference.filter"`（`:336`）。
+- **key 显式指定**：URL 上的 `service.filter` / `reference.filter` 可强制包含/排除（`-` 前缀表示排除）某些 Filter；两者 key 的常量是 `CommonConstants.SERVICE_FILTER_KEY = "service.filter"`与 `REFERENCE_FILTER_KEY = "reference.filter"`。
 
-链上每个节点是 `FilterChainNode`（或 `CopyOfFilterChainNode`），`filter.invoke(nextNode, invocation)` 依次向下传递，结果经 `whenCompleteWithContext` 回调 `ListenableFilter.Listener`。装配时链是从后往前串的（`DefaultFilterChainBuilder.java:67-74`）：`for (int i = filters.size() - 1; i >= 0; i--)` 逆序遍历 filter 列表，每轮把 `last` 作为 `next` 包进新的 `CopyOfFilterChainNode`，最终最外层再包一层 `CallbackRegistrationInvoker` 用于注册监听回调——**这解释了为什么 order 小的 Filter 在链的外层**（它在逆序循环的最后才被包上）。
+链上每个节点是 `FilterChainNode`（或 `CopyOfFilterChainNode`），`filter.invoke(nextNode, invocation)` 依次向下传递，结果经 `whenCompleteWithContext` 回调 `ListenableFilter.Listener`。装配时链是从后往前串的（`DefaultFilterChainBuilder.java`）：`for (int i = filters.size() - 1; i >= 0; i--)` 逆序遍历 filter 列表，每轮把 `last` 作为 `next` 包进新的 `CopyOfFilterChainNode`，最终最外层再包一层 `CallbackRegistrationInvoker` 用于注册监听回调——**这解释了为什么 order 小的 Filter 在链的外层**（它在逆序循环的最后才被包上）。
 
-`DefaultFilterChainBuilder` 还处理了**多 ModuleModel 场景**（`:49-65`）：`moduleModels.size() > 1` 时分别从各 ModuleModel 取 filter 列表，再经 `sortingAndDeduplication(filters, directors)` 合并去重，此时排序依据是各 ModuleModel 自己的 `ExtensionDirector`；只有单个 ModuleModel 时才直接用 `ScopeModelUtil.getExtensionLoader(Filter.class, moduleModels.get(0))`。
+`DefaultFilterChainBuilder` 还处理了**多 ModuleModel 场景**：`moduleModels.size() > 1` 时分别从各 ModuleModel 取 filter 列表，再经 `sortingAndDeduplication(filters, directors)` 合并去重，此时排序依据是各 ModuleModel 自己的 `ExtensionDirector`；只有单个 ModuleModel 时才直接用 `ScopeModelUtil.getExtensionLoader(Filter.class, moduleModels.get(0))`。
 
 ## Consumer Timeout and Provider TimeoutFilter
 
 消费端超时由 `DefaultFuture` 的 `TimeoutCheckTask` 触发（见上文 Time-Wheel Timer 一节），与服务端是否完成无关。服务端侧另有 `TimeoutFilter`（`@Activate(group = PROVIDER)`），职责与消费端不同：
 
 ```java
-// dubbo-rpc/.../filter/TimeoutFilter.java:38
+// dubbo-rpc/.../filter/TimeoutFilter.java
 @Activate(group = CommonConstants.PROVIDER)
 public class TimeoutFilter implements Filter { ... }
 ```
@@ -458,29 +460,29 @@ public class TimeoutFilter implements Filter { ... }
 
 ## DubboProtocol Server Cache and Request Dispatch
 
-`DubboProtocol extends AbstractProtocol`，持有两处来自父类的缓存：`Map<String, ProtocolServer> serverMap`（按 `url.getAddress()` 复用 Server）与 `Map<String, Exporter<?>> exporterMap`（按 `serviceKey` 复用 Exporter，定义于 `AbstractProtocol.java:60,65`）。
+`DubboProtocol extends AbstractProtocol`，持有两处来自父类的缓存：`Map<String, ProtocolServer> serverMap`（按 `url.getAddress()` 复用 Server）与 `Map<String, Exporter<?>> exporterMap`（按 `serviceKey` 复用 Exporter，定义于 `AbstractProtocol.java`）。
 
 服务端暴露时 `openServer` 做了地址级复用：
 
 ```java
-// dubbo-rpc/.../protocol/dubbo/DubboProtocol.java:367-389
+// dubbo-rpc/.../protocol/dubbo/DubboProtocol.java
 private void openServer(URL url) {
-    String key = url.getAddress();                 // host:port
+    String key = url.getAddress();  // host:port
     if (url.getParameter(IS_SERVER_KEY, true)) {
         ProtocolServer server = serverMap.get(key);
         if (server == null) {
             synchronized (this) {
                 if (serverMap.get(key) == null) {
-                    serverMap.put(key, createServer(url));   // 同一 address 只建一个 ExchangeServer
+                    serverMap.put(key, createServer(url));  // 同一 address 只建一个 ExchangeServer
                     return;
                 }
             }
         }
-        server.reset(url);                          // 已存在则 reset（配合 override 动态配置）
+        server.reset(url);  // 已存在则 reset（配合 override 动态配置）
     }
 }
 
-// :397-432 createServer 关键两行
+// createServer 关键两行
 url = url.addParameter(CODEC_KEY, DubboCodec.NAME); // 绑定 DubboCodec
 ExchangeServer server = Exchangers.bind(url, requestHandler);
 ```
@@ -490,18 +492,18 @@ ExchangeServer server = Exchangers.bind(url, requestHandler);
 请求到达后的分发由构造时创建的 `ExchangeHandlerAdapter requestHandler` 完成，它实现了 `ExchangeHandler.reply`：
 
 ```java
-// dubbo-rpc/.../protocol/dubbo/DubboProtocol.java:111-169
+// dubbo-rpc/.../protocol/dubbo/DubboProtocol.java
 private final ExchangeHandler requestHandler = new ExchangeHandlerAdapter(frameworkModel) {
     public CompletableFuture<Object> reply(ExchangeChannel channel, Object message) {
         Invocation inv = (Invocation) message;
         Invoker<?> invoker = inv.getInvoker() == null ? getInvoker(channel, inv) : inv.getInvoker();
         ...
-        Result result = invoker.invoke(inv);       // 进入 Filter 链 → 业务实现
+        Result result = invoker.invoke(inv);  // 进入 Filter 链 → 业务实现
         return result.thenApply(Function.identity());
     }
 };
 
-// :287-324 getInvoker
+// getInvoker
 String serviceKey = serviceKey(port, path, version, group);  // port 取自 channel 本地地址；path/version/group 取自 attachment
 DubboExporter<?> exporter = (DubboExporter<?>) exporterMap.get(serviceKey);
 return exporter.getInvoker();
@@ -509,14 +511,14 @@ return exporter.getInvoker();
 
 `port` 取自 `channel.getLocalAddress().getPort()`，`path/version/group` 取自 `Invocation` attachment，拼出 `serviceKey` 后在 `exporterMap` 取到 `Invoker`——这正是 16 字节头里 request id 之外的、定位「这次请求属于哪个服务」的服务端依据。`requestHandler` 被传给 `Exchangers.bind`，最终由 `HeaderExchangeHandler`（`dubbo-remoting-api`）按消息类型分派：twoway `Request` 进 `reply()` 回写响应，非 `Invocation` 消息（如事件）走父类逻辑。客户端建连在 `initClient` 里 `Exchangers.connect(url, requestHandler)`，且 `lazy-connect` 时换成 `LazyConnectExchangeClient`。
 
-`getInvoker` 里还有两处易被忽略的分支（`:287-324`）：`isStubServiceInvoke` 为真时把 `port` 强制置 0（本地 stub 服务不对外暴露端口）；`isClientSide(channel)` 为真时（即消费端回调服务端场景）给 `path` 追加 `CALLBACK_SERVICE_KEY` 后缀，用同一个 `exporterMap` 承载双向调用。找不到 exporter 时抛 `RemotingException`，错误信息里带上 `exporterMap.keySet()` 便于排查 group / version 不匹配。
+`getInvoker` 里还有两处易被忽略的分支：`isStubServiceInvoke` 为真时把 `port` 强制置 0（本地 stub 服务不对外暴露端口）；`isClientSide(channel)` 为真时（即消费端回调服务端场景）给 `path` 追加 `CALLBACK_SERVICE_KEY` 后缀，用同一个 `exporterMap` 承载双向调用。找不到 exporter 时抛 `RemotingException`，错误信息里带上 `exporterMap.keySet()` 便于排查 group / version 不匹配。
 
 ## Lazy Decoding DecodeableRpcInvocation
 
 Dubbo 协议的一个关键设计决策是**反序列化不在 I/O 线程里做**。服务端收到请求包时，`DubboCodec.decodeBody` 只把 body 的字节流包成 `DecodeableRpcInvocation` 对象，**不立即反序列化**：
 
 ```java
-// dubbo-rpc/.../protocol/dubbo/DubboCodec.java:186-211
+// dubbo-rpc/.../protocol/dubbo/DubboCodec.java
 DecodeableRpcInvocation inv;
 if (isDecodeDataInIoThread(channel)) {
     if (customByteAccessor != null) {
@@ -525,9 +527,9 @@ if (isDecodeDataInIoThread(channel)) {
         inv = new DecodeableRpcInvocation(frameworkModel, channel, req,
                 new UnsafeByteArrayInputStream(readMessageData(is)), proto);
     }
-    inv.decode();                       // :200 仅在 I/O 线程解码模式下才立即解码
+    inv.decode();  // 仅在 I/O 线程解码模式下才立即解码
 } else {
-    // ... 只构造，不解码
+  // ... 只构造，不解码
 }
 data = inv;
 ```
@@ -535,10 +537,10 @@ data = inv;
 真正的解码时机由 `DecodeHandler` 决定——它在消息进入业务线程池**之后**才触发：
 
 ```java
-// dubbo-remoting/.../remoting/transport/DecodeHandler.java:39-52
+// dubbo-remoting/.../remoting/transport/DecodeHandler.java
 public void received(Channel channel, Object message) throws RemotingException {
     if (message instanceof Decodeable) {
-        decode(message);               // :41 触发 Decodeable.decode()
+        decode(message);  // 触发 Decodeable.decode()
     }
     if (message instanceof Request) {
         decode(((Request) message).getData());
@@ -550,10 +552,10 @@ public void received(Channel channel, Object message) throws RemotingException {
 }
 ```
 
-`DecodeableRpcInvocation.decode()`（`:103-118`）带幂等保护（`hasDecoded` 标志），且解码失败**不抛异常**，而是把错误塞进 Request：
+`DecodeableRpcInvocation.decode()`带幂等保护（`hasDecoded` 标志），且解码失败**不抛异常**，而是把错误塞进 Request：
 
 ```java
-// dubbo-rpc/.../protocol/dubbo/DecodeableRpcInvocation.java:103-118
+// dubbo-rpc/.../protocol/dubbo/DecodeableRpcInvocation.java
 public void decode() throws Exception {
     if (!hasDecoded && channel != null && inputStream != null) {
         try {
@@ -579,7 +581,7 @@ public void decode() throws Exception {
 服务端导出时 `DubboProtocol.export` 造的是 `DubboExporter`，它继承 `AbstractExporter`：
 
 ```java
-// dubbo-rpc/.../protocol/dubbo/DubboProtocol.java:336-364（export 摘录）
+// dubbo-rpc/.../protocol/dubbo/DubboProtocol.java（export 摘录）
 String key = serviceKey(url);
 DubboExporter<T> exporter = new DubboExporter<>(invoker, key, exporterMap);
 ...
@@ -588,10 +590,10 @@ optimizeSerialization(url);
 return exporter;
 ```
 
-注意 `exporterMap.put(key, this)` 是在 **`DubboExporter` 的构造器里**做的（`DubboExporter.java:36-38`），不是 `export` 方法里——所以 `DubboExporter` 一被构造就已经在 `exporterMap` 中注册了。`DubboExporter` 的另一职责是 `afterUnExport()` 时把自己摘掉：
+注意 `exporterMap.put(key, this)` 是在 **`DubboExporter` 的构造器里**做的（`DubboExporter.java`），不是 `export` 方法里——所以 `DubboExporter` 一被构造就已经在 `exporterMap` 中注册了。`DubboExporter` 的另一职责是 `afterUnExport()` 时把自己摘掉：
 
 ```java
-// dubbo-rpc/.../protocol/dubbo/DubboExporter.java:41-43
+// dubbo-rpc/.../protocol/dubbo/DubboExporter.java
 @Override
 public void afterUnExport() {
     exporterMap.remove(key, this);
@@ -603,7 +605,7 @@ public void afterUnExport() {
 消费端引用时 `DubboProtocol.refer` 造的是 `DubboInvoker`，真正的发请求在 `doInvoke`：
 
 ```java
-// dubbo-rpc/.../protocol/dubbo/DubboInvoker.java:90-145（doInvoke 摘录）
+// dubbo-rpc/.../protocol/dubbo/DubboInvoker.java（doInvoke 摘录）
 List<? extends ExchangeClient> exchangeClients = clientsProvider.getClients();
 if (exchangeClients.size() == 1) {
     currentClient = exchangeClients.get(0);
@@ -611,7 +613,7 @@ if (exchangeClients.size() == 1) {
     currentClient = exchangeClients.get(index.getAndIncrement() % exchangeClients.size());  // 轮询
 }
 int timeout = RpcUtils.calculateTimeout(getUrl(), invocation, methodName, DEFAULT_TIMEOUT);
-if (timeout <= 0) {                       // 超时时间已耗尽，直接终止
+if (timeout <= 0) {  // 超时时间已耗尽，直接终止
     return AsyncRpcResult.newDefaultAsyncResult(
             new RpcException(RpcException.TIMEOUT_TERMINATE, "No time left for making the following call: ..."), invocation);
 }
@@ -644,11 +646,11 @@ if (isOneway) {
 消费端连接的复用由 `DubboProtocol.getClients` 决定，核心是 `connections` 与 `shareconnections` 两个参数：
 
 ```java
-// dubbo-rpc/.../protocol/dubbo/DubboProtocol.java:452-472
+// dubbo-rpc/.../protocol/dubbo/DubboProtocol.java
 private ClientsProvider getClients(URL url) {
     int connections = url.getParameter(CONNECTIONS_KEY, 0);
     if (connections == 0) {
-        // 未配置 connections 时走共享连接；shareconnections 默认 "1"
+  // 未配置 connections 时走共享连接；shareconnections 默认 "1"
         String shareConnectionsStr = StringUtils.isBlank(url.getParameter(SHARE_CONNECTIONS_KEY, (String) null))
                 ? ConfigurationUtils.getProperty(url.getOrDefaultApplicationModel(), SHARE_CONNECTIONS_KEY, DEFAULT_SHARE_CONNECTIONS)
                 : url.getParameter(SHARE_CONNECTIONS_KEY, (String) null);
@@ -661,30 +663,30 @@ private ClientsProvider getClients(URL url) {
 }
 ```
 
-- `connections` 未配置（0）→ **共享连接**：`getSharedClient`（`:481-494`）以 `url.getAddress()` 为 key 在 `referenceClientMap` 里 `compute`，复用已有的 `SharedClientsProvider` 并对其引用计数 `increaseCount()`。
+- `connections` 未配置（0）→ **共享连接**：`getSharedClient`以 `url.getAddress()` 为 key 在 `referenceClientMap` 里 `compute`，复用已有的 `SharedClientsProvider` 并对其引用计数 `increaseCount()`。
 - `connections` 显式配置 → **独占连接**：每个 Invoker 自建 N 条 `ExchangeClient`（`ExclusiveClientsProvider`），不共享。
-- `shareconnections` 默认值是 `"1"`（`dubbo-rpc/.../protocol/dubbo/Constants.java:27`），key 是 `"shareconnections"`（`:21`，**全小写、无连字符**）。
+- `shareconnections` 默认值是 `"1"`（`dubbo-rpc/.../protocol/dubbo/Constants.java`），key 是 `"shareconnections"`（**全小写、无连字符**）。
 
-共享连接的引用计数由 `SharedClientsProvider` 管理（`increaseCount()` / `close(int)`），最后一个使用者关闭后通过 `scheduleRemoveSharedClient`（`:496-502`）异步把自己从 `referenceClientMap` 移除。客户端连接的构造在 `initClient`（`:541-585`），会补上 `CODEC_KEY=DubboCodec.NAME` 与默认 `HEARTBEAT_KEY`，`lazy-connect` 为真时返回 `LazyConnectExchangeClient`（延迟到首次调用才真正建连）。
+共享连接的引用计数由 `SharedClientsProvider` 管理（`increaseCount()` / `close(int)`），最后一个使用者关闭后通过 `scheduleRemoveSharedClient`异步把自己从 `referenceClientMap` 移除。客户端连接的构造在 `initClient`，会补上 `CODEC_KEY=DubboCodec.NAME` 与默认 `HEARTBEAT_KEY`，`lazy-connect` 为真时返回 `LazyConnectExchangeClient`（延迟到首次调用才真正建连）。
 
 ## Default Value Summary Table
 
 | 项目 | 值 | 源码位置 |
 | :--- | :--- | :--- |
-| 头部长度 | 16 字节 | `ExchangeCodec.java:60` |
-| 魔数 | `0xdabb` | `ExchangeCodec.java:62` |
-| flag 位 | 请求 `0x80`、twoway `0x40`、event `0x20`、序列化掩码 `0x1f` | `ExchangeCodec.java:66-69` |
-| 序列化 id 位置 | `header[2]` 低 5 位（请求与响应相同） | `ExchangeCodec.java:265/319` |
-| status 位置 | `header[3]`，仅响应有效 | `ExchangeCodec.java:324-325` |
-| status 取值 | `OK=20`、`CLIENT_TIMEOUT=30`、`SERVER_TIMEOUT=31`、`BAD_REQUEST=40`、`SERVICE_NOT_FOUND=60`、`SERVICE_ERROR=70`、`SERVER_ERROR=80`、`CLIENT_ERROR=90` | `Response.java:26-76` |
-| 协议格式版本 | `"2.0.2"` | `Version.java:46` |
+| 头部长度 | 16 字节 | `ExchangeCodec.java` |
+| 魔数 | `0xdabb` | `ExchangeCodec.java` |
+| flag 位 | 请求 `0x80`、twoway `0x40`、event `0x20`、序列化掩码 `0x1f` | `ExchangeCodec.java` |
+| 序列化 id 位置 | `header[2]` 低 5 位（请求与响应相同） | `ExchangeCodec.java` |
+| status 位置 | `header[3]`，仅响应有效 | `ExchangeCodec.java` |
+| status 取值 | `OK=20`、`CLIENT_TIMEOUT=30`、`SERVER_TIMEOUT=31`、`BAD_REQUEST=40`、`SERVICE_NOT_FOUND=60`、`SERVICE_ERROR=70`、`SERVER_ERROR=80`、`CLIENT_ERROR=90` | `Response.java` |
+| 协议格式版本 | `"2.0.2"` | `Version.java` |
 | `Codec2` 注册 | transport/telnet/exchange/default + dubbo | 各模块 SPI 文件 |
-| 时间轮 tick | 30ms | `DefaultFuture.java:65-67` |
-| 默认调用超时 | 1000ms | `CommonConstants.java:147` |
+| 时间轮 tick | 30ms | `DefaultFuture.java` |
+| 默认调用超时 | 1000ms | `CommonConstants.java` |
 | `dubbo-rpc` 模块 | api / dubbo / injvm / triple 共 4 个 | 目录结构 |
 | 可用协议名 | `dubbo`、`tri`、`grpc`、`rest2`、`injvm` | 各模块 SPI 文件 |
-| Wrapper 层级 | order 越小越靠外；`InvokerCountWrapper`(`MIN_VALUE+1000`) 最外，`ProtocolFilterWrapper`(100) 居中 | `ExtensionLoader.java:789-800` |
-| 共享连接默认条数 | `shareconnections=1` | `dubbo-rpc-dubbo/.../Constants.java:21,27` |
+| Wrapper 层级 | order 越小越靠外；`InvokerCountWrapper`(`MIN_VALUE+1000`) 最外，`ProtocolFilterWrapper`(100) 居中 | `ExtensionLoader.java` |
+| 共享连接默认条数 | `shareconnections=1` | `dubbo-rpc-dubbo/.../Constants.java` |
 
 ## Pitfall List
 

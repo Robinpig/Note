@@ -2,7 +2,7 @@
 
 本目录是 Consul 的专题索引。Consul 是 HashiCorp 出品的**服务网络平台**：把服务发现、KV 配置、服务网格（mTLS + 意图授权）与多数据中心联邦打包进单个二进制。与 etcd / ZooKeeper / Nacos 这类"通用强一致键值底座"不同，Consul 直接把**注册发现 + 安全通信 + 跨机房**做成开箱能力，业务无需自己拼上层。
 
-建议阅读路线：先读 [Consul（枢纽）](/docs/CS/Framework/consul/Consul.md) 建立全局心智，再用 [架构深潜](/docs/CS/Framework/consul/architecture.md) 看 agent 内部子系统与读写路径、用 [数据模型](/docs/CS/Framework/consul/data_model.md) 看 catalog/session，最后按"共识 Raft → 成员 Serf → 存储 KV → 服务发现 → 服务网格 → 网关联邦 → 安全 → 配置 → 运维"逐层下钻。版本与许可专篇见 [版本与许可](/docs/CS/Framework/consul/license.md)；横向取舍见 [etcd 横向对照](/docs/CS/Framework/etcd/compare.md)。
+建议阅读路线：先读 [Consul（枢纽）](/docs/CS/Framework/consul/Consul.md) 建立全局心智（枢纽含 `## Architecture`：分层 dot 图 + 真实源码片段，源码核自 v2.1.0），再按"共识 Raft → 成员 Serf → 存储 KV/Session → 服务发现 → 服务网格 → 网关联邦 → 安全 → 配置 → 运维"逐层下钻。版本与许可专篇见 [版本与许可](/docs/CS/Framework/consul/license.md)；横向取舍见 [etcd 横向对照](/docs/CS/Framework/etcd/compare.md)。
 
 ```dot
 digraph consul_index {
@@ -18,7 +18,6 @@ digraph consul_index {
     catalog [label="Catalog / KV\nkv.md + data_model.md"];
   }
   agent [label="Agent\nserver / client", fillcolor="#fdeccb"];
-  arch [label="架构深潜\narchitecture.md", fillcolor="#e4eef7"];
   disco [label="服务发现\ndiscovery.md", fillcolor="#e7f4e4"];
   mesh [label="服务网格\nmesh.md", fillcolor="#f3e4f7"];
   gw [label="网关 & 联邦\ngateway.md", fillcolor="#f7e9e4"];
@@ -31,8 +30,6 @@ digraph consul_index {
   agent -> serf;
   agent -> catalog;
   agent -> disco;
-  agent -> arch;
-  arch -> cfg;
   disco -> mesh;
   mesh -> gw;
   raft -> sec;
@@ -43,12 +40,11 @@ digraph consul_index {
 
 ## Overview and Startup
 
-- [Consul（枢纽）](/docs/CS/Framework/consul/Consul.md)：agent 双模式（server / client）、控制面 / 数据面、版本与 BSL 许可摘要、整体能力地图、分层导航、与 etcd/ZooKeeper/Nacos 的维度对照。
-- [架构深潜](/docs/CS/Framework/consul/architecture.md)：agent 内部子系统、写路径（client→RPC→Raft→FSM）、读路径（本地缓存 stale / leader 一致读）、端口全表、引导启动流程、控制面 vs 数据面。
+- [Consul（枢纽）](/docs/CS/Framework/consul/Consul.md)：agent 双模式（server / client）、`## Architecture` 章节（分层 cluster dot 图、写路径 local→反熵→Raft→FSM、三档读一致性、LAN/WAN gossip、端口全表、2.x 纠偏）。
 
 ## Consensus Layer: Raft (Server Only)
 
-- [Raft](/docs/CS/Framework/consul/raft.md)：Consul 为何在 server 间跑 Raft、LogStore/SnapshotStore 持久化、snapshot 阈值、Autopilot 自动化运维（稳定期 / 死节点清理 / 最大落后日志）、`/v1/operator/autopilot` 健康检查；与 etcd-raft / Zab / JRaft 对照。
+- [Raft](/docs/CS/Framework/consul/raft.md)：WAL/BoltDB 双日志后端（2.x 新增 WAL）、snapshot 阈值与 `raft_multiplier` 缩放、写提交（ForwardRPC → raftApply → FSM map 分发）、三档一致性读、Autopilot（2.x 外置 `hashicorp/raft-autopilot` 库）。
 
 ## Member Discovery Layer: Serf gossip
 
@@ -56,24 +52,25 @@ digraph consul_index {
 
 ## Storage Layer: KV
 
-- [KV](/docs/CS/Framework/consul/kv.md)：KV 语义（无历史版本）、CAS（ModifyIndex）、单值 512KB 上限、session（lock_delay / TTL / behavior）、分布式锁与信号量、阻塞查询；与 etcd 的 MVCC + lease 对照。
-- [数据模型](/docs/CS/Framework/consul/data_model.md)：catalog 三要素（node / service / check）、agent 本地注册与 server catalog 分离、反熵（anti-entropy）对账、session 的锁/信号量/临时键语义、KV 与 catalog 的边界。
+- [KV](/docs/CS/Framework/consul/kv.md)：KV 语义（无历史版本）、写路径 `KVS.Apply` → `kvsSetTxn` 索引维护、CAS（0 = set-if-not-exists）、lock/unlock 的 `LockIndex` 三态、阻塞查询（300s/600s）。
+- [Session 与锁](/docs/CS/Framework/consul/Session.md)：session 字段校验、TTL invalidator（`sessionTimers` + multiplier）、release/delete 行为、lock-delay（leader 内存 map、commit 前预判）、acquire 失败返回 false 非 409、信号量与选主模式。
+- [数据模型](/docs/CS/Framework/consul/data_model.md)：memdb state store（纯内存、Raft 重放）、FSM 快照/Restore 换库与 Abandon、catalog 三要素与 `HealthFilterType` 过滤、agent 本地状态与反熵同步、blockingquery 包。
 
 ## Service Discovery
 
-- [Discovery](/docs/CS/Framework/consul/discovery.md)：DNS（`<svc>.service.consul`）、HTTP API（catalog / health / agent）、健康检查（script / http / tcp / grpc / ttl）、prepared queries、agent 缓存 stale 读、阻塞查询。
+- [Discovery](/docs/CS/Framework/consul/discovery.md)：DNS（`agent/dns.go` 单文件、weights、SOA）、HTTP API（catalog/health 分工）、健康检查（checks 包、TTL、最小间隔 1s、HTTP 超时 10s）、agent cache（refresh + 退避）、prepared query。
 
 ## Service Mesh (Differentiation Ace)
 
-- [Mesh](/docs/CS/Framework/consul/mesh.md)：Connect → Consul service mesh、Envoy sidecar、xDS（gRPC 8502）、mTLS（connect CA）、intentions（默认 deny，L4/L7）、transparent proxy、proxy-defaults / service-resolver / router / splitter 配置项。
+- [Mesh](/docs/CS/Framework/consul/mesh.md)：delta xDS（SOTW 已废弃）、Connect CA（`CAManager` 状态机、leaf 72h）、intentions 默认 deny、transparent proxy 的 nftables 重定向（2.x 弃 iptables）、config entry 家族。
 
 ## Gateway and Multi-Data Center Federation
 
-- [Gateway](/docs/CS/Framework/consul/gateway.md)：mesh gateway（WAN 联邦，local / remote 模式）、ingress / terminating / API gateway、WAN federation 的两种形态、primary_datacenter 与 primary_gateways。
+- [Gateway](/docs/CS/Framework/consul/gateway.md)：mesh gateway（`GatewayLocator`、wanfed:1 meta）、ingress / terminating / api gateway（2.x config entry 合并）、WAN federation 与 cluster peering（establishment secret 握手）。
 
 ## Security
 
-- [Security](/docs/CS/Framework/consul/security.md)：ACL（默认不启用、default_policy 出厂 allow、策略 / 角色 / 令牌 / 认证方法）、传输 TLS（RPC / HTTPS 8501 / gRPC TLS 8503 / gossip keyring / auto_encrypt）、connect CA；与 etcd RBAC + mTLS 对照。
+- [Security](/docs/CS/Framework/consul/security.md)：ACL（默认不启用、default_policy 出厂 allow、`ACLResolver` 三层解析、down_policy、2.x 移除 TokenResolve）、传输 TLS（`Configurator` 三域）、auto-encrypt、gossip keyring。
 
 ## Configuration
 
@@ -88,7 +85,7 @@ digraph consul_index {
 
 ## Client
 
-- [Client](/docs/CS/Framework/consul/client.md)：go-client（api 包）、DNS 调试、HTTP API（curl）、CLI、服务注册与检查、阻塞查询 SDK、与 etcd clientv3 对照。
+- [Client](/docs/CS/Framework/consul/client.md)：go-client（api 包）、agent 内部 RPC 层（`FindLANRoute`、yamux conn pool、限流、失败换 server）、本地注册状态与 ServiceManager。
 
 ## Version and License
 

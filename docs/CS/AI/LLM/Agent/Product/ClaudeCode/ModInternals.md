@@ -1,10 +1,10 @@
 ## Introduction
 
-前一篇 [Mods](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Mods.md) 讲的是 mod 的**接口面**（`$` 的命名空间、128 个事件、渲染表面、tier）。这一篇讲**实现机制**——从官方四个内置 mod 的真实源码（`diff` 828 文件 / `sec-default` 195 / `telemetry` 275 / `agents-md` 75，共约 13 万行 TypeScript）读出来的、文档与类型契约都不给的东西。
+前一篇 [Mods](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Mods.md) 讲的是 mod 的**接口面**（`$` 的命名空间、128 个事件、渲染表面、tier）。这一篇讲**实现机制**——从官方五个内置 mod 的真实源码（`diff` 840 文件 / `sec-default` 261 / `telemetry` 275 / `agents-md` 75 / `privacy` 12）读出来的、文档与类型契约都不给的东西。
 
-四个 mod 随 Claude Code 二进制一同构建发布，源码即仓库里的 `mods/`。官方给了一条读源码运行的命令：`claude --plugin-dir mods/diff`；测试用 `claude plugin test mods/diff`；类型检查用 `tsc -p mods/tsconfig.json`。
+五个 mod 随 Claude Code 二进制一同构建发布，源码即仓库里的 `mods/`，官方 README 原文是 "These five ship inside Claude Code"。官方给了一条读源码运行的命令：`claude --plugin-dir mods/diff`；测试用 `claude plugin test mods/diff`；类型检查用 `tsc -p mods/tsconfig.json`。
 
-事实基线：官方仓库 [`anthropics/claude-code`](https://github.com/anthropics/claude-code) 的 `main`（2026-10-18 本地取全仓核对；`mods/types/claude-code.d.ts` 首行标注由 Claude Code **2.1.277** 生成，而当前客户端基线已是 **2.1.302**）。
+事实基线：官方仓库 [`anthropics/claude-code`](https://github.com/anthropics/claude-code) 的 `main`（本机 2026-11-17 取 **2.1.326** 全仓核对）；客户端基线同为 2.1.326。类型契约 `mods/types/claude-code.d.ts` 实测 **824KB / 20680 行**。这里最反直觉的一点是：**契约不是全集**——它是引擎加载 mod 时写出到 `.claude-plugin/types/claude-code/index.d.ts` 的副本，标注 EARLY ACCESS（可在小版本间无预告变更）；更根本的是，**mod 通过声明合并加进 `$` 的 noun 永远不在契约文件里**（`$.telemetry` 在契约里搜不到，它由 `telemetry` mod 的 `types/index.d.ts` 声明）。所以「契约规模变大」不等于「补齐了所有 noun」，读 mod 源码比只盯契约更能反映引擎实际提供了什么。
 
 ## Mods Can Add Nouns To `$`
 
@@ -29,6 +29,8 @@ export interface EngineInterface extends CoreEngineInterface {}
 
 `$` 因此是**冻结**的（frozen，且「每一层深度都冻结」），调用时传入；声明合并的类型让插件代码能拿到自己加的 noun 的完整类型。
 
+⚠️ **2.1.323 推翻了旧写法**：在 `engine.create` 上挂 `*`（通配）、namespace 或取反（negated）的 hook **现在只观察**——它们能读到 `$`，但加 noun、withhold noun 都不会生效。要真正新增或保留一个 `$` noun，**必须按名字 hook `engine.create`**（`on('engine.create', ...)`）。同一版本还让 `claude plugin validate` 拒绝不符合唯一可接受写法的 `engine.create` hook——但只是校验，已安装的 mod 照常加载。所以下面「加 noun」的例子都是按名字 hook 的。
+
 ### A Worked Example: `$.telemetry`
 
 `telemetry` mod 是这个机制的唯一实例，它做的事很具体：**让内置插件能记录一方 analytics 行**（`tengu_plugin_<event>`），批量发送。
@@ -48,6 +50,28 @@ declare module "claude-code" {
 }
 ```
 
+它按名字 hook `engine.create` 的真实写法在 `mods/telemetry/hooks/register.ts`。注意那个 `Omit`——契约把 `$.telemetry` 类型成「永远在那里」，但只有更内层的 step 可能已经加了它，不写 `Omit` 直接返回会触发 TS2783：
+
+```ts
+on('engine.create', async (_$, e, next) => {
+  // The contract types $.telemetry as always there, though only a step beneath
+  // may have added it: without the Omit, the return below is TS2783.
+  const beneath: Omit<EngineInterface, 'telemetry'> = await next(e)
+
+  sender = telemetryOf({
+```
+
+中间是 `telemetryOf({...})` 的一大段上下文装配（session / env / policy / facts / fs / http / clock / ui 的委托），到这里才收尾——关键在返回值的**展开顺序**：
+
+```ts
+    const telemetry: EngineInterface['telemetry'] = sender.telemetry
+
+    return { telemetry, ...beneath }
+  })
+```
+
+`beneath` **最后展开**，所以引擎自带（以及更内层 step 加上）的 noun 全部保留，`telemetry` 只在本没有的地方被加上——这正是「ADD 而非 REPLACE」边界的落地写法，不是伪代码。
+
 它的策略边界值得单独记：**只服务编进 CLI 的插件，installed plugin 的调用一律 reject**；mod 未落座或缺席时不排队任何东西；**Claude Code 自己的 analytics 关掉的地方它也不发**。所以 `diff` 这个内置 mod 可以安全地调用 `$.telemetry.log(...)`——它和 `telemetry` mod 一样是内置的，而用户装的插件不能借此把自己混进一方分析数据里。
 
 两个方法的语义也不同：`log` 发 `tengu_plugin_<event>`（调用方在 `event` 里自报家门）；`mark` 发 `tengu_feature_<kind>`，**不加插件前缀**，因为它要汇入全产品的 feature 事件面。值只接受**有限数字、布尔或 `TelemetryChoice`**，自由文本被拒。
@@ -56,15 +80,15 @@ declare module "claude-code" {
 
 这是整个 mod 体系里最实用的工程约定（官方 `mods/README.md` 有一整节）：
 
-> 在 `engine.create` 折叠里给 `$` 加了某个 noun 的 mod，**拥有**那个 noun 的类型，并把它们放在一处：`types/index.d.ts`——一个无 import 的声明文件，导出该 noun 由之组成的类型，并在 `claude-code` 的 `EngineInterface` 上声明它。
+> 按名字 hook `engine.create` 给 `$` 加了某个 noun 的 mod，**拥有**那个 noun 的类型，并把它们放在一处：`types/index.d.ts`——一个无 import 的声明文件，导出该 noun 由之组成的类型，并在 `claude-code` 的 `EngineInterface` 上声明它。
 
 三条规则：
 
-1. **契约是该 noun 的唯一声明**。mod 自己的 hooks 从那个文件夹 import 类型（`import type { Telemetry } from '../types'`），而 `engine.create` hook 返回的值会被按 `EngineInterface['telemetry']` 检查——**所以实现无法与调用方读到的类型漂移**。
+1. **契约是该 noun 的唯一声明**。mod 自己的 hooks 从那个文件夹 import 类型（`import type { Telemetry } from '../types'`），而按名字的 `engine.create` hook 返回的值会被按 `EngineInterface['telemetry']` 检查——**所以实现无法与调用方读到的类型漂移**。
 2. **调用别人 noun 的 mod 读同一个文件，绝不复制**。`mods/tsconfig.json` 包含 `*/types/**/*.d.ts`，所以 `diff` 里的 `$.telemetry.log(…)` 直接按 `telemetry` 的契约做类型检查——**别人改了契约，你这边立刻编译不过**。
-3. **调用别人 noun 的 mod 的测试要「坐一个 provider」**——一个内联插件，其 `engine.create` hook 加上该 noun，行为与引擎自己的相同。**没有 provider 加载时，`$` 的构建会拒绝那个 hook，并点名无人提供的 noun。**
+3. **调用别人 noun 的 mod 的测试要「坐一个 provider」**——一个内联插件，其按名字的 `engine.create` hook 加上该 noun，行为与引擎自己的相同。**没有 provider 加载时，`$` 的构建会拒绝那个 hook，并点名无人提供的 noun。**
 
-⚠️ 一条现存的限制：仓库外的插件若要依赖某个 mod 的 noun，目前得把 tsconfig 的 `include` 指向那个 mod 的 `types/` 目录；等引擎开始为会话已安装的插件写契约后，`/plugin-types` 会把它们放到 `claude-code.d.ts` 旁边，这个 include 就消失了。
+⚠️ 一条现存的限制：仓库外的插件若要依赖某个 mod 的 noun，目前得把 tsconfig 的 `include` 指向那个 mod 的 `types/` 目录——因为引擎写出的契约副本只覆盖自己拥有的 mod 文件夹，不会自动带上别的插件声明的 noun。
 
 ## Test Layout Is A Convention Worth Stealing
 
@@ -119,7 +143,7 @@ export type Host = {
 }
 ```
 
-好处有三个：换宿主不用改业务代码、**测试只需提供这个窄面**、以及「用了什么」一目了然。它还顺带证明了 `$.telemetry` 是真实存在的——而**这个成员在 517KB 的 `claude-code.d.ts` 里搜不到**，因为它由 `telemetry` mod 声明合并进去。
+好处有三个：换宿主不用改业务代码、**测试只需提供这个窄面**、以及「用了什么」一目了然。它还顺带证明了 `$.telemetry` 是真实存在的——而**这个成员在 824KB 的 `claude-code.d.ts` 里搜不到**，因为它由 `telemetry` mod 声明合并进去。
 
 `isCheckpointing()` 那条注释还记了一个行为事实：**内置 diff 面板只在会话做 checkpoint 时才在编辑后自动打开**——这个 mod 精确复刻了内置的判定。
 
@@ -149,11 +173,11 @@ which reads afresh under a pane it leaves open.
 
 三条易忽略的细节：**停靠式面板会先取数再打开**（所以永远不闪 `Loading diff…`）；「引擎让出等待却没画出来」的打开请求**被撤销**（免得日后 resize 又把它摆出来），但 `no-surface` 的请求**被保留**——没人看见时不轮询，首次绘制时重读仓库并记为已展示。
 
-`mods/diff/hooks/` 的模块划分也值得看：`register`（编排）· `host`（宿主抽象）· `backend`（git 交互）· `pane-state` / `pane-toggle`（面板状态）· `views`（绘制）· `tools`（面板内的自定义工具）· `classify` · `limits` · `todos` · `git` · `ask`（打开前的询问）· `record`（宽度分桶、tab、recorder、已展示触发）。每个都是独立子目录、自带 `index.ts`——**一个目录一个概念**的极细分层，是 828 文件仍可读的原因。
+`mods/diff/hooks/` 的模块划分也值得看：`register`（编排）· `host`（宿主抽象）· `backend`（git 交互）· `pane-state` / `pane-toggle`（面板状态）· `views`（绘制）· `tools`（面板内的自定义工具）· `classify` · `limits` · `todos` · `git` · `ask`（打开前的询问）· `record`（宽度分桶、tab、recorder、已展示触发）。每个都是独立子目录、自带 `index.ts`——**一个目录一个概念**的极细分层，是 840 文件仍可读的原因。
 
 ## The Double-Run, As Coded
 
-[Security](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Security.md) 描述的 deny-hold 双跑机制，在源码里就是这个形状（`sec-default/hooks/register.ts`，全mod 208 行主体 + 1352 行 policy 子模块）：
+[Security](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Security.md) 描述的 deny-hold 双跑机制，在源码里就是这个形状（`sec-default/hooks/register.ts`，全 mod 607 行主体 + policy 子模块约 1492 行）：
 
 ```ts
 on('tool.check', async ($, e, next) => {
@@ -178,22 +202,157 @@ on('tool.check', async ($, e, next) => {
 })
 ```
 
-比README 多出的两点：
+比 README 多出的两点：
 
 - **`shouldRecheck` 要求 `mods.length > 0`** —— 没有插件改写过就**完全不加跑**，所以「只监听」或「只收紧」的插件不产生任何额外开销。
 - **hook 自身失败时走 `.catch` 分支**：只能读第一跑的结果，用 `caughtAnswer` 判定——**裁决被改写过、或那一跑被拒绝，就用本插件自己的话拒绝**（因为规则与 hooks 从未被咨询过）。这正是 `HookFailure` 只有 `throw` / `timeout` 两种 kind 的实际落点。
 
-policy 层同样印证了文档：`deny-rules-hold.ts` 只有 19 行，判定式就是 `isPersonWritable(policy) || ownOption(policy, 'allowModsToOverrideDenyRules') !== true`——**只有字面量 `true` 才松绑**，且个人可写的策略源（Windows `HKCU` 那种）不算数。
+policy 层同样印证了文档：`deny-rules-hold.ts`（19 行）的判定式就是 `isPersonWritable(policy) || ownOption(policy, 'allowModsToOverrideDenyRules') !== true`——**只有字面量 `true` 才松绑**，且个人可写的策略源（Windows `HKCU` 那种）不算数。
+
+## Privacy: Keeping The Login Address Off The Wire
+
+第五个 mod `privacy`（12 文件）解决的是一个很具体的问题：**上下文把登录账号的邮箱交给模型用于识别用户，这个地址可能随 shell 命令、写文件、WebFetch、MCP 调用外发出去，变成调用方的 client identity**。它用两个 hook 堵：`tool.check` 拦外发，`session.identity` 拒绝 user 层插件读取会话身份。
+
+两个设计要点先讲清楚，否则读片段会误读：
+
+- **拒绝是「值」不是「抛错」**：`tool.check` 返回 `{ decision: 'deny', reason }`，`session.identity` 返回 `{ value: { deny } }`，调用方是「以 deny 结算」（resolves with `deny`），从不 reject。
+- **失败关闭（fail closed）**：`session.identity` hook 直接 `.catch(() => ({ value: { deny: ... } }))`——钩子自身读身份失败时，不外包、不放行，而是回一个 deny 值。
+
+`mods/privacy/hooks/register.ts` 里 `session.identity` 按调用方 tier 分流；user 层一律 deny，builtin 原样回答，其余调用方把 `contextEmail` 摘掉——而且注释明确说**这个 hook 内部不再调用任何 `$`**，因为那样会进入一个「少掉本 hook」的重入：
+
+```ts
+  // No call on `$` here: a hook that call reached would run with this one left out.
+  // A refusal is a value, so that the call resolves with `deny` and never rejects.
+  on('session.identity', async ($, e, next) => {
+    if (next.origin.tier === 'user') {
+      return {
+        value: {
+          deny:
+            '$.session.identity answers only a mod that managed settings ' +
+            'enable and that is loaded in place from a source they name; ' +
+            `${next.origin.plugin} is not one`,
+        },
+      }
+    }
+
+    const answer = await next(e)
+
+    if (
+      next.origin.tier === 'builtin' ||
+      answer.value?.contextEmail === undefined
+    ) {
+      return answer
+    }
+
+    const { contextEmail: _handed, ...rest } = answer.value
+
+    return { value: rest }
+  }).catch(() => ({ value: { deny: 'privacy could not read the identity' } }))
+```
+
+`tool.check` 的主流程先 `await next(e)`，若下层已经是 deny 就直接保留其理由；否则取外发文本、必要时读脚本文件，算出 `isRefused` 后返回 deny 值（关键一行：`return isRefused ? { decision: 'deny', reason: Outbound.REFUSAL } : verdict`）。
+
+判定分两种规矩，在 `mods/privacy/hooks/outbound/outgoing-text.ts` 的 `isRefused` 里：
+
+```ts
+export function isRefused(
+  tool: string,
+  input: unknown,
+  email: string | undefined,
+): boolean {
+  const text = outgoingText(tool, input)
+
+  if (tool === WEB_FETCH_TOOL) {
+    return holdsAddress(text, email)
+  }
+
+  return (
+    namesUserAgentWithAddress(text, email) &&
+    !(
+      tool === EDIT_TOOL &&
+      namesUserAgentWithAddress(fieldText(input, 'old_string'), email)
+    )
+  )
+}
+```
+
+WebFetch 的 `url` **单独成立**——URL 本身就是外发的东西，不需要第二个「声明调用方」的词；其它工具要「地址 + 声明身份的词」同时命中；Edit 尤其特殊：**`new_string` 命中且 `old_string` 不命中才拒**，因为把文件里本就有的那一行带过去并没有新增外发。
+
+「地址」的判定在 `mods/privacy/hooks/outbound/names-user-agent.ts`，`holdsAddress` 对原文和百分号解码各做一次、大小写不敏感：
+
+```ts
+export function holdsAddress(
+  text: string,
+  email: string | undefined,
+): boolean {
+  if (email === undefined || email === '') {
+    return false
+  }
+
+  const lowered = text.toLowerCase()
+  const decoded = text
+    .replace(/%([0-9a-fA-F]{2})/g, (_, hex: string) =>
+      String.fromCharCode(Number.parseInt(hex, HEX_RADIX)),
+    )
+    .toLowerCase()
+
+  return spellingsOf(email).some(spelling => {
+    const address = spelling.toLowerCase()
+
+    return lowered.includes(address) || decoded.includes(address)
+  })
+}
+```
+
+而 `spellingsOf` 给地址两种拼写：**原文 + 去掉 shell 引号**（`[email, email.replace(QUOTING, '')]`），配合上面的百分号解码就是 README 说的「any case or percent-encoded」。
+
+文本本身怎么读？`mods/privacy/hooks/outbound/text-of.ts` 的 `textOf` **每个字符串读两遍**——原样一遍，去掉续行、去掉引号和转义一遍——所以 `cu''rl`、`"jo"@x.test` 都算；字典的 key 也会被读成它代表的词（如 `headers: {From: ...}`）：
+
+```ts
+export function textOf(input: unknown): string {
+  if (typeof input === 'string') {
+    const plain = input
+      .replace(/[\\`]\r?\n/g, '')
+      .replace(/\$(?=["'])/g, '')
+      .replace(QUOTING, '')
+
+    return `${input}\n${plain}`
+  }
+
+  if (typeof input !== 'object' || input === null) {
+    return ''
+  }
+
+  return Array.isArray(input)
+    ? input.map(textOf).join(' ')
+    : Object.entries(input)
+        .map(([key, value]) => `"${key}": ${textOf(value)}`)
+        .join('\n')
+}
+```
+
+**刻意不用 parser、接受假阳性**是这个 mod 的设计取舍：README 直说 "The test is two word matches over the whole text. There is no parser, on purpose: it keeps the test simple."。于是 `git log --author=<address> --grep=sec.gov` 这种只在日志里提到地址的会被误拒，`curl` 一行、`grep -A` 另一行也会误拒——**这些假阳性被接受以换 simplicity**。同样，脚本是从 shell 行的词匹配里找的（`scriptNames`，不是 parser），脚本内容包括 `@author` 标签里的地址都能被读到，但符号链接、绝对路径、工作目录之外的脚本一律不读。
+
+它也不是安全边界，README 自己写 "This is a courtesy against a well-meaning model, not a boundary"：地址旁边没有声明身份的词就放行，脚本运行时才读出的值（如 `$(cat contact.txt)`）、脚本里用变量算出的地址都抓不到。关掉它的方式包括 `/plugin disable`、`enabledPlugins` 里的开关、服务器开关，以及安装在它上方的插件 hook 覆盖拒绝。
+
+## Mod Tool Calls Bypass Prompts
+
+mod 自己发起的工具调用和用户的工具调用走的是两条路，两条版本变更把它钉死了：
+
+- **2.1.321**：mod 自己的工具调用（`$.tool.call`、`$.mcp.call`）**不再弹任何权限提示**——即便命中你自己的 ask 规则，或在 `dontAsk` / `-p` 会话里；**但 deny 规则和组织策略仍然适用**。同一版本还改了：Claude 写的 mod 在 auto / bypass 模式下静默开启（即使 managed `allowUnsandboxedCommands: false` 或 `allowManagedDomainsOnly`），而 **`dontAsk` 模式下 mod 根本不加载**。
+- **2.1.326**：修了 mod 在 **Code Mode** 下无法通过 `$.tool.call` / `$.tool.check` 使用 Bash、Read 等工具的问题。
+
+所以读 mod 源码看到 `$.tool.call(...)` 时不要去对应的权限提示里找它的入口：它不经过用户确认，只经过 deny 规则与组织策略这道闸。
 
 ## What The Contract Does Not Know
 
-一个必须提防的落差：类型契约标注 **EARLY ACCESS（可能在小版本间无预告变更）**，且它由 **2.1.277** 生成，而客户端已到 **2.1.302**——**25 个小版本之间的新增接口不会出现在契约里**（`$.telemetry` 就是现成例子）。所以读 mod 源码时，**`Host` 这类窄接口比类型契约更能反映引擎实际提供了什么**。
+一个必须提防的落差：类型契约标注 **EARLY ACCESS（可能在小版本间无预告变更）**，且契约天生不是全集——引擎每次加载 mod 都会重新写出它，**mod 用声明合并加进 `$` 的 noun 不会被写进契约**（`$.telemetry` 就是现成例子，它来自 `telemetry` mod 自己的 `types/index.d.ts`）。所以读 mod 源码时，**`Host` 这类窄接口与 noun 的 `types/index.d.ts` 比类型契约本身更能反映引擎实际提供了什么**。
 
 官方自己也在 `mods/README.md` 末尾声明了同一边界：hooks 模块只在函数 hook 开启处加载，**这些 mod 所依赖的 API 可能在小版本间无预告变更**；它们不在本仓库的 marketplace 里，**真正起作用的是已经在你 Claude Code 里的那些副本**。
 
 ## Git Interaction Without Stepping On The User
 
-`diff` 要不停跑 git 读未提交改动，同时用户可能正在同一个仓库敲 git 命令。17 个 `git/` 子模块里两个常量把这件事处理得很干净：
+`diff` 要不停跑 git 读未提交改动，同时用户可能正在同一个仓库敲 git 命令。16 个 `git/` 子模块里两个常量把这件事处理得很干净：
 
 ```ts
 // 每个探测都带这个 flag，好让一次读永远不抢用户 git 的 index 锁
@@ -228,7 +387,7 @@ export const SHOWN_TRIGGERS = ['auto_open', 'manual'] as const
 
 **把「宽到什么程度」「什么触发的」写成枚举而不是散落的数字/布尔**，是这份源码的一致风格——遥测要按维度分组上报时，枚举比原始值有用得多。类似的还有 `git/` 下的 `git-base-modes`、`mark-outcome`、`base-outcomes`。
 
-## AGENTS.md 的发现算法与它的 8 条边界
+## AGENTS.md Discovery Algorithm And Its 8 Boundaries
 
 `agents-md`（75 文件）是一个受 `instructionFiles` 选项控制的 mod，四个取值：`claude-md`（只读 `CLAUDE.md`）、`claude-md-or-agents-md`（默认，项目自己没有指令文件时才用 `AGENTS.md`）、`claude-md-and-agents-md`（两者并用）、`managed-only`（丢掉项目与个人的，只留组织的）。
 
@@ -243,7 +402,7 @@ export const isBelow = (path: string, dir: string): boolean =>
 
 不跟随符号链接，与引擎给嵌套 `CLAUDE.md` 划界的方式一致。`outsideClaudeDirs` 则简单直接——**某目录有自己的 `CLAUDE.md`，该目录的 `AGENTS.md` 就让出去，而不是合并**。
 
-### 它诚实列出的 8 条能力边界
+### The 8 Capability Boundaries It Lists Honestly
 
 这份 README 有一节专列「与 `CLAUDE.md` 仍有差异」，每条都点明是「一个插件通过现有事件够不到的事实」。这份清单本身就是插件能力边界的教科书：
 
@@ -262,9 +421,10 @@ export const isBelow = (path: string, dir: string): boolean =>
 
 ## Traps
 
-- 想在 `$` 上加 noun：`engine.create` + `types/index.d.ts` 声明合并，**且不能替换别人的 noun**（会失败并卸载你的插件）。
+- 想在 `$` 上加 noun：**按名字** hook `engine.create` + `types/index.d.ts` 声明合并；`*` / namespace / 取反 hook 从 2.1.323 起只观察，且不能替换别人的 noun（会失败并卸载你的插件）。
 - 调用别人的 noun：**读它的 `types/`，不要复制**；测试里要给它坐一个 provider，否则 `$` 的构建直接拒绝你的 hook。
-- 事件结果只有三种形态：`{value}` / `{deny}` / core 的 `{ref, result}`。
+- 事件结果只有三种形态：`{value}` / `{deny}` / core 的 `{ref, result}`。**拒绝是值，不是抛错**——privacy 的两个 hook 都靠这一点让调用以 deny 结算。
+- mod 自己的 `$.tool.call` / `$.mcp.call` **不弹权限提示**，但仍受 deny 规则与组织策略约束；`dontAsk` 下 mod 不加载。
 - 别把宿主 `$.` 直接传得到处都是——包一层窄接口（`Host` 那种），顺带拿到可测性。
 - 别信类型契约是全集——它可能落后客户端若干版本，以 mod 源码里的实际调用为准。
 
@@ -272,13 +432,18 @@ export const isBelow = (path: string, dir: string): boolean =>
 
 - [Mods](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Mods.md)
 - [Security](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Security.md)
+- [Hooks](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Hooks.md)
 - [PluginSpec](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/PluginSpec.md)
 - [HookPatterns](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/HookPatterns.md)
 
 ## References
 
-- [`mods/README.md` mod 体系与 noun 契约](https://github.com/anthropics/claude-code/blob/main/mods/README.md)
+- [`mods/README.md` 五个 mod 与 noun 契约](https://github.com/anthropics/claude-code/blob/main/mods/README.md)
+- [`mods/privacy/README.md` 地址外发与身份读取的全部边界](https://github.com/anthropics/claude-code/blob/main/mods/privacy/README.md)
+- [`mods/privacy/hooks/register.ts` 两个 hook 与失败关闭](https://github.com/anthropics/claude-code/blob/main/mods/privacy/hooks/register.ts)
+- [`mods/telemetry/hooks/register.ts` 按名字 hook `engine.create` 加 noun](https://github.com/anthropics/claude-code/blob/main/mods/telemetry/hooks/register.ts)
 - [`mods/telemetry/types/index.d.ts` `$.telemetry` 的 noun 契约](https://github.com/anthropics/claude-code/blob/main/mods/telemetry/types/index.d.ts)
 - [`mods/sec-default/hooks/register.ts` 双跑实现](https://github.com/anthropics/claude-code/blob/main/mods/sec-default/hooks/register.ts)
 - [`mods/diff/hooks/host/host.ts` 窄宿主接口](https://github.com/anthropics/claude-code/blob/main/mods/diff/hooks/host/host.ts)
 - [mod 类型契约 `claude-code.d.ts`](https://github.com/anthropics/claude-code/blob/main/mods/types/claude-code.d.ts)
+- [`CHANGELOG.md` 版本变更（2.1.321 / 2.1.323 / 2.1.326）](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md)

@@ -1,104 +1,305 @@
-> 版本基线：核实于 2026-10-06。Cordis 是 DeepSeek Harness 底层的 TypeScript 插件框架，设计论文：[*A Programming Paradigm for Spatiotemporal Composability*](https://arxiv.org/abs/2608.25512)。参考：[Cordis 教程](https://deepseek-harness.github.io/deepseek-harness/develop/cordis-tutorial/)（概念参考见 [Cordis 入门](https://deepseek-harness.github.io/deepseek-harness/reference/cordis-primer)，API 见 [Cordis 核心 API](https://deepseek-harness.github.io/deepseek-harness/reference/cordis-api/context)）
+> 版本基线：v0.2.2-rc.3（`E:/Projects/deepseek-harness-dsh-v0.2.2-rc.3`）。Cordis 是 DSH 底层的 TypeScript 插件运行时（元框架）；设计论文：[*A Programming Paradigm for Spatiotemporal Composability*](https://arxiv.org/abs/2608.25512)。
 
 ## Introduction
 
-Cordis 是 DeepSeek Harness **底层的插件框架**：一个 TypeScript 编写的小型运行时（元框架，Meta-Framework of Spatiotemporal Composability），每项能力——工具、LLM 适配器、文件访问乃至 agent loop 本身——都是挂载到**共享上下文（Context）**中的插件。
+Cordis 是 DSH 的**插件运行时**：它不提供模型、工具或 UI，只提供"组织能力的方式"——谁提供能力、谁使用、何时启动、如何退出、不同场景加载哪组能力。DSH 把它的源码 vendored 在 `vendor/`（重映射到 `@deepseek-ai`），本地改动包含 Fiber 重入卸载加固、配置更新事务、HMR 精确监听。
 
-- 由开发者 Shigma 于 2022 年创建，其 GitHub 资料显示已加入 DeepSeek
-- Cordis 不提供业务功能，只提供**组织功能的方式**：谁提供能力、谁使用能力、何时启动、如何退出、不同场景加载哪组能力
-- DSH 把 Cordis 源码放进 `vendor/`（固定上游提交、包名重映射到 `@deepseek-ai`），本地修改包含 Fiber 重入卸载加固、配置更新事务、HMR 精确监听、延迟配置解析——增加维护成本，换来框架层的可审计性
+> 版本基线：v0.2.2-rc.3。
 
-与面向 harness 的插件（`cordis.yml` 加载、Web UI 驱动）不同，Cordis 教程用单文件启动器在临时目录中动手构建，**无需 API 密钥**。
+几个反直觉的点：
 
-## Runtime Environment
+- **"一切皆插件"不递归到元层**：根 Context 构造函数里直接 `new Fiber/ReflectService/RegistryService/EventsService/LoggerService`，这些不是插件、不可被插件卸载。可替换的是产品能力，不是让插件得以存在的机制。
+- **`provide` 返回的 disposer 不是"必须手动调用才清理"**：它本身已经是 fiber effect 的 wrapper，登记进 `_disposables`；不调用，fiber 卸载照样逆序回收，调用了也是幂等触发同一个 dispose。
+- **waterfall 的 `next()` 是 Koa 式"包裹剩余链"**：不调用即否决内建行为（如服务解析、配置校验），调用两次直接抛错——把它当普通观察者漏掉 `next()`，会导致"服务读不到/配置没应用"这类难定位的现象。
 
-```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
-cd deepseek-harness && pnpm install
+## Context: A Proxy-Backed Service Boundary
 
-mkdir -p tmp/cordis-tutorial   # tmp/ 已被 git 忽略
-cd tmp/cordis-tutorial
-node --import tsx ../../vendor/cordis/bin.js   # 每一章都用这条命令
+`ctx` 不是装满单例的对象，而是**经 Proxy 包装的服务解析边界**。根 Context 构造时安装内建服务并把自己包成 Proxy（`vendor/cordis/src/context.ts`）：
+
+```ts
+  /** Create the root context and install the built-in services. */
+  constructor() {
+    this[symbols.isolate] = Object.create(null)
+    this[symbols.intercept] = Object.create(null)
+    const self = new Proxy<this>(this, ReflectService.handler)
+    this.root = self
+    this.baseUrl = undefined
+    this.fiber = new Fiber(self, {}, Object.create(null), null, () => [])
+    this.reflect = new ReflectService(self)
+    this.registry = new RegistryService(self)
+    this.events = new EventsService(self)
+    this.logger = new LoggerService(self)
+    this.fiber._disposables.clear()
+    return self
+  }
 ```
 
-启动器（`vendor/cordis/bin.js`）创建根 `Context`、挂载 Loader 插件，从当前目录加载 `./cordis.yml`——有哪些插件、如何配置，全部来自 YAML 文件。`--import tsx` 让 Node 免构建直接运行 TypeScript。
+读取 `ctx.foo` 时，Proxy 的 `get` 陷阱沿 fiber 链上溯、按 isolate key 找实现（`vendor/cordis/src/reflect.ts`）：
 
-## Context: A Shared "Capability Service Desk"
+```ts
+      const def = target.reflect.props[prop]
+      if (def?.type === 'accessor') {
+        return def.get.call(ctx, ctx[symbols.receiver], error)
+      }
+      // a fiber-less def site cannot declare `inject` at all, so it keeps the unchecked root access.
+      const defSite = (ctx[symbols.shadow] as Context | undefined) ?? ctx
+      if (!defSite.fiber.runtime) return ctx.reflect.get(prop, false)
+      return ctx.events.waterfall('internal/get', ctx, prop, error, () => {
+        const key = defSite[symbols.isolate][prop]
+        let fiber = defSite.fiber
+        while (true) {
+          let impl = fiber.committed?.[prop]
+          for (const provision of fiber.provisions) {
+            if (provision.name === prop && provision.ctx[symbols.isolate][prop] === key) impl = provision
+          }
+          if (impl) return getTraceable(ctx, impl.value)
+          if (prop in fiber.inject) {
+            error.message = `cannot get required service "${prop}" in inactive context`
+            throw error
+          }
+          if (!fiber.runtime) throw error
+          if (fiber.parent[symbols.isolate][prop] !== key) throw error
+          fiber = fiber.parent.fiber
+        }
+      })
+```
 
-`ctx` 是**经 Proxy 包装的 service 解析边界**，不是装满单例的对象：
+含义：未在 `inject` 声明就读 `ctx.foo` 会报错；`ctx.get("foo")` 是不受限的显式读取（接受服务可能不存在）。**依赖声明不是权限控制**——原生 JS 插件仍在宿主进程执行，未注入 `fs` 不代表 OS 层失去文件访问。
 
-- 服务通过稳定名称出现在 `ctx` 上（`ctx.llm` / `ctx.tools` / `ctx.sessions`）；调用方只关心"我要模型能力"，不关心背后是哪家模型、哪个 SDK
-- 未在 `inject` 中声明就读取 `ctx.foo` 会报错；`ctx.get("foo")` 底层读取不受限（显式接受服务可能不存在）
-- 子 Context 通过原型继承父级 service，隔离映射按层遮蔽，局部配置无需复制整棵容器
-- **依赖约束 ≠ 权限控制**：原生 JS 插件仍在宿主进程执行，未注入 `fs` 不代表 OS 层失去文件访问
+子 Context 通过原型继承父级（不新建容器），`isolate()` 只覆盖一个 name→label 映射：
 
-## Fiber: Plugin Instances and State Machines
+```ts
+  isolate(name: string, label?: symbol) {
+    const shadow = Object.create(this[symbols.isolate])
+    shadow[name] = label ?? Symbol(name)
+    return this.extend({ [symbols.isolate]: shadow })
+  }
+```
 
-Plugin 是定义，**Fiber 是挂载实例记录**：父 Context、原始配置、解析后配置、依赖实现快照、生命周期状态、disposables。
+配合 loader 层的 `Realm` 把 label 稳定映射成带后缀 symbol（`vendor/loader/src/config/isolate.ts`），同名服务可在不同 realm 各自存在——这是 agent preset 能给每个会话独立工具集/提示词的基础。
 
-- 依赖未就绪 → Fiber 保持 `PENDING`；就绪后进入 `LOADING` → `ACTIVE`；启动失败 → `FAILED`
-- **配置文件条目顺序不承担启动顺序，依赖关系才承担**——解决了传统插件系统遍历数组依次 `init` 的隐含顺序顽疾
-- Provider 消失或换实现时，Fiber 身份变化刷新依赖 epoch，触发旧 Consumer 卸载与新重载。Cordis 维护的是**随 Provider 变化刷新的运行图**，不是启动一次解析完的 DI 容器
-- 卸载时按注册**逆序**执行清理并等待异步清理达到静止（quiescence）；单次 effect 内 disposer 逆序串联，**多个 Fiber 顶层 effect 是并发清理**（非严格 LIFO 栈）
-- vendor 版本还处理重入边界：effect 执行 setup 前先登记所有者包装；同步卸载观察者；异步 cleanup 期间其他调用者可等待同一次清理；`UNLOADING` 状态拒绝创建新 effect
+## Fiber: The Ownership Unit
 
-## Spatial Composition: isolate and dsh-scope
+Plugin 是定义，**Fiber 是挂载实例记录**：父 Context、原始配置、依赖实现快照、生命周期状态、disposables。状态枚举（`vendor/cordis/src/fiber.ts`）：
 
-两层空间模型，分别解决"哪个服务实例"和"哪些注册项可见"：
+```ts
+export const enum FiberState {
+  PENDING,
+  LOADING,
+  ACTIVE,
+  FAILED,
+  DISPOSED,
+  UNLOADING,
+}
+```
 
-- **`isolate` / realm（实例隔离）**：为指定服务名创建 realm 标签，服务注册和查找以标签定位——同名服务可在不同子上下文各自存在。两个 Agent 访问 `ctx.tools` 可得各自目录。适合**替换提供方**
-- **`dsh-scope`（注册可见性）**：用不透明对象作 scope key，维护父子关系，创建带路由身份的事件 receiver。注册视图沿父链**向下**继承（Agent 看到 preset 的提示词和工具），事件沿链**向上**接纳（preset 级监听器收到其下 Agent 事件，兄弟 Agent 互不串线）
+配置文件条目顺序不承担启动顺序，**依赖关系才承担**——依赖未就绪时 Fiber 停在 PENDING，就绪后 LOADING→ACTIVE。Provider 换实现时，Fiber 身份变化刷新依赖 epoch，触发旧 Consumer 卸载与新重载；Cordis 维护的是随 Provider 变化刷新的运行图，不是启动一次解析完的 DI 容器。
 
-Agent preset 是空间组合的完整应用：preset 配置挂在长期存在的 scope 下，相同 preset 的并发首次挂载通过 single-flight 共享；文件变化后新会话加入新一代组合，已有会话保留原代际（避免会话中途换工具/提示词，代价是旧代际保留到整棵运行时退出）。DSH 还会**审计 preset 子树是否把服务发布到 root realm**——发布则拒绝挂载，防止会话级组合退化成进程全局状态。
+`plugin()` 把插件归一化为 callback/runtime 并创建 Fiber（`vendor/cordis/src/registry.ts`）：
 
-## Time Composition: effect and Configuration Transactions
+```ts
+  plugin(plugin: Plugin, config?: any, getOuterStack = buildOuterStack()) {
+    const callback = this.resolve(plugin)
+    if (!callback) throw new Error('invalid plugin, expect function or object with an "apply" method, received ' + typeof plugin)
+    this.ctx.fiber.assertActive()
+    let runtime = this._internal.get(callback)
+    if (!runtime) {
+      let name = plugin.name
+      if (name === 'apply') name = undefined
+      runtime = { name, callback, fibers: new DisposableList(), Config: plugin.Config }
+      this._internal.set(callback, runtime)
+    }
+    const fiber = new Fiber(this.ctx, config, Inject.resolve(plugin.inject), runtime, getOuterStack)
+    return Object.create(fiber) as Fiber & PromiseLike<Fiber>
+  }
+```
 
-- 每次 `ctx.effect()` 登记 disposer，资源获取与释放写在同一 effect，防失配；`ctx.on()`、`ctx.provide()` 都接入 effect 所有权
-- 与 React Hooks 对照：`useEffect` 把 cleanup 存进 Hook 链表，Cordis 把 disposer 存进 Fiber——都是"框架持有所有权，作者只声明建立/撤销"
-- **可逆 ≠ 事务**：disposer 只能补偿，无法回滚外部世界（已发网络消息、已写共享文件不回滚）；未登记的进程/句柄不会自动消失
-- **插件不仅要插得进去，还要拔得干净**；"谁创建，谁清理"不是约定，而是 Cordis 管理的运行时规则——这才让热更新和能力替换变得可信
+## Effect: Registration as Reversible
 
-## Event Contract: Five Dispatch Modes
+一切可撤销的注册都收敛到 `Fiber.effect()`。它把执行体返回的 disposer 经 `collect` 压入局部数组，并把包装后的 wrapper 登记进 fiber 的 `DisposableList`（`vendor/cordis/src/fiber.ts`）：
 
-插件间不只靠服务调用（那会把所有扩展变成接口方法），Cordis 同时提供类型化事件：
+```ts
+    const disposables: Disposable[] = []
+    let disposing = false
+    let disposalTask: void | Promise<void>
+    const dispose = () => {
+      if (disposing) return disposalTask
+      disposing = true
+      let task!: void | Promise<void>
+      for (const disposable of disposables.splice(0).reverse()) {
+        if (task) {
+          task = task.then(() => runDisposable(disposable))
+        } else {
+          const result = runDisposable(disposable)
+          if (isObject(result) && 'then' in result) task = result as any
+        }
+      }
+      return disposalTask = task
+    }
+```
 
-| 模式 | 行为 | DSH 中的用例 |
+执行器把同步函数、promise、同步迭代、异步迭代统一成"收集 disposer"（同文件 `_execute`）：
+
+```ts
+      const effect: Effect = runner.execute.call(this)
+      if (typeof effect === 'function') {
+        return runner.collect(effect)
+      } else if (isNullable(effect)) {
+        // return
+      } else if (!isObject(effect)) {
+        throw new TypeError('Invalid effect')
+      } else if ('then' in effect) {
+        return effect.then(safeCollect)
+      } else if (Symbol.iterator in effect) {
+        info.error = new Error()
+        const iter = effect[Symbol.iterator]()
+        while (true) {
+          const result = iter.next()
+          safeCollect(result.value)
+          if (result.done) return
+        }
+      } else if (Symbol.asyncIterator in effect) {
+        // ... async iterator branch awaits each yield, honoring epoch
+      }
+```
+
+Fiber 卸载走 `_unload()`：**先等所有 dependents 清空**（不让下游在自己清理时访问已撤销服务），再逆序 await 所有 disposer（`vendor/cordis/src/fiber.ts`）：
+
+```ts
+  private async _unload() {
+    while ([...this.provisions].some(impl => impl.dependents.size)) {
+      await new Promise<void>((resolve) => this._release = resolve)
+    }
+    this._release = undefined
+    await Promise.all(this._disposables.clear().map(async (dispose) => {
+      try {
+        await composeError(async (info) => {
+          await Promise.resolve()
+          info.error = new Error()
+          await runDisposable(dispose)
+        }, this._runner.getOuterStack)
+      } catch (reason) {
+        this.ctx.logger.error(reason)
+      }
+    }))
+  }
+```
+
+这就是"先问如何撤销，再问如何注册"的运行时兑现：插件作者只在 effect 里"注册"，无需手动配对注销；fiber 是唯一所有权边界，卸载 = 逆序执行其账号下所有 effect 的 disposer。**但可逆 ≠ 事务**——disposer 只能补偿，发过的网络消息、写过的共享文件不回滚。
+
+## The Five Dispatch Modes
+
+插件间除了服务调用，还提供类型化事件。五种模式在 `vendor/cordis/src/events.ts`：
+
+```ts
+  emit(...args: any[]) {
+    const [thisArg, callbacks] = this._resolve('emit', args)
+    for (const callback of callbacks) Reflect.apply(callback, thisArg, args)
+  }
+
+  async serial(...args: any[]) {
+    const [thisArg, callbacks] = this._resolve('serial', args)
+    for (const callback of callbacks) {
+      const result = await Reflect.apply(callback, thisArg, args)
+      if (isBailed(result)) return result
+    }
+  }
+
+  waterfall(...args: any[]) {
+    const [thisArg, callbacks] = this._resolve('waterfall', args)
+    const inner = args.pop()
+    const dispatch = () => {
+      const callback = callbacks.shift()
+      if (!callback) return inner()
+      let called = false
+      const next = () => {
+        if (called) throw new Error('next() called multiple times')
+        called = true
+        return dispatch()
+      }
+      return Reflect.apply(callback, thisArg, [...args, next])
+    }
+    return dispatch()
+  }
+```
+
+`parallel` 用 `Promise.allSettled` 并发、把 rejected 聚合成 `AggregateError`；`bail` 是 `serial` 的同步版。DSH 的分派：
+
+| 模式 | 行为 | DSH 用例 |
 | --- | --- | --- |
-| `emit` | 同步通知，忽略返回值 | 普通通知 |
-| `parallel` | 并发执行，等全部完成 | 广播 |
-| `serial` | 顺序执行，遇首有效结果停止 | `agent/turn-stopping` |
-| `bail` | `serial` 的同步版 | 校验类拦截 |
-| `waterfall` | 监听器拿到 `next()`，包裹/改写/短路余下链路 | `agent/pre-step`、`agent/request`、`llm/stream`、工具执行前后 |
+| `emit` | 同步通知，忽略返回值 | `tools/result`、`agent/status`、`session/event` |
+| `parallel` | 并发等全部完成 | 广播型通知 |
+| `serial` | 顺序、遇首有效结果停止 | `agent/turn-stopping`、`agent/created` |
+| `bail` | `serial` 同步版 | 校验类拦截 |
+| `waterfall` | 监听器拿 `next()` 包裹/改写/短路余下链 | `agent/pre-step`、`agent/request`、`llm/stream`、`tools/execute` |
 
-- **waterfall ≈ Koa 中间件链**：审批插件可在工具执行前拒绝，重试插件可包围模型流，日志插件可观察前后——"流程"与"策略"分离，新增安全规则不用重写 Agent 大脑
-- waterfall 最易出错：只想记日志的监听器忘调 `next()` 会短路整条能力链。DSH 把"必须调用 next()"写进项目级规则
-- **事件的持久性被刻意分层**：`agent/*`、`tools/*` 是活跃运行时的拦截；会话事件追加日志承担恢复/fork/回放。一切皆插件 ≠ 一切皆事件——直接能力调用放 Service，策略拦截放实时事件，需持久化的事实进 session log
+**事件的持久性被刻意分层**：`agent/*`、`tools/*` 是活跃运行时的拦截（进程内、不落盘）；`turn/*`、`step/*`、`user/message`、`tool/*` 等会话事件追加日志承担恢复/fork/回放。一切皆插件 ≠ 一切皆事件。
+
+## Loader and HMR: Failure Recovery
+
+Loader 的 entry 导入模块后交给 registry 建 Fiber（`vendor/loader/src/config/entry.ts`）：
+
+```ts
+  private async _init() {
+    let moduleNamespace: unknown
+    try {
+      moduleNamespace = await this.parent.tree.import(this.options.name, this.getOuterStack)
+    } catch (error) {
+      this.ctx.logger.error(error)
+      return
+    }
+    const plugin = this.loader.unwrapExports(moduleNamespace)
+    await this._patchContext([])
+    this.fiber = this.ctx.registry.plugin(plugin, this.options.config, this.getOuterStack)
+    this.moduleNamespace = moduleNamespace
+  }
+```
+
+HMR 失败恢复靠"备份缓存 + 旧插件按原配置重建"（`vendor/hmr/src/index.ts`）：先备份 ESM loadCache 与 CJS require.cache 并清空，重导入或重挂载任一失败即 `rollback()` 恢复两份缓存，并 `registry.delete(attempts[filename])` + `reload(plugin, runtime)` 用旧实现按原 rawConfig 重新建 fiber。
+
+配置持久化（include）则是"读成功才写 cache、坏文件只告警保留旧树"（`vendor/include/src/index.ts`）：
+
+```ts
+        } catch (error) {
+          // Half-written files are routine while the user is editing, hence
+          // only a warning. With the file in an unknown state there is nothing
+          // safe to write: unless another read is due, stop here and leave
+          // `dirtyWrite` set for the next trigger.
+          this.persistenceError = error
+          this.ctx.logger.warn(error)
+          if (this.dirtyRead) continue
+          return
+        }
+```
+
+两者共同兑现"失败后保留最后一棵可用树"——接近配置事务，但外部副作用无法回滚，所以不等同于数据库事务。
 
 ## Comparison with Historical Precedents
 
-- **Eclipse**：扩展点/扩展由宿主清单定义；DSH 连 agent loop 和 UI 都可替换，核心与第三方插件共享同一挂载机制
-- **OSGi**：动态服务注册表 + bundle 生命周期已有先例；Cordis 的新意是把动态依赖、作用域上下文、effect 所有权压进一个很小的进程内模型（执行单元是 Fiber——一个函数或 Service 子类即可，而非重量级 bundle）
-- **DI 容器**：服务解析不陌生；新组合来自 **DI 与生命周期的绑定**——普通容器只构造对象，定时器/监听器/子进程仍由业务代码清理，Cordis 把注册动作收敛成 effect
+- **Eclipse**：扩展点/扩展由宿主清单定义；DSH 连 agent loop 和 UI 都可替换，核心与第三方插件共享同一挂载机制。
+- **OSGi**：动态服务注册表 + bundle 生命周期已有先例；Cordis 的新意是把动态依赖、作用域上下文、effect 所有权压进一个很小的进程内模型（执行单元是 Fiber——一个函数或 Service 子类即可）。
+- **DI 容器**：新组合来自 **DI 与生命周期的绑定**——普通容器只构造对象，定时器/监听器/子进程仍由业务代码清理，Cordis 把注册动作收敛成 effect。
 
-## TypeScript Essentials
+`declare module '@deepseek-ai/cordis' { interface Context { ... } }` 是声明合并：为已有接口添加 `ctx.greeter` 或事件名的类型，**不产生任何运行时接线**，插件须另行 `provide` 服务或发出事件。
 
-- **类型注解**（`ctx: Context`、`who: string`、`string[]`）：只描述值，不改变运行时行为
-- **`import type { Context } from '@deepseek-ai/cordis'`**：仅导入类型信息，运行时消失，不增加运行时依赖
-- **声明合并** `declare module '@deepseek-ai/cordis' { ... }`：为已有接口添加条目（如 `ctx.greeter` 的类型、事件名），**不产生任何运行时接线**，插件须另行提供服务或发出事件
-- 第 5 章还会用到 `interface`（描述配置字段）和 `Schema<Config>`（泛型，表示 schema 校验的对象字段）
+## Common Misconceptions
+
+1. **元层不是插件**：Proxy 陷阱、EffectRunner、Fiber 状态机、dispose 屏障属于 Cordis 自身，无法通过 `ctx.plugin()` 卸载或替换。
+2. **失败 fiber 不会因依赖到位自动复活**：`_setEpoch` 里 `if (this._error) return` 明确阻断；失败 fiber 只能通过显式 `update()` 恢复。
+3. **`FiberState` 的真相来源不是 `state` 字段**：ACTIVE/FAILED/PENDING 由 `_getState()` 依据 `uid/_error/runner.epoch` 派生，`state` 只是用于 `internal/status` 的缓存值。
+4. **`emit` 并非普遍保证逐监听器隔离错误**：只有被特判的生命周期通知路径逐个 try/catch；公共 listener 抛错仍会中断同批后续 listener。
 
 ## Links
 
 - [DSH 主入口](/docs/CS/AI/LLM/Agent/Product/DSH/DSH.md)
-- [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md)
-- [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md)
 - [DSH Agent Loop](/docs/CS/AI/LLM/Agent/Product/DSH/AgentLoop.md)
 - [DSH Plugin 开发](/docs/CS/AI/LLM/Agent/Product/DSH/Plugin.md)
+- [DSH Boot & Frontends](/docs/CS/AI/LLM/Agent/Product/DSH/BootAndFrontends.md)
 - [TypeScript](/docs/CS/TypeScript/TypeScript.md)
 
 ## References
 
-- [Cordis](https://github.com/cordiverse/cordis) / [时空可组合性论文](https://github.com/cordiverse/paper)
-- [Cordis 框架教程](https://deepseek-harness.github.io/deepseek-harness/develop/cordis-tutorial/)
-- [DSH 的 Cordis 插件架构](https://mp.weixin.qq.com/s/XFWvHB8ke_LjcSZ06IajsA)
-- [为什么 DSH 把一切都做成插件？Cordis 又是什么？](https://mp.weixin.qq.com/s/EDx6e1AEKalz6dEXdyWFSg)
+1. [deepseek-ai/deepseek-harness（v0.2.2-rc.3）vendor/cordis](https://github.com/deepseek-ai/deepseek-harness/tree/v0.2.2-rc.3/vendor/cordis)
+2. [Cordis 框架](https://github.com/cordiverse/cordis) / [时空可组合性论文](https://arxiv.org/abs/2608.25512)
+3. [Cordis 框架教程](https://deepseek-harness.github.io/deepseek-harness/develop/cordis-tutorial/)
+4. [DSH 的 Cordis 插件架构](https://mp.weixin.qq.com/s/XFWvHB8ke_LjcSZ06IajsA)

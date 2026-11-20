@@ -1,14 +1,52 @@
+# TC Coordinator
+
 ## Introduction
 
-本笔记拆解 Seata **TC（事务协调者，server 端）** 的内部实现（apache/seata @ v2.7.0）：启动装配、入站分发、会话状态机、全局锁、事务日志存储与二阶段提交/回滚。链路总览与传输层分别见 Transaction Flow、RPC Transport 两册。
+本笔记拆解 Seata **TC（事务协调者，server 端）**的内部实现：入站分发、会话状态机、全局锁与二阶段提交/回滚，以及驱动重试的调度线程。会话持久化见 [TC Storage](/docs/CS/Framework/Seata/TC_Storage.md)，高可用见 [Raft HA](/docs/CS/Framework/Seata/Raft_HA.md)，传输层见 [RPC Transport](/docs/CS/Framework/Seata/RPC_Transport.md)。
 
-## Startup and Wiring
-
-`Server.start()` → `new NettyRemotingServer()` + `DefaultCoordinator.getInstance()`（Raft 模式返回 `RaftCoordinator`）→ `SessionHolder.init()` + `LockerManagerFactory.init()` → `coordinator.init()`（启动调度线程）→ `nettyRemotingServer.setHandler(coordinator)` → `init()` 时 `registerProcessor()` 把全部事务消息类型注册到 `ServerOnRequestProcessor`。
+> 版本基线：apache/seata **v2.7.0**。以下片段均取自该 tag。
 
 ## Inbound Dispatch
 
-server 侧**没有**传统的「一个 Handler 类对应一种消息」体系；统一汇聚到 `ServerOnRequestProcessor` → `TransactionMessageHandler.onRequest()` → `request.handle()` → `AbstractTCInboundHandler` 的 8 个 `handle(...)` 模板方法（每个调一个 `doXxx`，由 `DefaultCoordinator` 实现）：
+server 侧没有"一个 Handler 对应一种消息"的体系：所有事务类请求汇聚到 `ServerOnRequestProcessor` → `TransactionMessageHandler.onRequest()` → `request.handle()` → `AbstractTCInboundHandler` 的模板方法 → `DefaultCoordinator` 的 `doXxx`。
+
+`DefaultCoordinator` 的 `doGlobalBegin` / `doGlobalCommit` / `doGlobalRollback` / `doBranchRegister` 都只是薄薄一层，把请求字段转给 `core`（`DefaultCore`）：
+
+```java
+protected void doGlobalBegin(GlobalBeginRequest request, GlobalBeginResponse response, RpcContext rpcContext)
+        throws TransactionException {
+    response.setXid(core.begin(
+            rpcContext.getApplicationId(),
+            rpcContext.getTransactionServiceGroup(),
+            request.getTransactionName(),
+            request.getTimeout()));
+}
+
+@Override
+protected void doGlobalCommit(GlobalCommitRequest request, GlobalCommitResponse response, RpcContext rpcContext)
+        throws TransactionException {
+    MDC.put(RootContext.MDC_KEY_XID, request.getXid());
+    response.setGlobalStatus(core.commit(request.getXid()));
+}
+```
+
+```java
+@Override
+protected void doBranchRegister(
+        BranchRegisterRequest request, BranchRegisterResponse response, RpcContext rpcContext)
+        throws TransactionException {
+    MDC.put(RootContext.MDC_KEY_XID, request.getXid());
+    response.setBranchId(core.branchRegister(
+            request.getBranchType(),
+            request.getResourceId(),
+            rpcContext.getClientId(),
+            request.getXid(),
+            request.getApplicationData(),
+            request.getLockKey()));
+}
+```
+
+入站消息与 `doXxx` 的映射：
 
 | 消息 | `doXxx` | 说明 |
 | :--- | :--- | :--- |
@@ -25,59 +63,111 @@ server 侧**没有**传统的「一个 Handler 类对应一种消息」体系；
 
 | 类 | 职责 |
 | :--- | :--- |
-| `DefaultCoordinator` | 入站入口 + 各 `doXxx` 实现 + 全部调度线程 |
-| `DefaultCore` / `AbstractCore` / `ATCore` | 按 `BranchType` 分派的二阶段总控；`branchRegister` 含锁获取，`branchCommit`/`branchRollback` 向 RM 同步发请求 |
-| `GlobalSession` / `BranchSession` | 全局/分支事务会话，可持久化、可加锁 |
-| `SessionManager` / `AbstractSessionManager` | 把生命周期事件映射成 `LogOperation` 写 `TransactionStoreManager` |
-| `LockManager` / `AbstractLockManager` / `LockerManagerFactory` | 全局锁；后端 db/file/redis/raft |
+| `DefaultCoordinator` | 入站入口 + `doXxx` + 调度线程 |
+| `DefaultCore` / `AbstractCore` / `ATCore` | 按 `BranchType` 分派的二阶段总控 |
+| `GlobalSession` / `BranchSession` | 全局/分支会话，可持久化、可加锁 |
+| `SessionManager` / `AbstractSessionManager` | 生命周期事件映射成 `LogOperation` 写 store |
+| `LockManager` / `LockerManagerFactory` | 全局锁，后端 db/file/redis/raft |
 | `TransactionStoreManager` + `SessionConverter` | 会话持久化（global/branch/lock DO） |
 
 ## Two-Phase Commit (AT)
 
-1. `DefaultCore.commit(xid)`：`findGlobalSession`；若 `isTimeout()` 直接转 `TimeoutRollbacking`。
-2. `globalSession.close()`（**先于状态变更**，禁止再注册分支）→ `changeGlobalStatus(Committing/AsyncCommitting)` → `clean()` **立即释放全局锁** → 给 TM 返回 `Committed`。
-3. 真正的 branch commit 由 `handleAsyncCommitting` 调度线程推进：对每个分支发 `BranchCommitRequest`（RM 收到即删 `undo_log`）。
-4. 全部完成 → `SessionHelper.endCommitted`；失败进 `RetryCommitting` 被 `handleRetryCommitting` 重试。
+`DefaultCore.commit` 用 `SessionHolder.lockAndExecute` 对会话加锁后改状态：**先 `close()` 禁止再注册分支**，再按 `canBeCommittedAsync()` 分流——能异步提交（AT）就 `asyncCommit()` 转 `AsyncCommitting`，否则转 `Committing` 同步提交；最后 `clean()` 释放全局锁：
 
-> **「Committed」≠「undo_log 已删除」**：AT 一阶段已本地提交真实数据，二阶段 commit 只是删 `undo_log`，可 fire-and-forget + 重试。
+```java
+boolean shouldCommit = SessionHolder.lockAndExecute(globalSession, () -> {
+    boolean shouldCommitNow = false;
+    if (globalSession.getStatus() == GlobalStatus.Begin) {
+        // Highlight: Firstly, close the session, then no more branch can be registered.
+        globalSession.close();
+        if (globalSession.canBeCommittedAsync()) {
+            globalSession.asyncCommit();
+            MetricsPublisher.postSessionDoneEvent(globalSession, GlobalStatus.Committed, false, false);
+        } else {
+            globalSession.changeGlobalStatus(GlobalStatus.Committing);
+            shouldCommitNow = true;
+        }
+        // clean session after changing status successfully.
+        globalSession.clean();
+    }
+    return shouldCommitNow;
+});
+```
+
+真正的 branch commit 由 `handleAsyncCommitting` 调度线程推进。"Committed" ≠ "undo_log 已删除"——AT 一阶段已本地提交，二阶段 commit 只是删 undo_log。
 
 ## Two-Phase Rollback
 
-1. `DefaultCore.rollback(xid)`：`close()` → `Rollbacking` → `doGlobalRollback()`。
-2. **逆序**遍历分支，发 `BranchRollbackRequest` 给每个 RM（RM 用 `undo_log` 反向补偿）。
-3. 返回 `PhaseTwo_Rollbacked` → `removeBranch`；返回 `PhaseTwo_RollbackFailed_Unretryable` → `endRollbackFailed`（终态，需人工）；失败/超时 → `queueToRetryRollback()`（`RollbackRetrying`）。
-4. 重试界限用 `beginTime` 而非「状态维持时长」：`isRetryTimeout` 超过 `MAX_COMMIT/ROLLBACK_RETRY_TIMEOUT` 才转 `Failed`。
+`rollback` 同样先锁会话、`close()`、转 `Rollbacking`，再调 `doGlobalRollback(false)`：
 
-## Global Lock
+```java
+boolean shouldRollBack = SessionHolder.lockAndExecute(globalSession, () -> {
+    globalSession.close(); // Highlight: Firstly, close the session, then no more branch can be registered.
+    if (globalSession.getStatus() == GlobalStatus.Begin) {
+        globalSession.changeGlobalStatus(GlobalStatus.Rollbacking);
+        return true;
+    }
+    return false;
+});
+if (!shouldRollBack) {
+    return globalSession.getStatus();
+}
+boolean rollbackSuccess = doGlobalRollback(globalSession, false);
+return rollbackSuccess ? GlobalStatus.Rollbacked : globalSession.getStatus();
+```
 
-- lockKey 形如 `tableName:pk1,pk2;tableName2:pk3`（`AbstractLockManager.collectRowLocks`）；`RowLock` 再拼成 `resourceId⌐tableName⌐pk` 作为 `lock_table.row_key` 唯一键。
-- **只有 `BranchType.AT` 才真正获取锁**（`BranchSession.lock`：`if branchType==AT → lockManager.acquireLock`）。
-- 全局锁保护的是「资源+表+主键」**行级锁**，保证不同全局事务对同一行互斥（AT 写隔离核心）。
-- 后端：`DataBaseLocker` / `FileLocker` / `RedisLocker` / `RaftLockManager`（经 `LockerManagerFactory` SPI 装配）。
+`doGlobalRollback` **逆序**遍历分支，`PhaseOne_Failed`/`PhaseOne_PrepareFailed` 的分支直接移除；返回 `PhaseTwo_Rollbacked` 移除分支，`PhaseTwo_RollbackFailed_Unretryable` 走 `endRollbackFailed`（终态需人工），其余进重试队列。重试界限用 `beginTime` 而非"状态维持时长"：
 
-## Session Persistence
-
-- 存储后端 db/file/redis/raft，对应 `global_table` / `branch_table` / `lock_table`（DO：`GlobalTransactionDO` / `BranchTransactionDO` / `LockDO`）。
-- `AbstractSessionManager` 把 `onBegin/onAddBranch/onStatusChange/...` 映射成 `LogOperation`（ADD/UPDATE/REMOVE）写 `TransactionStoreManager`。
-- 锁与分支**解耦存储**：锁在 `lock_table`，会话在 `global/branch_table`，共享同一数据源但由 `LockerManagerFactory` 与 `SessionManager` 分别管理。
-
-## High Availability (Raft)
-
-- `RaftCoordinator` 是 `DefaultCoordinator` 子类，仅额外做 leader 校验（`isPass` / `GROUP_PREVENT`），阻止非 leader 处理写请求。
-- **仅 `SessionManager`（RaftSessionManager）与锁（RaftLockManager）走 Raft 复制**；Netty 收发、定时调度在各节点本地跑。
-- Raft 模式下 follower 不本地写 session，靠状态机复制；只有 leader apply 后回调才在本地内存 `addGlobalSession`。
-- `SessionHolder.distributedLockAndExecute` 保证多 TC/多线程下扫描任务只跑一份。
+```java
+List<BranchSession> branchSessions = globalSession.getReverseSortedBranches();
+Boolean result = SessionHelper.forEach(
+        branchSessions,
+        branchSession -> {
+            BranchStatus currentBranchStatus = branchSession.getStatus();
+            if (currentBranchStatus == BranchStatus.PhaseOne_Failed
+                    || currentBranchStatus == BranchStatus.PhaseOne_PrepareFailed) {
+                SessionHelper.removeBranch(globalSession, branchSession, !retrying);
+                return CONTINUE;
+            }
+            if (retrying && BranchStatus.STOP_RETRY.equals(currentBranchStatus)) {
+                return CONTINUE;
+            }
+            // ... branchRollback -> switch on BranchStatus
+```
 
 ## Scheduling Threads
 
-`DefaultCoordinator.init()` 启动：`retryCommitting`、`retryRollbacking`、`asyncCommitting`、`timeoutCheck`、`undoLogDelete`（5 个 `scheduleAtFixedRate`），以及 `handleCommittingByScheduled` / `handleRollbackingByScheduled` / `handleEndStatesByScheduled`（自驱动链式调度，延迟由 `timeToDeadSession()` 动态计算）。`undoLogDelete` 是向**所有已注册 RM 的 resourceId** 发 `UndoLogDeleteRequest` 按 `saveDays` 清理过期日志——与「删当前事务 undo_log」是两件事。
+`DefaultCoordinator.init()` 起 5 组 `scheduleAtFixedRate`：`retryRollbacking`、`retryCommitting`、`asyncCommitting`、`timeoutCheck`、`undoLogDelete`，每组都套 `SessionHolder.distributedLockAndExecute(key, func)` 保证多 TC 节点下扫描任务只跑一份：
+
+```java
+public void init() {
+    retryRollbacking.scheduleAtFixedRate(
+            () -> SessionHolder.distributedLockAndExecute(RETRY_ROLLBACKING, this::handleRetryRollbacking),
+            0, CONFIG.getScheduledAtFixedRate(), TimeUnit.MILLISECONDS);
+    retryCommitting.scheduleAtFixedRate(
+            () -> SessionHolder.distributedLockAndExecute(RETRY_COMMITTING, this::handleRetryCommitting),
+            0, CONFIG.getScheduledAtFixedRate(), TimeUnit.MILLISECONDS);
+    asyncCommitting.scheduleAtFixedRate(
+            () -> SessionHolder.distributedLockAndExecute(ASYNC_COMMITTING, this::handleAsyncCommitting),
+            0, CONFIG.getScheduledAtFixedRate(), TimeUnit.MILLISECONDS);
+    timeoutCheck.scheduleAtFixedRate(
+            () -> SessionHolder.distributedLockAndExecute(TX_TIMEOUT_CHECK, this::timeoutCheck),
+            0, CONFIG.getScheduledAtFixedRate(), TimeUnit.MILLISECONDS);
+    undoLogDelete.scheduleAtFixedRate(
+            () -> SessionHolder.distributedLockAndExecute(UNDOLOG_DELETE, this::undoLogDelete),
+            0, CONFIG.getScheduledAtFixedRate(), TimeUnit.MILLISECONDS);
+}
+```
+
+`handleRetryRollbacking` / `handleRetryCommitting` / `handleAsyncCommitting` 都调 `core.doGlobalXxx(session, true)` 推进；`timeoutCheck` 扫描超时会话转 `TimeoutRollbacking`；`undoLogDelete` 是向所有已注册 RM 发 `UndoLogDeleteRequest` 按 `saveDays` 清理过期日志——与"删当前事务 undo_log"是两件事。
 
 ## Links
 - [Seata](/docs/CS/Framework/Seata/Seata.md)
 - [Architecture](/docs/CS/Framework/Seata/Architecture.md)
 - [Transaction Flow](/docs/CS/Framework/Seata/Transaction_Flow.md)
 - [RPC Transport](/docs/CS/Framework/Seata/RPC_Transport.md)
-- [AT and Undo Log](/docs/CS/Framework/Seata/AT_UndoLog.md)
+- [TC Storage](/docs/CS/Framework/Seata/TC_Storage.md)
+- [Global Lock](/docs/CS/Framework/Seata/Global_Lock.md)
 
 ## References
 - Apache Seata source (v2.7.0): https://github.com/apache/seata/tree/v2.7.0

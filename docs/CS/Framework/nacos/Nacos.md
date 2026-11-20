@@ -63,82 +63,263 @@ cluster.conf文件需配置在 ～/nacos/conf/下
 
 ## Architecture
 
-整体架构分为用户层、 业务层、 内核层和插件， 用户层主要解决用户使用的易用性问题， 业务层主要解决服务发现和配置管理的功能问题， 内核层解决分布式系统⼀致性、 存储、 高可用等核心问题，插件解决扩展性问题。  
+### Layered Architecture
 
+Nacos 把「用户交互 / 业务能力 / 分布式内核 / 扩展插件」压进一个进程：用户层给控制台与 SDK，业务层跑命名（naming）与配置（config）两套子系统，内核层（`core` + 独立的 `consistency` 模块）提供一致性、集群寻址与安全，插件层（`plugin-default-impl` / `persistence` 数据源插件）承载可替换实现。3.x 又把持久化、AI/MCP、控制台新前端拆成独立模块（见 `## 3.x Module Map`）。
 
-<div style="text-align: center;">
+> 版本基线：Nacos 3.2.4（commit 2c587c0，Java 17 / Spring Boot 3）。以下片段均取自该 tag。
 
-![Fig.1. Architecture](./img/Architecture.png)
+```dot
+digraph NacosArch {
+  rankdir=TB;
+  node [shape=box, style=rounded];
 
-</div>
+  subgraph cluster_user {
+    label="用户层 / User";
+    console [label="console + console-ui-next\n(Web UI)"];
+    sdk [label="client / OpenAPI\nHTTP :8848 + gRPC :9848"];
+  }
 
-<p style="text-align: center;">Fig.1. Architecture</p>
+  subgraph cluster_biz {
+    label="业务层 / Business";
+    naming [label="naming\n服务发现 (AP 临时实例)"];
+    cfg [label="config\n配置中心 (CP)"];
+  }
 
+  subgraph cluster_core {
+    label="内核层 / Core + Consistency";
+    pm [label="ProtocolManager\nAP=Distro / CP=JRaft"];
+    member [label="ServerMemberManager\nMemberLookup 寻址"];
+    sec [label="core/plugin\n鉴权 SPI"];
+  }
 
-采⽤了阿⾥巴巴内部⾃研的 Distro 协议来实现数据弱⼀致性同步。其中所有节点都将存储集群内所有服务元数据，因此都可以提供数据读取服务，但每个节点只负责⼀部分客户端的数据写服务
+  subgraph cluster_plugin {
+    label="插件层 / Plugin";
+    ds [label="persistence 数据源插件\nMySQL/Derby/PG/Oracle"];
+    ext [label="ai / istio / lock\nAI注册 / 网格 / 分布式锁"];
+  }
+
+  console -> naming; console -> cfg;
+  sdk -> naming; sdk -> cfg;
+  naming -> pm [label="AP 写"];
+  cfg -> pm [label="CP 写"];
+  pm -> ds [label="JRaft 状态机落库"];
+  member -> pm [label="成员变更"];
+}
+```
+
+### The Bootstrap Chain
+
+应用启动时第一跳不是 Spring Boot 自己的监听器，而是 Nacos 注册的 `SpringApplicationRunListener`：它实现 Spring Boot 的同名接口、且 `getOrder()` 返回 `HIGHEST_PRECEDENCE`，因此**先于** `EventPublishingRunListener` 执行。它本身不做事，只是把 SPI 加载来的一批 `NacosApplicationListener` 按生命周期逐一轮转：
+
+```java
+public class SpringApplicationRunListener
+    implements org.springframework.boot.SpringApplicationRunListener, Ordered {
+
+    Collection<NacosApplicationListener> nacosApplicationListeners =
+        NacosServiceLoader.load(NacosApplicationListener.class);
+
+    @Override
+    public void started(ConfigurableApplicationContext context, Duration timeTaken) {
+        for (NacosApplicationListener nacosApplicationListener : nacosApplicationListeners) {
+            nacosApplicationListener.started(context);
+        }
+    }
+
+    @Override
+    public int getOrder() {
+        return HIGHEST_PRECEDENCE;
+    }
+}
+```
+
+其中最关键的实现是 `StartingApplicationListener`。**注意**：3.2.4 里它已不再自己起线程池打印 "Nacos is starting..."、也不在 `started()` 里调 `judgeStorageMode()`——这些旧逻辑已被拆除，全部委托给 `NacosStartUpManager` + `NacosStartUp` 这套 SPI 阶段抽象：
+
+```java
+public class StartingApplicationListener implements NacosApplicationListener {
+
+    @Override
+    public void started(ConfigurableApplicationContext context) {
+        NacosStartUp currentStartUp = NacosStartUpManager.getCurrentStartUp();
+        currentStartUp.started();
+        currentStartUp.logStarted(LOGGER);
+    }
+
+    @Override
+    public void failed(ConfigurableApplicationContext context, Throwable exception) {
+        for (NacosStartUp each : NacosStartUpManager.getReverseStartedList()) {
+            each.failed(exception, context);
+        }
+        LOGGER.error("Startup errors : ", exception);
+    }
+}
+```
+
+`NacosStartUpManager` 是一个单例阶段注册表：构造时按 `NacosStartUp.startUpPhase()` 把 SPI 实现装进 map，`start(phase)` 推进当前阶段并记入 `startedList`，失败时 `getReverseStartedList()` **逆序回滚**——这就是启动失败能按依赖反方向清理的原因：
+
+```java
+public static void start(String phase) {
+    NacosStartUp startUp = INSTANCE.getStartUp(phase);
+    if (null == startUp) {
+        throw new IllegalArgumentException("Unknown nacos start up phase " + phase);
+    }
+    INSTANCE.currentStartUpPhase = phase;
+    INSTANCE.startedList.add(startUp);
+}
+
+public static List<NacosStartUp> getReverseStartedList() {
+    List<NacosStartUp> result = new ArrayList<>(INSTANCE.startedList);
+    Collections.reverse(result);
+    return result;
+}
+```
+
+3.2.4 里的阶段实现有 `NacosCoreStartUp` / `NacosWebStartUp` / `NacosConsoleStartUp` / `NacosAiRegistryStartUp`，分别由 core / console / ai-registry-adaptor 模块提供——启动本身也是插件化的。
+
+> [!WARNING]
+> 旧资料里 `StartingApplicationListener.logStarting()` 用 `ExecutorFactory.newSingleScheduledExecutorService` 每秒打印、并在 `started()` 调 `judgeStorageMode(context.getEnvironment())` 的代码，在 3.2.4 **已不存在**（全树 0 命中）。不要据此描述当前启动链路。
+
+### Two Subsystems, One Process
+
+Nacos 在一个进程里同时跑命名与配置，两者选了**不同的一致性模型**——这是它区别于 etcd（全程 Raft）、ZooKeeper（全程 Zab）的根本特征：
+
+- **命名（naming）默认 AP**：临时实例（ephemeral）走自研 Distro 协议，数据存内存、每个节点全量可读、只负责一部分写、异步最终一致（见 [Distro](/docs/CS/Framework/nacos/distro.md)）。持久实例（persistent）改走 CP。
+- **配置（config）走 CP**：配置变更经 JRaft 多数派确认 + 状态机落外部 DB（见 [JRaft](/docs/CS/Framework/nacos/jraft.md)）。
+
+### The Consistency Core: Lazy Dual Protocol
+
+`ProtocolManager` 是最上层的协议开关，持有 `APProtocol apProtocol` 与 `CPProtocol cpProtocol` 各一路。**两个协议都是懒加载 + 双检锁**——第一次 `getApProtocol()` / `getCpProtocol()` 才 SPI 找实现、注入成员、初始化：
+
+```java
+public CPProtocol getCpProtocol() {
+    if (!cpInit) {
+        synchronized (cpLock) {
+            if (!cpInit) {
+                initCPProtocol();
+                cpInit = true;
+            }
+        }
+    }
+    return cpProtocol;
+}
+
+private void initCPProtocol() {
+    ApplicationUtils.getBeanIfExist(CPProtocol.class, protocol -> {
+        Class configType = ClassUtils.resolveGenericType(protocol.getClass());
+        Config config = (Config) ApplicationUtils.getBean(configType);
+        injectMembers4CP(config);
+        protocol.init(config);
+        ProtocolManager.this.cpProtocol = protocol;
+    });
+}
+```
+
+注入给两路协议的成员信息**格式不同**：AP 用每个节点的 `address`（`ip:port`），CP 用 `ip:raftPort`（raft 端口 = 主端口 − 1000）：
+
+```java
+public static Set<String> toAPMembersInfo(Collection<Member> members) {
+    Set<String> nodes = new HashSet<>();
+    members.forEach(member -> nodes.add(member.getAddress()));
+    return nodes;
+}
+
+public static Set<String> toCPMembersInfo(Collection<Member> members) {
+    Set<String> nodes = new HashSet<>();
+    members.forEach(member -> {
+        final String ip = member.getIp();
+        final int raftPort = MemberUtil.calculateRaftPort(member);
+        nodes.add(ip + ":" + raftPort);
+    });
+    return nodes;
+}
+```
+
+集群成员变化时，`onEvent` 不直接调用协议，而是经 `ProtocolExecutor` 的两个**独立单线程池**串行投递，避免并发的成员变更同时冲击一致性层、也避免两路协议互相阻塞：
+
+```java
+@Override
+public void onEvent(MembersChangeEvent event) {
+    if (Objects.nonNull(apProtocol)) {
+        ProtocolExecutor.apMemberChange(
+            () -> apProtocol.memberChange(toAPMembersInfo(event.getMembers())));
+    }
+    if (Objects.nonNull(cpProtocol)) {
+        ProtocolExecutor.cpMemberChange(
+            () -> cpProtocol.memberChange(toCPMembersInfo(event.getMembers())));
+    }
+}
+```
+
+### Distro and JRaft in One Line
+
+`DistroProtocol` 自身**不存数据、不发网络包**，只是路由层：写调用 `sync()` → 为每个目标节点构造一个 `DistroDelayTask` 投入延迟队列；收到数据走 `onReceive()`、收到校验走 `onVerify()`，都按 `resourceType` 从 `DistroComponentHolder` 找对应 processor 处理：
+
+```java
+public void sync(DistroKey distroKey, DataOperation action, long delay) {
+    for (Member each : memberManager.allMembersWithoutSelf()) {
+        syncToTarget(distroKey, action, each.getAddress(), delay);
+    }
+}
+
+public void syncToTarget(DistroKey distroKey, DataOperation action,
+    String targetServer, long delay) {
+    DistroKey distroKeyWithTarget = new DistroKey(
+        distroKey.getResourceKey(), distroKey.getResourceType(), targetServer);
+    DistroDelayTask distroDelayTask =
+        new DistroDelayTask(distroKeyWithTarget, action, delay);
+    distroTaskEngineHolder.getDelayTaskExecuteEngine()
+        .addTask(distroKeyWithTarget, distroDelayTask);
+}
+```
+
+CP 侧 `JRaftProtocol` / `JRaftServer` 承载配置与持久实例，经 Raft 日志 + `NacosStateMachine` 落库。两者共用 `ProtocolManager` 这一层抽象，使得 naming/config 只关心数据的使用与计算，不关心存储与一致性（详见 [一致性抽象层](/docs/CS/Framework/nacos/consistency.md)）。
+
+### Ports at a Glance
+
+所有偏移都相对主端口 `server.port`（默认 8848），常量集中在 `api` 模块 `Constants` 与 `core` 模块 `MemberUtil`：
+
+| 端口 | 计算 | 常量 / 方法 | 用途 |
+| :-- | :-- | :-- | :-- |
+| 8848 | `server.port` | — | HTTP OpenAPI / 控制台 |
+| 9848 | `server.port + 1000` | `SDK_GRPC_PORT_DEFAULT_OFFSET` | SDK gRPC（`GrpcSdkServer`） |
+| 9849 | `server.port + 1001` | `CLUSTER_GRPC_PORT_DEFAULT_OFFSET` | 集群间 gRPC（`GrpcClusterServer`） |
+| 7848 | `server.port − 1000` | `MemberUtil.DEFAULT_RAFT_OFFSET_PORT` | JRaft（`calculateRaftPort`） |
+
+```java
+public static final Integer SDK_GRPC_PORT_DEFAULT_OFFSET = 1000;
+public static final Integer CLUSTER_GRPC_PORT_DEFAULT_OFFSET = 1001;
+```
+
+### Why This Shape
+
+Nacos 长成「一进程 + 双协议 + 插件化启动」是几个约束共同决定的：
+
+- **注册要高可用优于强一致**：临时实例分区时各节点仍能从本地内存响应，于是选 AP（Distro），把「注册中心不因分区全挂」看得比线性一致更重。
+- **配置不能分歧**：配置变更必须多数派确认后才生效，于是走 CP（JRaft + 落库），代价是写要过共识。
+- **两套能力要在一个产品里共存**：所以把一致性下沉成 core 的可插拔协议（`ProtocolManager`），让业务模块只依赖抽象、不碰实现。
+- **扩展点与启动流程要可替换**：数据源、鉴权、AI Registry、启动阶段都做成 SPI，3.x 才能在不改内核的前提下长出新模块。
 
 ## start
 
-com.alibaba.nacos.core.code.SpringApplicationRunListener
-
-```java
-public class SpringApplicationRunListener implements org.springframework.boot.SpringApplicationRunListener, Ordered {
-
-}
-```
-
-专有线程池做log 在 started后shutdownNow
-
-```java
-public class StartingApplicationListener implements NacosApplicationListener {
-    @Override
-    public void contextPrepared(ConfigurableApplicationContext context) {
-        logClusterConf();
-
-        logStarting();
-    }
-
-    private void logStarting() {
-        if (!EnvUtil.getStandaloneMode()) {
-            
-            scheduledExecutorService = ExecutorFactory
-                    .newSingleScheduledExecutorService(new NameThreadFactory("com.alibaba.nacos.core.nacos-starting"));
-            
-            scheduledExecutorService.scheduleWithFixedDelay(() -> {
-                if (starting) {
-                    LOGGER.info("Nacos is starting...");
-                }
-            }, 1, 1, TimeUnit.SECONDS);
-        }
-    }
-}
-```
-
-judge if is storage mode
-
-```java
-public class StartingApplicationListener implements NacosApplicationListener {
-    @Override
-    public void started(ConfigurableApplicationContext context) {
-    starting = false;
-    
-    closeExecutor();
-    
-    ApplicationUtils.setStarted(true);
-    judgeStorageMode(context.getEnvironment());
-    }
-}
-```
-
-
+启动链路的主线已在 `### The Bootstrap Chain` 展开：`SpringApplicationRunListener`（最高优先级）→ `NacosApplicationListener` 群 → `NacosStartUpManager` 阶段机 → 各 `NacosStartUp` 实现。核心结论是**启动本身也是 SPI 插件化的**，失败按阶段逆序回滚。
 
 ## grpc
 
-sdkserver 端口 server.port+1000
+Nacos 3.x 在 8848 HTTP 之外跑两条 gRPC 服务，端口由 `BaseRpcServer.rpcPortOffset()` 相对 `server.port` 计算：SDK 侧 +1000（9848）、集群侧 +1001（9849）：
 
-grpcserver端口 server.port+1001
+```java
+public abstract class BaseRpcServer {
+    public abstract int rpcPortOffset();
 
- ## Consistency
+    public int getServicePort() {
+        return EnvUtil.getPort() + rpcPortOffset();
+    }
+}
+```
+
+JRaft 则反向偏移 −1000（7848），由 `MemberUtil.calculateRaftPort(member)` 计算。四个端口的完整对照见上表 `### Ports at a Glance`。
+
+## Consistency
 
 
 Nacos 是⼀个集服务注册发现以及配置管理于⼀体的组件， 因此对于集群下， 各个节点之间的数据⼀致性保障问题， 需要拆分成两个方面

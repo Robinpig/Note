@@ -1,3 +1,5 @@
+# Dubbo Invocation: Modes, Context and Generic Calls
+
 ## Introduction
 
 Dubbo 的一次调用，表面看就是「代理对象方法进、结果出」，背后却叠了四层语义：调用模式（同步 / 异步 / 单向）、上下文传递（attachment）、泛化调用、以及线程切换。这几层里散落着大量「看起来像但其实是另一回事」的说法，先破除三个最常见的：
@@ -6,7 +8,7 @@ Dubbo 的一次调用，表面看就是「代理对象方法进、结果出」�
 - **`AsyncRpcResult` 上不存在 `getCompletableFuture()` 方法。** 它只有 `getResponseFuture(): CompletableFuture<AppResponse>`。`getCompletableFuture()` 出现在 `RpcContext` / `RpcServiceContext` / `FutureContext` 上。
 - **Provider 用 `RpcContext.getServerAttachment().setAttachment()` 写的值不会回传给客户端。** 想回传必须写 `getServerContext()`——这就是 Dubbo 3 把 `RpcContext` 拆成四类语义化 Context 之后最容易踩的坑。
 
-本文基于 Apache Dubbo **3.3.6** 官方源码，所有默认值标注文件与行号。
+本文基于 Apache Dubbo **3.3.6** 官方源码，所有默认值均逐文件核对自源码，正文贴真实片段。
 
 ## Invocation Modes: async / return / sent / timeout
 
@@ -14,16 +16,16 @@ Dubbo 的一次调用，表面看就是「代理对象方法进、结果出」�
 
 | 参数 | 字符串值 | 常量位置 |
 | :--- | :--- | :--- |
-| `async` | `"async"` | `dubbo-rpc-api` 的 `org.apache.dubbo.rpc.Constants:71` |
-| `return` | `"return"` | 同上 `:73` |
-| `sent` | `"sent"` | `dubbo-remoting-api` 的 `org.apache.dubbo.remoting.Constants:132` |
-| `timeout` | `"timeout"` | `dubbo-common` 的 `CommonConstants:145` |
+| `async` | `"async"` | `dubbo-rpc-api` 的 `org.apache.dubbo.rpc.Constants` |
+| `return` | `"return"` | 同上  |
+| `sent` | `"sent"` | `dubbo-remoting-api` 的 `org.apache.dubbo.remoting.Constants` |
+| `timeout` | `"timeout"` | `dubbo-common` 的 `CommonConstants` |
 | `oneway` | —— | **不存在** |
 
 `AsyncRpcResult` 与 `RpcInvocation` 之外，判断逻辑集中在 `RpcUtils`：
 
 ```java
-// dubbo-rpc/dubbo-rpc-api/.../rpc/support/RpcUtils.java:172-188
+// dubbo-rpc/dubbo-rpc-api/.../rpc/support/RpcUtils.java
 public static boolean isAsync(URL url, Invocation inv) {
     boolean isAsync;
     if (inv instanceof RpcInvocation) {
@@ -46,7 +48,7 @@ public static boolean isAsync(URL url, Invocation inv) {
 单向判定则完全由 `return` 推导：
 
 ```java
-// RpcUtils.java:232-240
+// RpcUtils.java
 public static boolean isOneway(URL url, Invocation inv) {
     boolean isOneway;
     if (Boolean.FALSE.toString().equals(inv.getAttachment(RETURN_KEY))) {
@@ -63,7 +65,7 @@ public static boolean isOneway(URL url, Invocation inv) {
 在 Dubbo 协议的调用器里，oneway 的判定**先于** async：
 
 ```java
-// dubbo-rpc/dubbo-rpc-dubbo/.../protocol/dubbo/DubboInvoker.java:105,128-145（节选）
+// dubbo-rpc/dubbo-rpc-dubbo/.../protocol/dubbo/DubboInvoker.java（节选）
 boolean isOneway = RpcUtils.isOneway(getUrl(), invocation);
 ...
 if (isOneway) {
@@ -84,9 +86,9 @@ if (isOneway) {
 `sent` 传给了 `currentClient.send(request, isSent)`，最终在 Netty 通道上体现为「是否阻塞等这次写入完成」：
 
 ```java
-// dubbo-remoting/dubbo-remoting-netty4/.../transport/netty4/NettyChannel.java:224-228
+// dubbo-remoting/dubbo-remoting-netty4/.../transport/netty4/NettyChannel.java
 if (sent) {
-    // wait timeout ms
+  // wait timeout ms
     timeout = getUrl().getPositiveParameter(TIMEOUT_KEY, DEFAULT_TIMEOUT);
     success = future.await(timeout);
 }
@@ -95,14 +97,14 @@ if (sent) {
 `sent=false` 意味着「fire and forget 地写出去，不确认是否写成功」，`sent=true` 会阻塞至多一个 `timeout`。它与「等不等业务响应」完全无关。
 
 > [!WARNING]
-> 这里还有一个默认值不一致的细节：运行时读取的默认值是 `false`（`DubboInvoker.java:129` 的 `getMethodParameter(..., SENT_KEY, false)`），但配置层 `MethodConfig.java:322-334` 在构造时会把 `sent` 补成 `true`。两者作用于不同阶段，排查「为什么发了但没报错」时要注意以运行时读取为准。
+> 这里还有一个默认值不一致的细节：运行时读取的默认值是 `false`（`DubboInvoker.java` 的 `getMethodParameter(..., SENT_KEY, false)`），但配置层 `MethodConfig.java` 在构造时会把 `sent` 补成 `true`。两者作用于不同阶段，排查「为什么发了但没报错」时要注意以运行时读取为准。
 
 ## Async Return Value
 
 Dubbo 3 推荐的异步写法是**方法签名直接返回 `CompletableFuture`**，框架据此识别：
 
 ```java
-// RpcUtils.java:190-198
+// RpcUtils.java
 public static boolean isReturnTypeFuture(Invocation inv) {
     Class<?> clazz;
     if (inv instanceof RpcInvocation) { clazz = ((RpcInvocation) inv).getReturnType(); }
@@ -114,14 +116,14 @@ public static boolean isReturnTypeFuture(Invocation inv) {
 拿结果的 API 有三个层次：
 
 ```java
-// dubbo-rpc/dubbo-rpc-api/.../rpc/AsyncRpcResult.java:161
+// dubbo-rpc/dubbo-rpc-api/.../rpc/AsyncRpcResult.java
 public CompletableFuture<AppResponse> getResponseFuture() {
     return responseFuture;
 }
 ```
 
 ```java
-// dubbo-rpc/dubbo-rpc-api/.../rpc/RpcContext.java:315-328（节选）
+// dubbo-rpc/dubbo-rpc-api/.../rpc/RpcContext.java（节选）
 public <T> CompletableFuture<T> getCompletableFuture() {
     return SERVICE_CONTEXT.get().getCompletableFuture();
 }
@@ -132,14 +134,14 @@ public <T> Future<T> getFuture() {
 
 | 用法 | 位置 | 状态 |
 | :--- | :--- | :--- |
-| `Result.getResponseFuture()` | `AsyncRpcResult:161` | 推荐，`FutureContext` 的 javadoc 明确 2.7.3 起优先用它 |
-| `RpcContext.getServiceContext().getCompletableFuture()` | `RpcContext:315` | 3.x 正式入口 |
-| `RpcContext.getContext().getFuture()` | `RpcContext:160,325` | `getContext()` 已 `@Deprecated`，整体不推荐 |
+| `Result.getResponseFuture()` | `AsyncRpcResult` | 推荐，`FutureContext` 的 javadoc 明确 2.7.3 起优先用它 |
+| `RpcContext.getServiceContext().getCompletableFuture()` | `RpcContext` | 3.x 正式入口 |
+| `RpcContext.getContext().getFuture()` | `RpcContext` | `getContext()` 已 `@Deprecated`，整体不推荐 |
 
 `FutureContext` 的注释把历史交代得很清楚：
 
 ```java
-// dubbo-rpc/dubbo-rpc-api/.../rpc/FutureContext.java:108-117（节选）
+// dubbo-rpc/dubbo-rpc-api/.../rpc/FutureContext.java（节选）
  * Start from 2.7.3, you don't have to get Future from RpcContext, we recommend using Result directly:
  *      Result result = invoker.invoke(invocation);
  *      result.getResponseFuture().whenComplete(new FinishSpanCallback(span));
@@ -153,7 +155,7 @@ public <T> Future<T> getFuture() {
 Dubbo 3 把原来的 `RpcContext` 单例拆成了四类语义化 Context，源码注释就是最好的说明：
 
 ```java
-// dubbo-rpc/dubbo-rpc-api/.../rpc/RpcContext.java:37-46
+// dubbo-rpc/dubbo-rpc-api/.../rpc/RpcContext.java
  * There are four kinds of RpcContext, which are ServerContext, ClientAttachment, ServerAttachment and ServiceContext.
  * ClientAttachment is using to pass attachments to next hop as a consumer. ( A --> B , in A side)
  * ServerAttachment is using to fetch attachments from previous hop as a provider. ( A --> B , in B side)
@@ -171,14 +173,14 @@ Dubbo 3 把原来的 `RpcContext` 单例拆成了四类语义化 Context，源�
 底层存储全部是 Dubbo 自研的 `InternalThreadLocal`（仿 Netty `FastThreadLocal`）：
 
 ```java
-// dubbo-common/.../common/threadlocal/InternalThreadLocal.java:34
+// dubbo-common/.../common/threadlocal/InternalThreadLocal.java
 public class InternalThreadLocal<V> extends ThreadLocal<V> {
 ```
 
 关键在于 **`getServerContext()` 的 `setAttachment` 被重写了**，它并不写进当前的 ThreadLocal，而是转发到 ServerResponseContext：
 
 ```java
-// dubbo-rpc/dubbo-rpc-api/.../rpc/RpcServerContextAttachment.java:36-39
+// dubbo-rpc/dubbo-rpc-api/.../rpc/RpcServerContextAttachment.java
 @Override
 public RpcContextAttachment setObjectAttachment(String key, Object value) {
     RpcContext.getServerResponseContext().setObjectAttachment(key, value);
@@ -187,7 +189,7 @@ public RpcContextAttachment setObjectAttachment(String key, Object value) {
 ```
 
 ```java
-// RpcServerContextAttachment.java:71-87（节选）
+// RpcServerContextAttachment.java（节选）
 @Override
 public Object getObjectAttachment(String key) {
     Object fromServerResponse = RpcContext.getServerResponseContext().getObjectAttachment(key);
@@ -201,7 +203,7 @@ public Object getObjectAttachment(String key) {
 而 `getServerAttachment()` 的写入就只是普通 ThreadLocal 赋值，出了 Provider 的线程就没了：
 
 ```java
-// dubbo-rpc/dubbo-rpc-api/.../rpc/RpcContextAttachment.java:104-122（节选）
+// dubbo-rpc/dubbo-rpc-api/.../rpc/RpcContextAttachment.java（节选）
 @Override
 public RpcContextAttachment setObjectAttachment(String key, Object value) {
     if (value == null) { attachments.remove(key); } else { attachments.put(key, value); }
@@ -218,7 +220,7 @@ public RpcContextAttachment setObjectAttachment(String key, Object value) {
 `ConsumerContextFilter` 负责把消费者写的 attachment 打包进 invocation：
 
 ```java
-// dubbo-cluster/.../filter/support/ConsumerContextFilter.java:63-95（节选）
+// dubbo-cluster/.../filter/support/ConsumerContextFilter.java（节选）
 public Result invoke(Invoker<?> invoker, Invocation invocation) throws RpcException {
     RpcContext.getServiceContext().setInvoker(invoker).setInvocation(invocation);
     RpcContext context = RpcContext.getClientAttachment();
@@ -234,7 +236,7 @@ public Result invoke(Invoker<?> invoker, Invocation invocation) throws RpcExcept
 Provider 侧由 `ContextFilter` 把它读进 `getServerAttachment()`：
 
 ```java
-// dubbo-rpc/dubbo-rpc-api/.../filter/ContextFilter.java:138-181（节选）
+// dubbo-rpc/dubbo-rpc-api/.../filter/ContextFilter.java（节选）
 Map<String, Object> attachments = invocation.getObjectAttachments();
 ...
 RpcContext context = RpcContext.getServerAttachment();
@@ -253,7 +255,7 @@ if (CollectionUtils.isNotEmptyMap(attachments)) {
 只有写进 Response 的那两类 attachment 会随响应回去：
 
 ```java
-// ContextFilter.java:200-217（节选）
+// ContextFilter.java（节选）
 public void onResponse(Result appResponse, Invoker<?> invoker, Invocation invocation) {
     ...
     appResponse.addObjectAttachments(
@@ -267,7 +269,7 @@ public void onResponse(Result appResponse, Invoker<?> invoker, Invocation invoca
 消费侧再把它读回来：
 
 ```java
-// ConsumerContextFilter.java:122-128
+// ConsumerContextFilter.java
 public void onResponse(Result appResponse, Invoker<?> invoker, Invocation invocation) {
     Map<String, Object> map = appResponse.getObjectAttachments();
     RpcContext.getClientResponseContext().setObjectAttachments(map);
@@ -280,7 +282,7 @@ public void onResponse(Result appResponse, Invoker<?> invoker, Invocation invoca
 当 Provider B 又要作为消费者调用下游 C 时，B 收到的上游 attachment 会自动带进新请求——这就是「隐式参数透传」的源码依据，**实现点在 `ConsumerContextFilter` 而不是 `AbstractClusterInvoker`**：
 
 ```java
-// ConsumerContextFilter.java:82-84（节选）
+// ConsumerContextFilter.java（节选）
 } else {
     ((RpcInvocation) invocation)
             .addObjectAttachments(RpcContext.getServerAttachment().getObjectAttachments());
@@ -288,14 +290,14 @@ public void onResponse(Result appResponse, Invoker<?> invoker, Invocation invoca
 ```
 
 > [!WARNING]
-> `AbstractClusterInvoker.java:348-351` 里确实有一段与 "binding attachments into invocation" 相关的代码，但它**已被注释掉**，不是现行透传路径。任何引用该处解释透传行为的说法都已过时。
+> `AbstractClusterInvoker.java` 里确实有一段与 "binding attachments into invocation" 相关的代码，但它**已被注释掉**，不是现行透传路径。任何引用该处解释透传行为的说法都已过时。
 
 ## Generic Invocation
 
 泛化调用让消费方在没有服务接口 API 包的情况下发起调用，入口是 `GenericService`：
 
 ```java
-// dubbo-common/.../rpc/service/GenericService.java:26-48（节选）
+// dubbo-common/.../rpc/service/GenericService.java（节选）
 public interface GenericService {
     Object $invoke(String method, String[] parameterTypes, Object[] args) throws GenericException;
 
@@ -307,7 +309,7 @@ public interface GenericService {
 相关常量：
 
 ```java
-// dubbo-common/.../constants/CommonConstants.java:246,264,266,268
+// dubbo-common/.../constants/CommonConstants.java
 String GENERIC_KEY = "generic";
 String $INVOKE = "$invoke";
 String $INVOKE_ASYNC = "$invokeAsync";
@@ -325,16 +327,16 @@ token=org.apache.dubbo.rpc.filter.TokenFilter
 ```
 
 ```java
-// GenericFilter.java:74（提供方，无 condition 恒激活）
+// GenericFilter.java（提供方，无 condition 恒激活）
 @Activate(group = CommonConstants.PROVIDER, order = -20000)
 public class GenericFilter implements Filter, Filter.Listener, ScopeModelAware {
 
-// GenericImplFilter.java:57（消费方，仅 generic 参数存在时激活）
+// GenericImplFilter.java（消费方，仅 generic 参数存在时激活）
 @Activate(group = CommonConstants.CONSUMER, value = GENERIC_KEY, order = 20000)
 public class GenericImplFilter implements Filter, Filter.Listener {
 ```
 
-`generic` 的取值决定泛化序列化方式（`CommonConstants.java:370-380`）：
+`generic` 的取值决定泛化序列化方式（`CommonConstants.java`）：
 
 | 取值 | 含义 |
 | :--- | :--- |
@@ -347,11 +349,11 @@ public class GenericImplFilter implements Filter, Filter.Listener {
 **Triple 协议下泛化同样支持**：`TripleInvoker` 对 `$invoke` 有专门分支，泛化请求会被强制走 wrapper 打包：
 
 ```java
-// dubbo-rpc/dubbo-rpc-triple/.../tri/TripleInvoker.java:157-167（节选）
+// dubbo-rpc/dubbo-rpc-triple/.../tri/TripleInvoker.java（节选）
 if (methodDescriptor == null) {
     if (RpcUtils.isGenericCall(
             ((RpcInvocation) invocation).getParameterTypesDesc(), invocation.getMethodName())) {
-        // Only reach when server generic
+  // Only reach when server generic
         methodDescriptor = ServiceDescriptorInternalCache.genericService()
                 .getMethod(invocation.getMethodName(), invocation.getParameterTypes());
     } else if (RpcUtils.isEcho(...)) { ... }
@@ -359,10 +361,10 @@ if (methodDescriptor == null) {
 ```
 
 ```java
-// dubbo-rpc/dubbo-rpc-triple/.../tri/ReflectionPackableMethod.java:127-132
+// dubbo-rpc/dubbo-rpc-triple/.../tri/ReflectionPackableMethod.java
 public static boolean needWrap(MethodDescriptor methodDescriptor, Class<?>[] parameterClasses, Class<?> returnClass) {
     String methodName = methodDescriptor.getMethodName();
-    // generic call must be wrapped
+  // generic call must be wrapped
     if (CommonConstants.$INVOKE.equals(methodName) || CommonConstants.$INVOKE_ASYNC.equals(methodName)) {
         return true;
     }
@@ -388,7 +390,7 @@ public static boolean needWrap(MethodDescriptor methodDescriptor, Class<?>[] par
 - **`getInvoker()` 是 `@Transient`**。它用于运行期取上下文，但不会被序列化进网络报文——跨进程时该字段为空，所以 Provider 端不能依赖 `invocation.getInvoker()` 拿到消费端的 Invoker。
 - **`Object` 型 attachment 是 3.x 主线**。`getAttachments()` 返回 `Map<String,String>`，`getObjectAttachments()` 返回 `Map<String,Object>`；跨进程透传时对象会被序列化，框架默认用 `getObjectAttachmentWithoutConvert` 以绕过字符串转换（见 Filter 篇 `TokenFilter`）。
 
-`RpcInvocation` 还实现了 `addInvokedInvoker` / `getInvokedInvokers`（`Invocation.java:173-181`），用于 Cluster 重试时记录已试过的 Invoker，目前**仅消费侧**使用。
+`RpcInvocation` 还实现了 `addInvokedInvoker` / `getInvokedInvokers`（`Invocation.java`），用于 Cluster 重试时记录已试过的 Invoker，目前**仅消费侧**使用。
 
 ## RpcInvocation Object Body (P2 blind spots)
 
@@ -415,27 +417,27 @@ public static boolean needWrap(MethodDescriptor methodDescriptor, Class<?>[] par
 | `invokeMode` | `InvokeMode` | **是** | 调用模式（SYNC/ASYNC/FUTURE） |
 | `invokedInvokers` | `List<Invoker<?>>` | **是** | 已调用 invoker 列表（Cluster 重试用） |
 
-注：`parameterTypes` 是 `transient`，真正跨网络的是 `parameterTypesDesc`（字符串描述，`initParameterDesc()` `:463-493`）。
+注：`parameterTypes` 是 `transient`，真正跨网络的是 `parameterTypesDesc`（字符串描述，`initParameterDesc()` ）。
 
 ### Pitfall: `attachments` is STILL `Map<String, Object>` in 3.x
-⚠️ 不要以为 3.x 把 `attachments` 收紧成了 `Map<String, String>`。字段始终是 `Map<String, Object>`（`RpcInvocation.java:80`）；`Map<String, String>` **只出现在 `@Deprecated` 兼容接口**与 `AttachmentsAdapter.ObjectToStringMap` 视图里。
-- 规范的 Object 路径 API **未废弃**：`getObjectAttachments()`（`:603`）、`setObjectAttachment(String, Object)`（`:684`）、`addObjectAttachments(Map<String, Object>)`（`:737`）、`getObjectAttachment(String)`（`:790`）。
-- `Map<String, String>` 仅见于废弃适配：`getAttachments()`（`:654`，包成 `AttachmentsAdapter.ObjectToStringMap`）、`setAttachments(Map<String,String>)`（`:668`）、`addAttachments(Map<String,String>)`（`:721`）。
+⚠️ 不要以为 3.x 把 `attachments` 收紧成了 `Map<String, String>`。字段始终是 `Map<String, Object>`（`RpcInvocation.java`）；`Map<String, String>` **只出现在 `@Deprecated` 兼容接口**与 `AttachmentsAdapter.ObjectToStringMap` 视图里。
+- 规范的 Object 路径 API **未废弃**：`getObjectAttachments()`、`setObjectAttachment(String, Object)`、`addObjectAttachments(Map<String, Object>)`、`getObjectAttachment(String)`。
+- `Map<String, String>` 仅见于废弃适配：`getAttachments()`（包成 `AttachmentsAdapter.ObjectToStringMap`）、`setAttachments(Map<String,String>)`、`addAttachments(Map<String,String>)`。
 - 新代码用 `getObjectAttachment` / `setObjectAttachment`；避免废弃的 `getAttachment(String)`。
 
 ### Pitfall: `attributes` vs `attachments`
-- `attachments`（`Map<String, Object>`）是跨网络透传 KV，经 `readAttachments()` / `writeAttachments()` 序列化（`DecodeableRpcInvocation.java:182-184`）。
-- `attributes`（`Map<Object, Object>`）是 **`transient`**，源码注释明确「Only used on the caller side, will not appear on the wire」（`RpcInvocation.java:84-87`）——它是进程内单次调用链上下文，**从不序列化**。不要把它当透传通道。
+- `attachments`（`Map<String, Object>`）是跨网络透传 KV，经 `readAttachments()` / `writeAttachments()` 序列化（`DecodeableRpcInvocation.java`）。
+- `attributes`（`Map<Object, Object>`）是 **`transient`**，源码注释明确「Only used on the caller side, will not appear on the wire」（`RpcInvocation.java`）——它是进程内单次调用链上下文，**从不序列化**。不要把它当透传通道。
 
 ### Pitfall: invocation id is NOT a field
 ⚠️ 没有 `invocationId` / `id` 字段。id 以 `ID_KEY` 为 key 存于 `attachments`：
-- 读取：`RpcUtils.getInvocationId(Invocation)` → `inv.getAttachment(ID_KEY)`（`RpcUtils.java:108`）。
-- 生成：`RpcUtils.attachInvocationIdIfAsync()` 用模块级静态 `AtomicLong`（`RpcUtils.java:56,119-121`）。
+- 读取：`RpcUtils.getInvocationId(Invocation)` → `inv.getAttachment(ID_KEY)`（`RpcUtils.java`）。
+- 生成：`RpcUtils.attachInvocationIdIfAsync()` 用模块级静态 `AtomicLong`（`RpcUtils.java`）。
 
 ### Request/Response correspondence
 - 请求 = `RpcInvocation`（实现 `Invocation`）。
-- 响应 = `Result` 接口（`Result.java:46`），两个实现：`AppResponse`（`:54`，具体结果）与 `AsyncRpcResult`（`:54`，异步包装，实现 `CompletionStage<AppResponse>`）。
-- `RpcContext` 通过 `InternalThreadLocal` `SERVICE_CONTEXT` 绑定当前 invocation（`RpcContext.java:90-91`，`setInvocation` `:746`）；注意 `getInvocation()` 自身已 `@Deprecated`（`:741`）。
+- 响应 = `Result` 接口（`Result.java`），两个实现：`AppResponse`（具体结果）与 `AsyncRpcResult`（异步包装，实现 `CompletionStage<AppResponse>`）。
+- `RpcContext` 通过 `InternalThreadLocal` `SERVICE_CONTEXT` 绑定当前 invocation（`RpcContext.java`，`setInvocation` ）；注意 `getInvocation()` 自身已 `@Deprecated`。
 
 ## Pitfall List
 

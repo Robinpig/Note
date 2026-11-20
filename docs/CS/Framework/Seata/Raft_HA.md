@@ -1,85 +1,194 @@
-# Raft HA (Seata v2.7.0)
-
-> 源码驱动笔记。基座：apache/seata @ v2.7.0（tag `v2.7.0`，blobless + sparse-checkout 落盘 `server` / `core`）。类名可在 `server/src/main/java/org/apache/seata/server/coordinator/RaftCoordinator.java`、`server/src/main/java/org/apache/seata/server/cluster/raft/`（RaftServer / RaftStateMachine）、`server/src/main/java/org/apache/seata/server/storage/raft/` 下核对。
+# Raft HA
 
 ## Introduction
 
-Seata 2.x 把 TC 从「依赖外部注册中心的单点协调者」演进为**内嵌 Raft 的 CP 系统**：多个 TC 节点组成 Raft 组，全局/分支会话与全局锁的变更作为 Raft 日志条目复制到多数派，使 TC 在节点宕机、leader 切换后仍保持状态一致。它解决的是 TC 自身的**高可用与强一致**，与事务模式（AT/TCC/Saga/XA）正交——任何模式在 Raft 模式下都走同一套复制路径。Raft 之前，TC 会话只能靠 file/db/redis 单机持久化，failover 需外部手段；Raft 之后，TC 集群本身即具备自动选主与状态重建。
+Seata 2.x 把 TC 从"依赖外部注册中心的单点协调者"演进为**内嵌 Raft 的 CP 系统**：多个 TC 组成 Raft 组，全局/分支会话与全局锁的变更作为 Raft 日志复制到多数派，使 TC 在节点宕机、leader 切换后仍保持一致。它解决 TC 自身的**高可用与强一致**，与事务模式（AT/TCC/Saga/XA）正交。
 
-## Raft 集成架构
+> 版本基线：apache/seata **v2.7.0**。以下片段均取自该 tag。Raft 用 **SOFA JRaft**（`com.alipay.sofa.jraft`），不是自研，也不是 etcd/Ratis。
 
-Seata 使用 **SOFA JRaft**（`com.alipay.sofa.jraft`，蚂蚁开源 Raft 库），而非自研：
+## Raft Integration Architecture
 
-- `RaftCoordinator`（`server/coordinator/RaftCoordinator.java:37`）**`extends DefaultCoordinator`**——Raft 不是另起一套协调者，而是在 `DefaultCoordinator` 之外叠加「复制层」：leader 上的核心操作（begin / branchRegister / commit / rollback）被包装成 Raft 任务提交给 jraft `Node`，复制成功后在所有节点 apply。
-- `RaftServer`（`server/cluster/raft/RaftServer.java:54`）封装 jraft 的 `RaftGroupService` / `Node`：构造时传入 `RaftStateMachine` 作 FSM（`RaftServer.java:76`），`start()` 设置 log / raft_meta / snapshot 三个 URI 并 `raftGroupService.start(false)`（`RaftServer.java:97`）。
-- `RaftStateMachine`（`server/cluster/raft/RaftStateMachine.java:107`）**`extends StateMachineAdapter`**（jraft 的），是真正的「状态机 apply 点」。
+`RaftCoordinator` **extends `DefaultCoordinator`**——Raft 不是另起一套协调者，而是在 `DefaultCoordinator` 之外叠加"复制层"：它额外 `implements ApplicationListener<ClusterChangeEvent>`，通过 `GROUP_PREVENT` + `isPass()` 拦截非 leader 的写请求。
 
-## 写路径与状态机 apply
+```java
+public class RaftCoordinator extends DefaultCoordinator implements ApplicationListener<ClusterChangeEvent> {
 
-leader 上的写操作经 `RaftTaskUtil.createTask(...)` 提交到 jraft；jraft 复制日志到多数派后回调 `RaftStateMachine.onApply(iterator)`（`RaftStateMachine.java:170`）：
-
-```
-leader: core op → RaftTaskUtil.createTask(msg) → jraft Node.appendEntries
-        → 多数派确认 → onApply: iterator.done() != null → 直接执行（leader 不串行化）
-follower: 收到日志 → onApply: done == null → 解码 RaftBaseMsg
-        → onExecuteRaft(msg) → EXECUTES.get(msgType).execute(msg)
-        → AddGlobalSessionExecute / AddBranchSessionExecute / ... 应用到本地 SessionHolder
+    protected static final Map<String, Boolean> GROUP_PREVENT = new ConcurrentHashMap<>();
 ```
 
-`onApply` 的关键分支（`RaftStateMachine.java:173-188`）：`done != null` 表示 leader 本地提交，直接 `done.run(Status.OK())` 执行任务；`done == null` 表示 follower 通过日志回放，需把字节流解码成 `RaftBaseMsg` 再分派。**leader 与 follower 最终都执行同一组 `RaftMsgExecute`，保证各节点会话状态收敛**。
+```java
+@Override
+public <T extends AbstractTransactionRequest, S extends AbstractTransactionResponse> void exceptionHandleTemplate(
+        Callback<T, S> callback, T request, S response) {
+    String group = SeataClusterContext.bindGroup();
+    try {
+        if (!isPass(group)) {
+            throw new TransactionException(
+                    TransactionExceptionCode.NotRaftLeader,
+                    " The current TC is not a leader node, interrupt processing !");
+        }
+        super.exceptionHandleTemplate(callback, request, response);
+    } catch (TransactionException tex) {
+        LOGGER.error("Catch TransactionException while do RPC, request: {}", request, tex);
+        callback.onTransactionException(request, response, tex);
+    } finally {
+        SeataClusterContext.unbindGroup();
+    }
+}
 
-## 复制的操作集合（EXECUTES 表）
+private boolean isPass(String group) {
+    // Non-raft mode always allows requests
+    return Optional.ofNullable(GROUP_PREVENT.get(group)).orElse(false);
+}
 
-`RaftStateMachine` 构造时按 `RaftSyncMsgType` 注册执行器（`RaftStateMachine.java:155-164`），即 Raft 模式下「可被复制的状态变更」全貌：
+@Override
+public void onApplicationEvent(ClusterChangeEvent event) {
+    setPrevent(event.getGroup(), event.isLeader());
+}
+```
 
-| 消息类型 | 执行器 | 语义 |
-| :--- | :--- | :--- |
-| `ADD_GLOBAL_SESSION` | `AddGlobalSessionExecute` | 新增全局会话 |
-| `ADD_BRANCH_SESSION` | `AddBranchSessionExecute` | 新增分支会话 |
-| `UPDATE_GLOBAL_SESSION_STATUS` | `UpdateGlobalSessionExecute` | 推进全局状态 |
-| `UPDATE_BRANCH_SESSION_STATUS` | `UpdateBranchSessionExecute` | 推进分支状态 |
-| `REMOVE_GLOBAL_SESSION` | `RemoveGlobalSessionExecute` | 清理全局会话 |
-| `REMOVE_BRANCH_SESSION` | `RemoveBranchSessionExecute` | 清理分支会话 |
-| `RELEASE_GLOBAL_SESSION_LOCK` | `GlobalReleaseLockExecute` | 释放全局锁 |
-| `RELEASE_BRANCH_SESSION_LOCK` | `BranchReleaseLockExecute` | 释放分支锁 |
-| `ADD_VGROUP_MAPPING` / `REMOVE_VGROUP_MAPPING` | `VGroupAddExecute` / `VGroupRemoveExecute` | vgroup→cluster 映射复制 |
-| `REFRESH_CLUSTER_METADATA` | 内联 lambda | 刷新集群元数据 |
+> 命名陷阱：`GROUP_PREVENT` 字面像"阻止"，但 `setPrevent(group, event.isLeader())` 写入的是"是否 leader"，`isPass` 返回该值，`true` 代表**允许通过**；从未收到 `ClusterChangeEvent` 的 group 默认 `false`（拒绝）。以代码为准，别被名字带偏。
 
-注意：**只有这些被注册的操作会经 Raft 复制**；若某消息类型不在 `EXECUTES` 中，`onExecuteRaft` 会直接抛异常（`RaftStateMachine.java:346`），这是一道安全闸，防止「不可复制的事件」混入状态机。
+## Write Path and State Machine Apply
 
-## Snapshot 与恢复
+`RaftStateMachine extends StateMachineAdapter`（jraft 的），是真正的 apply 点。leader 上的写经 `RaftTaskUtil.createTask(...)` 提交 jraft `Node`。
 
-`RaftStateMachine` 注册了三类快照文件（`RaftStateMachine.java:151-154`）：`LeaderMetadataSnapshotFile`、`SessionSnapshotFile`、`VGroupSnapshotFile`。
+`onApply` 的 leader/follower 分支**不是用 `isLeader()` 判断，而是看 `iterator.done()` 是否为 null**：leader 本地提交带 callback（`done != null`）→ 直接 `done.run(Status.OK())` 执行任务，不走序列化；follower 重放日志（`done == null`）→ 解码成 `RaftBaseMsg` 再分派：
 
-- `onSnapshotSave`（`RaftStateMachine.java:195`）：遍历 `snapshotFiles` 落盘；仅当 `SessionMode.RAFT` 时真正写（否则空过）。
-- `onSnapshotLoad`（`RaftStateMachine.java:213`）：follower 从快照恢复；**leader 不允许加载快照**（`RaftStateMachine.java:217` 直接返回 false）。
-- jraft 自身还维护 `log`（`RaftServer.java:89`）与 `raft_meta`（`RaftServer.java:91`）URI，新节点或落后节点通过「追日志 + 必要时装快照」追上集群。
+```java
+@Override
+public void onApply(Iterator iterator) {
+    while (iterator.hasNext()) {
+        Closure done = iterator.done();
+        if (done != null) {
+            // leader does not need to be serialized, just execute the task directly
+            done.run(Status.OK());
+        } else {
+            ByteBuffer byteBuffer = iterator.getData();
+            // if data is empty, it is only a heartbeat event and can be ignored
+            if (byteBuffer != null && byteBuffer.hasRemaining()) {
+                RaftBaseMsg msg = (RaftBaseMsg)
+                        RaftSyncMessageSerializer.decode(byteBuffer.array()).getBody();
+                onExecuteRaft(msg);
+            }
+        }
+        iterator.next();
+    }
+}
+```
 
-## Leader 选举与故障切换
+根因在 `RaftTaskUtil.createTask`：`task.setDone(...)` 把调用方 Closure 设为 Task.done，只有 leader 本地 apply 时它非 null。
 
-- `onLeaderStart(term)`（`RaftStateMachine.java:234`）：新 leader 上任后 `syncMetadata()` 并异步 `SessionHolder.reload(...)`（`RaftStateMachine.java:249`）从根会话管理器重载全局会话——**leader 切换时把内存会话重新加载进状态机**，使新 leader 立即具备完整事务视图。
-- 成员变更：`onConfigurationCommitted`（`RaftStateMachine.java:280`）与 `changePeers`（`RaftStateMachine.java:290`）在扩缩容后同步/裁剪 follower/learner 元数据。
-- **in-flight 事务的连续性**：由于会话状态靠 Raft 日志复制、leader 切换后重新 `reload`，正在进行的全局事务不会因 leader 切换而丢失——新 leader 从已复制的会话状态继续驱动二阶段。但 leader 切换瞬间、尚未复制到多数派的本地写会回退到上一条已提交日志，需要 TM/RM 侧的重试补齐（这是 Raft 自身的线性一致语义，Seata 不额外补偿）。
+## Replicated Operations (EXECUTES Table)
 
-## 与存储后端、锁的关系
+`RaftStateMachine` 构造时按 `StoreMode.RAFT` 注册 `EXECUTES`，即 Raft 模式下"可被复制的状态变更"全貌：
 
-- **Raft 模式不是 `TransactionStoreManager` 的「第四套后端」**：session 的 `TransactionStoreManager` 仍只有 db / file / redis 三套（见 [TC Storage](/docs/CS/Framework/Seata/TC_Storage.md)）。Raft 模式用 `RaftSessionManager`（`storage/raft/session`）接管会话的增删改，把变更作为 Raft 日志复制，apply 时落到**各节点本地**的 file/db 会话存储；jraft 的 `log` + `SessionSnapshotFile` 提供持久化与检查点。
-- **Raft 模式的锁**：`RaftLockManager extends FileLockManager`（`storage/raft/lock/RaftLockManager.java:40`），复用文件锁实现，外层用 jraft `Closure`（`RaftLockManager.java:49` / `:73`）把锁变更经 Raft 复制。
-- 一句话：**Raft 是「复制层」，session 存储与锁存储是被复制的对象**，三者通过 `RaftCoordinator` + `RaftStateMachine` 的 `EXECUTES` 表串起来。
+```java
+if (StoreMode.RAFT.getName().equalsIgnoreCase(mode)) {
+    registryStoreSnapshotFile(new SessionSnapshotFile(group));
+    registryStoreSnapshotFile(new VGroupSnapshotFile(group));
+    EXECUTES.put(ADD_GLOBAL_SESSION, new AddGlobalSessionExecute());
+    EXECUTES.put(ADD_BRANCH_SESSION, new AddBranchSessionExecute());
+    EXECUTES.put(REMOVE_BRANCH_SESSION, new RemoveBranchSessionExecute());
+    EXECUTES.put(UPDATE_GLOBAL_SESSION_STATUS, new UpdateGlobalSessionExecute());
+    EXECUTES.put(RELEASE_GLOBAL_SESSION_LOCK, new GlobalReleaseLockExecute());
+    EXECUTES.put(REMOVE_GLOBAL_SESSION, new RemoveGlobalSessionExecute());
+    EXECUTES.put(UPDATE_BRANCH_SESSION_STATUS, new UpdateBranchSessionExecute());
+    EXECUTES.put(RELEASE_BRANCH_SESSION_LOCK, new BranchReleaseLockExecute());
+    EXECUTES.put(REMOVE_VGROUP_MAPPING, new VGroupRemoveExecute());
+    EXECUTES.put(ADD_VGROUP_MAPPING, new VGroupAddExecute());
+}
+```
 
-## 源码打假 / 设计点
+`onExecuteRaft` 对未注册的消息类型**直接抛异常**（一道安全闸，防止不可复制事件混入状态机）：
 
-- **Seata 的 Raft 是 SOFA JRaft，不是自研也不是 etcd/Raft 库**：`com.alipay.sofa.jraft` 出现在 `RaftServer` / `RaftStateMachine` / `RaftLockManager` 的 import 中，依赖以 `com.alipay.sofa` 为 groupId。
-- **`RaftCoordinator extends DefaultCoordinator`，Raft 是叠加而非替换**：不要把它当成「两套并行的 TC 协调者」——Raft 模式下的核心事务逻辑仍是 `DefaultCoordinator` 的那套，只是写路径被包了一层复制。
-- **leader 与 follower 的 apply 分支不同但终态一致**：leader 走 `done != null` 直接执行，follower 走解码 + `EXECUTES` 分派；二者执行的是同一组 `RaftMsgExecute`，这是「写只在 leader、状态全节点收敛」的实现细节。
-- **`EXECUTES` 未注册的操作会被拒绝**：`onExecuteRaft` 对未知 `msgType` 直接抛异常，是一道防止「非复制事件」污染状态机的安全闸，也是理解「哪些操作能进 Raft」的权威清单。
-- **leader 切换靠 `SessionHolder.reload` 续命 in-flight 事务**：这是 Raft 模式下高可用的关键，但切换瞬间未复制到多数派的写会回退，需上游重试——不要误以为 Raft 模式「零丢失、零重试」。
+```java
+private void onExecuteRaft(RaftBaseMsg msg) {
+    RaftMsgExecute<?> execute = EXECUTES.get(msg.getMsgType());
+    if (execute == null) {
+        throw new RuntimeException(
+                "the state machine does not allow events that cannot be executed, please feedback the information to the Seata community !!! msg: "
+                        + msg);
+    }
+    try {
+        execute.execute(msg);
+    } catch (Throwable e) {
+        LOGGER.error("Message synchronization failure: {}, msgType: {}", e.getMessage(), msg.getMsgType(), e);
+        throw new RuntimeException(e);
+    }
+}
+```
+
+会话侧 `RaftSessionManager extends FileSessionManager`，所有会话变更构造 `RaftXxxSyncMsg` 经 `RaftTaskUtil.createTask` 提交，leader 侧在 `Closure.isOk()` 后落本地内存；锁侧 `RaftLockManager extends FileLockManager`，用 jraft Closure 复制锁释放。
+
+## Snapshot and Recovery
+
+`RaftStateMachine` 注册三类快照：`LeaderMetadataSnapshotFile`、`SessionSnapshotFile`、`VGroupSnapshotFile`（后两类仅 `SessionMode.RAFT` 注册）。`onSnapshotLoad` 中 **leader 不允许加载快照**（直接返回 false），follower 才逐个 `snapshotFile.load(reader)`：
+
+```java
+@Override
+public boolean onSnapshotLoad(final SnapshotReader reader) {
+    if (!StringUtils.equals(SessionMode.RAFT.getName(), mode)) {
+        return true;
+    }
+    if (isLeader()) {
+        LOGGER.warn("Leader is not supposed to load snapshot");
+        return false;
+    }
+    for (StoreSnapshotFile snapshotFile : snapshotFiles) {
+        if (!snapshotFile.load(reader)) {
+            return false;
+        }
+    }
+    return true;
+}
+```
+
+## Leader Election and Failover
+
+`onLeaderStart(term)`：仅当"此前不是 leader、现在成为 leader"（`!leader && RaftServerManager.isRaftMode()`）才异步 `SessionHolder.reload(...)` 重载会话——**leader 切换时把内存会话重新加载进状态机**，使新 leader 立即具备完整事务视图；同一分支还会 `changePeers(conf)` 清理失效成员：
+
+```java
+@Override
+public void onLeaderStart(final long term) {
+    boolean leader = isLeader();
+    this.leaderTerm.set(term);
+    this.currentTerm.set(term);
+    syncMetadata();
+    if (!leader && RaftServerManager.isRaftMode()) {
+        CompletableFuture.runAsync(() -> {
+            SeataClusterContext.bindGroup(group);
+            try {
+                // become the leader again,reloading global session
+                SessionHolder.reload(SessionHolder.getRootSessionManager().allSessions(), SessionMode.RAFT, false);
+            } finally {
+                SeataClusterContext.unbindGroup();
+            }
+        });
+        Configuration conf = RouteTable.getInstance().getConfiguration(group);
+        changePeers(conf);
+    }
+}
+```
+
+in-flight 事务靠 Raft 日志复制 + leader 切换后 reload 保持连续；但切换瞬间尚未复制到多数派的本地写会回退到上一条已提交日志，需 TM/RM 侧重试补齐——**不是"零丢失、零重试"**。
+
+## Corrections
+
+- **Raft 是复制层，不是第四套存储后端**：session 的 storeManager 仍只有 db/file/redis；Raft 把 `DefaultCore` 的写作为日志复制，apply 后调用各节点本地 db/file store 落盘。
+- **`RaftCoordinator extends DefaultCoordinator`，Raft 是叠加而非替换**：核心事务逻辑仍是那套，只是写路径包了一层复制。
+- **leader 与 follower 的 apply 分支不同但终态一致**：leader 走 `done != null` 直接执行，follower 走解码 + `EXECUTES` 分派，二者执行同一组 `RaftMsgExecute`。
+- **底层还用到 Bolt**：jraft 之外，RPC 层 import `com.alipay.remoting.InvokeContext`。
+- **`onApply` 判断依据是 `iterator.done()`，不是 `isLeader()`**：这是理解 leader/follower 分支的关键。
 
 ## Links
-
 - [Seata](/docs/CS/Framework/Seata/Seata.md)
 - [Architecture](/docs/CS/Framework/Seata/Architecture.md)
 - [TC Coordinator](/docs/CS/Framework/Seata/TC_Coordinator.md)
 - [TC Storage](/docs/CS/Framework/Seata/TC_Storage.md)
 - [Global Lock](/docs/CS/Framework/Seata/Global_Lock.md)
 - [Transaction Flow](/docs/CS/Framework/Seata/Transaction_Flow.md)
+
+## References
+- Apache Seata source (v2.7.0): https://github.com/apache/seata/tree/v2.7.0
+- SOFA JRaft: https://github.com/sofastack/sofa-jraft

@@ -1,3 +1,5 @@
+# Dubbo LoadBalance: Selection Algorithms
+
 ## Introduction
 
 在 Dubbo 的集群调用流程中，LoadBalance 的执行时机是在 Directory 获取全部 Invoker 和 Router 路由过滤之后，作为最后一环完成服务实例的最终选择。
@@ -10,7 +12,7 @@
 
 还有一处贯穿全篇的细节：3.3.6 里取方法名**统一走 `RpcUtils.getMethodName(invocation)`**，不再直接 `invocation.getMethodName()`——前者会处理 `$invoke` 之类的泛化调用后缀。
 
-本文版本基线：Apache Dubbo **3.3.6**，所有代码块与扩展名清单均逐文件核对自源码 tag `dubbo-3.3.6`。其中 `LoadBalance` 接口定义、预热公式（`AbstractLoadBalance.java:46-49`）、以及预热机制说明三处已按 3.3.6 **逐字核对，与源码完全一致**，未作改动。`Cluster` 如何调用 `LoadBalance` 见 [cluster](/docs/CS/Framework/Dubbo/cluster.md)，消费端调用链见 [Consumer](/docs/CS/Framework/Dubbo/Consumer.md)。
+本文版本基线：Apache Dubbo **3.3.6**，所有代码块与扩展名清单均逐文件核对自源码 tag `dubbo-3.3.6`。其中 `LoadBalance` 接口定义、预热公式（`AbstractLoadBalance.java`）、以及预热机制说明三处已按 3.3.6 **逐字核对，与源码完全一致**，未作改动。`Cluster` 如何调用 `LoadBalance` 见 [cluster](/docs/CS/Framework/Dubbo/cluster.md)，消费端调用链见 [Consumer](/docs/CS/Framework/Dubbo/Consumer.md)。
 
 ```java
 @SPI(RandomLoadBalance.NAME)
@@ -79,7 +81,7 @@ public abstract class AbstractLoadBalance implements LoadBalance {
             url = ((ClusterInvoker<?>) invoker).getRegistryUrl();
         }
 
-        // Multiple registry scenario, load balance among multiple registries.
+  // Multiple registry scenario, load balance among multiple registries.
         if (REGISTRY_SERVICE_REFERENCE_PATH.equals(url.getServiceInterface())) {
             weight = url.getParameter(WEIGHT_KEY, DEFAULT_WEIGHT);
         } else {
@@ -107,12 +109,12 @@ public abstract class AbstractLoadBalance implements LoadBalance {
 
 | # | 旧写法 | 3.3.6 真实形态 | 证据 |
 |---|---|---|---|
-| 1 | `int getWeight(...)`（包级私有） | **`protected`**，子类可覆写 | `AbstractLoadBalance.java:72` |
-| 2 | 直接 `invoker.getUrl()` | `invoker instanceof ClusterInvoker` 时**改用 `getRegistryUrl()`** | `:74-77` |
-| 3 | `url.getParameter(REGISTRY_KEY + "." + WEIGHT_KEY, DEFAULT_WEIGHT)` | `url.getParameter(WEIGHT_KEY, DEFAULT_WEIGHT)`，**不再拼 `registry.` 前缀** | `:81` |
-| 4 | `invocation.getMethodName()` | `RpcUtils.getMethodName(invocation)` | `:83` |
+| 1 | `int getWeight(...)`（包级私有） | **`protected`**，子类可覆写 | `AbstractLoadBalance.java` |
+| 2 | 直接 `invoker.getUrl()` | `invoker instanceof ClusterInvoker` 时**改用 `getRegistryUrl()`** |  |
+| 3 | `url.getParameter(REGISTRY_KEY + "." + WEIGHT_KEY, DEFAULT_WEIGHT)` | `url.getParameter(WEIGHT_KEY, DEFAULT_WEIGHT)`，**不再拼 `registry.` 前缀** |  |
+| 4 | `invocation.getMethodName()` | `RpcUtils.getMethodName(invocation)` |  |
 
-第2 条尤其关键：多注册中心场景下 `ClusterInvoker` 的 `getUrl()` 返回的是**面向消费者的 URL**（带路由/负载均衡等本地决策参数），而权重必须按**注册中心维度的 URL** 读，否则拿不到真实配置。这也是为什么 `RandomLoadBalance.needWeightLoadBalance` 里也做了同样的 `ClusterInvoker` 判断（`RandomLoadBalance.java:110-113`）。
+第2 条尤其关键：多注册中心场景下 `ClusterInvoker` 的 `getUrl()` 返回的是**面向消费者的 URL**（带路由/负载均衡等本地决策参数），而权重必须按**注册中心维度的 URL** 读，否则拿不到真实配置。这也是为什么 `RandomLoadBalance.needWeightLoadBalance` 里也做了同样的 `ClusterInvoker` 判断（`RandomLoadBalance.java`）。
 
 
 
@@ -130,24 +132,24 @@ public class RandomLoadBalance extends AbstractLoadBalance {
 
     @Override
     protected <T> Invoker<T> doSelect(List<Invoker<T>> invokers, URL url, Invocation invocation) {
-        // Number of invokers
+  // Number of invokers
         int length = invokers.size();
 
         if (!needWeightLoadBalance(invokers, invocation)) {
             return invokers.get(ThreadLocalRandom.current().nextInt(length));
         }
 
-        // Every invoker has the same weight?
+  // Every invoker has the same weight?
         boolean sameWeight = true;
-        // the maxWeight of every invoker, the minWeight = 0 or the maxWeight of the last invoker
+  // the maxWeight of every invoker, the minWeight = 0 or the maxWeight of the last invoker
         int[] weights = new int[length];
-        // The sum of weights
+  // The sum of weights
         int totalWeight = 0;
         for (int i = 0; i < length; i++) {
             int weight = getWeight(invokers.get(i), invocation);
-            // Sum
+  // Sum
             totalWeight += weight;
-            // save for later use
+  // save for later use
             weights[i] = totalWeight;
             if (sameWeight && totalWeight != weight * (i + 1)) {
                 sameWeight = false;
@@ -174,7 +176,7 @@ public class RandomLoadBalance extends AbstractLoadBalance {
                 return invokers.get(i);
             }
         }
-        // If all invokers have the same weight value or totalWeight=0, return evenly.
+  // If all invokers have the same weight value or totalWeight=0, return evenly.
         return invokers.get(ThreadLocalRandom.current().nextInt(length));
     }
 
@@ -183,10 +185,10 @@ public class RandomLoadBalance extends AbstractLoadBalance {
 
 3.3.6 加了两处性能优化，旧版代码里都看不到：
 
-**（1）`needWeightLoadBalance()` 快速路径**（`RandomLoadBalance.java:60-62`、`:108-128`）。URL 上压根没配 `weight` 也没有 `timestamp` 时，说明所有节点权重相同，直接均匀随机返回，**跳过整套权重累加与比较**。这是默认配置下最常见的分支——旧版即使什么都没配也要走完整个数组。
+**（1）`needWeightLoadBalance()` 快速路径**（`RandomLoadBalance.java`、）。URL 上压根没配 `weight` 也没有 `timestamp` 时，说明所有节点权重相同，直接均匀随机返回，**跳过整套权重累加与比较**。这是默认配置下最常见的分支——旧版即使什么都没配也要走完整个数组。
 
 ```java
-// dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/loadbalance/RandomLoadBalance.java:108-128
+// dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/loadbalance/RandomLoadBalance.java
     private <T> boolean needWeightLoadBalance(List<Invoker<T>> invokers, Invocation invocation) {
         Invoker<T> invoker = invokers.get(0);
         URL invokerUrl = invoker.getUrl();
@@ -194,7 +196,7 @@ public class RandomLoadBalance extends AbstractLoadBalance {
             invokerUrl = ((ClusterInvoker<?>) invoker).getRegistryUrl();
         }
 
-        // Multiple registry scenario, load balance among multiple registries.
+  // Multiple registry scenario, load balance among multiple registries.
         if (REGISTRY_SERVICE_REFERENCE_PATH.equals(invokerUrl.getServiceInterface())) {
             String weight = invokerUrl.getParameter(WEIGHT_KEY);
             return StringUtils.isNotEmpty(weight);
@@ -212,7 +214,7 @@ public class RandomLoadBalance extends AbstractLoadBalance {
 
 只看第一个Invoker 的 URL 即可判定——它要么全配了要么全没配。
 
-**（2）`length > 4` 时改用 `Arrays.binarySearch`**（`:85-102`）。`weights[i]` 是累积权重数组，本身严格递增，所以可以二分查找落点，把 O(n) 的线性扫描降到 O(log n)。节点数少（≤4）时二分反而不如直接扫，源码里保留了两条分支。
+**（2）`length > 4` 时改用 `Arrays.binarySearch`**。`weights[i]` 是累积权重数组，本身严格递增，所以可以二分查找落点，把 O(n) 的线性扫描降到 O(log n)。节点数少（≤4）时二分反而不如直接扫，源码里保留了两条分支。
 
 
 
@@ -302,7 +304,7 @@ public class RoundRobinLoadBalance extends AbstractLoadBalance {
             });
 
             if (weight != weightedRoundRobin.getWeight()) {
-                //weight changed
+  //weight changed
                 weightedRoundRobin.setWeight(weight);
             }
             long cur = weightedRoundRobin.increaseCurrent();
@@ -321,7 +323,7 @@ public class RoundRobinLoadBalance extends AbstractLoadBalance {
             selectedWRR.sel(totalWeight);
             return selectedInvoker;
         }
-        // should not happen here
+  // should not happen here
         return invokers.get(0);
     }
 
@@ -351,69 +353,69 @@ public class LeastActiveLoadBalance extends AbstractLoadBalance {
 
     @Override
     protected <T> Invoker<T> doSelect(List<Invoker<T>> invokers, URL url, Invocation invocation) {
-        // Number of invokers
+  // Number of invokers
         int length = invokers.size();
-        // The least active value of all invokers
+  // The least active value of all invokers
         int leastActive = -1;
-        // The number of invokers having the same least active value (leastActive)
+  // The number of invokers having the same least active value (leastActive)
         int leastCount = 0;
-        // The index of invokers having the same least active value (leastActive)
+  // The index of invokers having the same least active value (leastActive)
         int[] leastIndexes = new int[length];
-        // the weight of every invokers
+  // the weight of every invokers
         int[] weights = new int[length];
-        // The sum of the warmup weights of all the least active invokers
+  // The sum of the warmup weights of all the least active invokers
         int totalWeight = 0;
-        // The weight of the first least active invoker
+  // The weight of the first least active invoker
         int firstWeight = 0;
-        // Every least active invoker has the same weight value?
+  // Every least active invoker has the same weight value?
         boolean sameWeight = true;
 
 
-        // Filter out all the least active invokers
+  // Filter out all the least active invokers
         for (int i = 0; i < length; i++) {
             Invoker<T> invoker = invokers.get(i);
-            // Get the active number of the invoker
+  // Get the active number of the invoker
             int active = RpcStatus.getStatus(invoker.getUrl(), RpcUtils.getMethodName(invocation)).getActive();
-            // Get the weight of the invoker's configuration. The default value is 100.
+  // Get the weight of the invoker's configuration. The default value is 100.
             int afterWarmup = getWeight(invoker, invocation);
-            // save for later use
+  // save for later use
             weights[i] = afterWarmup;
-            // If it is the first invoker or the active number of the invoker is less than the current least active number
+  // If it is the first invoker or the active number of the invoker is less than the current least active number
             if (leastActive == -1 || active < leastActive) {
-                // Reset the active number of the current invoker to the least active number
+  // Reset the active number of the current invoker to the least active number
                 leastActive = active;
-                // Reset the number of least active invokers
+  // Reset the number of least active invokers
                 leastCount = 1;
-                // Put the first least active invoker first in leastIndexes
+  // Put the first least active invoker first in leastIndexes
                 leastIndexes[0] = i;
-                // Reset totalWeight
+  // Reset totalWeight
                 totalWeight = afterWarmup;
-                // Record the weight the first least active invoker
+  // Record the weight the first least active invoker
                 firstWeight = afterWarmup;
-                // Each invoke has the same weight (only one invoker here)
+  // Each invoke has the same weight (only one invoker here)
                 sameWeight = true;
-                // If current invoker's active value equals with leaseActive, then accumulating.
+  // If current invoker's active value equals with leaseActive, then accumulating.
             } else if (active == leastActive) {
-                // Record the index of the least active invoker in leastIndexes order
+  // Record the index of the least active invoker in leastIndexes order
                 leastIndexes[leastCount++] = i;
-                // Accumulate the total weight of the least active invoker
+  // Accumulate the total weight of the least active invoker
                 totalWeight += afterWarmup;
-                // If every invoker has the same weight?
+  // If every invoker has the same weight?
                 if (sameWeight && afterWarmup != firstWeight) {
                     sameWeight = false;
                 }
             }
         }
-        // Choose an invoker from all the least active invokers
+  // Choose an invoker from all the least active invokers
         if (leastCount == 1) {
-            // If we got exactly one invoker having the least active value, return this invoker directly.
+  // If we got exactly one invoker having the least active value, return this invoker directly.
             return invokers.get(leastIndexes[0]);
         }
         if (!sameWeight && totalWeight > 0) {
-            // If (not every invoker has the same weight & at least one invoker's weight>0), select randomly based on 
-            // totalWeight.
+  // If (not every invoker has the same weight & at least one invoker's weight>0), select randomly based on 
+  // totalWeight.
             int offsetWeight = ThreadLocalRandom.current().nextInt(totalWeight);
-            // Return a invoker based on the random value.
+  // Return a invoker based on the random value.
             for (int i = 0; i < leastCount; i++) {
                 int leastIndex = leastIndexes[i];
                 offsetWeight -= weights[leastIndex];
@@ -422,7 +424,7 @@ public class LeastActiveLoadBalance extends AbstractLoadBalance {
                 }
             }
         }
-        // If all invokers have the same weight value or totalWeight=0, return evenly.
+  // If all invokers have the same weight value or totalWeight=0, return evenly.
         return invokers.get(leastIndexes[ThreadLocalRandom.current().nextInt(leastCount)]);
     }
 }
@@ -437,7 +439,7 @@ public class LeastActiveLoadBalance extends AbstractLoadBalance {
 选择流程与 `LeastActiveLoadBalance` 完全同构，唯一区别在估算值怎么算：
 
 ```java
-// dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/loadbalance/ShortestResponseLoadBalance.java:46-71
+// dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/loadbalance/ShortestResponseLoadBalance.java
 public class ShortestResponseLoadBalance extends AbstractLoadBalance implements ScopeModelAware {
 
     public static final String NAME = "shortestresponse";
@@ -468,15 +470,15 @@ public class ShortestResponseLoadBalance extends AbstractLoadBalance implements 
 
 四个关键点：
 
-1. **`implements ScopeModelAware`**（`:46`）。窗口周期从配置读（key `shortestresponse.slide.period`，默认 `30_000` 毫秒），线程池从 `FrameworkExecutorRepository` 借共享的——不自己建池。
+1. **`implements ScopeModelAware`**。窗口周期从配置读（key `shortestresponse.slide.period`，默认 `30_000` 毫秒），线程池从 `FrameworkExecutorRepository` 借共享的——不自己建池。
 2. **窗口按 `RpcStatus` 分桶**（`methodMap` 的 key 是 `RpcStatus` 本身，不是字符串）。滑动窗口的状态就是两个 offset。
-3. **权重项用 `active + 1`**（`:98-101`）。加1 是为了让「当前无并发」的节点估算值不为 0，从而仍能参与最小值比较。
-4. **窗口 reset 是异步的**（`:152-160`），且用 `AtomicBoolean` CAS 保证同一时刻只有一个 reset 任务在跑，不阻塞 `doSelect`。
+3. **权重项用 `active + 1`**。加1 是为了让「当前无并发」的节点估算值不为 0，从而仍能参与最小值比较。
+4. **窗口 reset 是异步的**，且用 `AtomicBoolean` CAS 保证同一时刻只有一个 reset 任务在跑，不阻塞 `doSelect`。
 
 窗口内部的两个 offset 与平均值算法：
 
 ```java
-// dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/loadbalance/ShortestResponseLoadBalance.java:73-102
+// dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/loadbalance/ShortestResponseLoadBalance.java
     protected static class SlideWindowData {
 
         private long succeededOffset;
@@ -514,19 +516,19 @@ public class ShortestResponseLoadBalance extends AbstractLoadBalance implements 
 取估算值与触发异步 reset 的那段：
 
 ```java
-// dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/loadbalance/ShortestResponseLoadBalance.java:126-132, 152-160
+// dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/loadbalance/ShortestResponseLoadBalance.java, 152-160
             RpcStatus rpcStatus = RpcStatus.getStatus(invoker.getUrl(), RpcUtils.getMethodName(invocation));
             SlideWindowData slideWindowData =
                     ConcurrentHashMapUtils.computeIfAbsent(methodMap, rpcStatus, SlideWindowData::new);
 
-            // Calculate the estimated response time from the product of active connections and succeeded average
-            // elapsed time.
+  // Calculate the estimated response time from the product of active connections and succeeded average
+  // elapsed time.
             long estimateResponse = slideWindowData.getEstimateResponse();
-        // ...
+  // ...
 
         if (System.currentTimeMillis() - lastUpdateTime > slidePeriod
                 && onResetSlideWindow.compareAndSet(false, true)) {
-            // reset slideWindowData in async way
+  // reset slideWindowData in async way
             executorService.execute(() -> {
                 methodMap.values().forEach(SlideWindowData::reset);
                 lastUpdateTime = System.currentTimeMillis();
@@ -573,14 +575,14 @@ public class ConsistentHashLoadBalance extends AbstractLoadBalance {
         String methodName = RpcUtils.getMethodName(invocation);
         String key = invokers.get(0).getUrl().getServiceKey() + "." + methodName;
         int invokersHashCode = invokers.hashCode();
-        // If the detection is successful, return in advance. it may be different from selector, but it doesn't matter
+  // If the detection is successful, return in advance. it may be different from selector, but it doesn't matter
         ConsistentHashSelector<T> oldSelector0;
         if ((oldSelector0 = (ConsistentHashSelector<T>) selectors.get(key)) != null
                 && oldSelector0.identityHashCode == invokersHashCode) {
             return oldSelector0.select(invocation);
         }
 
-        // using the hashcode of invoker list to create consistent selector by atomic computation.
+  // using the hashcode of invoker list to create consistent selector by atomic computation.
         ConsistentHashSelector<T> selector = (ConsistentHashSelector<T>) selectors.compute(
                 key,
                 (k, oldSelector) -> (oldSelector == null || oldSelector.identityHashCode != invokersHashCode)
@@ -660,19 +662,19 @@ public class ConsistentHashLoadBalance extends AbstractLoadBalance {
 
 哈希环构建逻辑（160 虚拟节点、`replicaNumber / 4 * 4`、`hash.arguments` 默认 `"0"`）在 3.3.6 未变，仍与旧版一致。
 
-`selectors` 缓存的写入在 3.3.6 改成了 **`ConcurrentHashMap.compute`**（`ConsistentHashLoadBalance.java:54-67`）。旧写法是「`get` → null 判断 → `put` → 再 `get`」，两次 `get` 之间存在竞态：两个线程可能同时判定为 null，各自`new` 一个 selector，后写的覆盖先写的，中间白算一遍 `MD5` 建环（160 个虚拟节点的成本不低）。`compute` 把这段变成原子的。
+`selectors` 缓存的写入在 3.3.6 改成了 **`ConcurrentHashMap.compute`**（`ConsistentHashLoadBalance.java`）。旧写法是「`get` → null 判断 → `put` → 再 `get`」，两次 `get` 之间存在竞态：两个线程可能同时判定为 null，各自`new` 一个 selector，后写的覆盖先写的，中间白算一遍 `MD5` 建环（160 个虚拟节点的成本不低）。`compute` 把这段变成原子的。
 
 ### AdaptiveLoadBalance
 
 第7 个实现，也是唯一**不做权重随机**的一个：它用 **P2C（Power of Two Choices）** —— 随机取两个节点，挑其中负载较低的那个。P2C 的好处是比纯随机分布更均匀，又比轮询更廉价。
 
 ```java
-// dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/loadbalance/AdaptiveLoadBalance.java:36-60
+// dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/loadbalance/AdaptiveLoadBalance.java
 public class AdaptiveLoadBalance extends AbstractLoadBalance {
 
     public static final String NAME = "adaptive";
 
-    // default key
+  // default key
     private String attachmentKey = "mem,load";
 
     private final AdaptiveMetrics adaptiveMetrics;
@@ -697,33 +699,33 @@ public class AdaptiveLoadBalance extends AbstractLoadBalance {
 
 三个要点：
 
-1. **构造器接 `ApplicationModel`**（`:45-47`），直接取 `AdaptiveMetrics` bean。这是 3.x ScopeModel 化的典型形态——`AbstractLoadBalance` 的无参构造在这里被打破。
-2. **`attachmentKey = "mem,load"`**（`:41`）是默认采集的负载指标，即内存与 CPU 负载。
-3. **选中后立刻把指标写进 `Invocation`**（`:52-57`）：采集维度、选择时刻、`LoadbalanceRules.ADAPTIVE` 标记。服务端据此在响应里回传真实负载，客户端侧的 `AdaptiveMetrics` 才能算出下一次选择所需的负载值——这是一个**闭环反馈**，与前6 个「客户端单方面决策」的策略本质不同。
+1. **构造器接 `ApplicationModel`**，直接取 `AdaptiveMetrics` bean。这是 3.x ScopeModel 化的典型形态——`AbstractLoadBalance` 的无参构造在这里被打破。
+2. **`attachmentKey = "mem,load"`**是默认采集的负载指标，即内存与 CPU 负载。
+3. **选中后立刻把指标写进 `Invocation`**：采集维度、选择时刻、`LoadbalanceRules.ADAPTIVE` 标记。服务端据此在响应里回传真实负载，客户端侧的 `AdaptiveMetrics` 才能算出下一次选择所需的负载值——这是一个**闭环反馈**，与前6 个「客户端单方面决策」的策略本质不同。
 
-节点数只有 2 时直接二选一比较（`selectByP2C`，`:68-70`），不浪费随机采样。
+节点数只有 2 时直接二选一比较（`selectByP2C`），不浪费随机采样。
 
 ## AdaptiveMetrics & Feedback Loop
 
-`AdaptiveMetrics` 在 3.3.6 里**不是接口而是具体类** `org.apache.dubbo.rpc.AdaptiveMetrics`（它无 `@SPI` / `@Activate` 注解，见 `AdaptiveMetrics.java:17-31`）。客户端 `AdaptiveLoadBalance` 构造器通过 `scopeModel.getBeanFactory().getBean(AdaptiveMetrics.class)` 取到的就是它的单例。
+`AdaptiveMetrics` 在 3.3.6 里**不是接口而是具体类** `org.apache.dubbo.rpc.AdaptiveMetrics`（它无 `@SPI` / `@Activate` 注解，见 `AdaptiveMetrics.java`）。客户端 `AdaptiveLoadBalance` 构造器通过 `scopeModel.getBeanFactory().getBean(AdaptiveMetrics.class)` 取到的就是它的单例。
 
 真实方法签名（注意：**没有** `setLoad` / `removeConsumerReq`，仓库内不存在这两个方法名）：
 
 ```java
-// dubbo-rpc/dubbo-rpc-api/src/main/java/org/apache/dubbo/rpc/AdaptiveMetrics.java:49-126
-public double getLoad(String idKey, int weight, int timeout);                 // :49
-public AdaptiveMetrics getStatus(String idKey);                               // :78
-public void addConsumerReq(String idKey);                                     // :82
-public void addConsumerSuccess(String idKey);                                 // :87
-public void addErrorReq(String idKey);                                        // :92
-public void setPickTime(String idKey, long time);                             // :97
-public void setProviderMetrics(String idKey, Map<String, String> metricsMap); // :102
+// dubbo-rpc/dubbo-rpc-api/src/main/java/org/apache/dubbo/rpc/AdaptiveMetrics.java
+public double getLoad(String idKey, int weight, int timeout);
+public AdaptiveMetrics getStatus(String idKey);
+public void addConsumerReq(String idKey);
+public void addConsumerSuccess(String idKey);
+public void addErrorReq(String idKey);
+public void setPickTime(String idKey, long time);
+public void setProviderMetrics(String idKey, Map<String, String> metricsMap);
 ```
 
 **默认实现是否开箱即用？是。** 该 bean 由 `AdaptiveScopeModelInitializer` 在 `initializeApplicationModel` 时注册：
 
 ```java
-// dubbo-rpc/dubbo-rpc-api/src/main/java/org/apache/dubbo/rpc/AdaptiveScopeModelInitializer.java:26-29
+// dubbo-rpc/dubbo-rpc-api/src/main/java/org/apache/dubbo/rpc/AdaptiveScopeModelInitializer.java
 public void initializeApplicationModel(ApplicationModel applicationModel) {
     ScopeBeanFactory beanFactory = applicationModel.getBeanFactory();
     beanFactory.registerBean(AdaptiveMetrics.class);
@@ -740,7 +742,7 @@ public void initializeApplicationModel(ApplicationModel applicationModel) {
 | 服务端写回 | `ProfilerServerFilter` | `@Activate(group=PROVIDER, order=Integer.MIN_VALUE)` | `onResponse`→`addAdaptiveResponse` 读入站 `lb_adaptive`，非空则把 `curTime:<now>,load:<系统负载>` 写进响应 attachment |
 
 ```java
-// dubbo-rpc/dubbo-rpc-api/src/main/java/org/apache/dubbo/rpc/filter/ProfilerServerFilter.java:92-106
+// dubbo-rpc/dubbo-rpc-api/src/main/java/org/apache/dubbo/rpc/filter/ProfilerServerFilter.java
 private void addAdaptiveResponse(Result appResponse, Invocation invocation) {
     String adaptiveLoadAttachment = invocation.getAttachment(Constants.ADAPTIVE_LOADBALANCE_ATTACHMENT_KEY);
     if (StringUtils.isNotEmpty(adaptiveLoadAttachment)) {
@@ -757,44 +759,44 @@ private void addAdaptiveResponse(Result appResponse, Invocation invocation) {
 闭环常量（与 `AdaptiveLoadBalance.doSelect` 写入一致）：
 
 ```java
-// dubbo-rpc/dubbo-rpc-api/src/main/java/org/apache/dubbo/rpc/Constants.java:122-123
+// dubbo-rpc/dubbo-rpc-api/src/main/java/org/apache/dubbo/rpc/Constants.java
 String ADAPTIVE_LOADBALANCE_ATTACHMENT_KEY = "lb_adaptive";
 String ADAPTIVE_LOADBALANCE_START_TIME      = "adaptive_startTime";
-// dubbo-common/.../constants/CommonConstants.java:409
+// dubbo-common/.../constants/CommonConstants.java
 String LOADBALANCE_KEY = "loadbalance";
-// dubbo-common/.../constants/LoadbalanceRules.java:52
+// dubbo-common/.../constants/LoadbalanceRules.java
 String ADAPTIVE = "adaptive";
 ```
 
 > [!NOTE]
-> 默认 `attachmentKey = "mem,load"`（`AdaptiveLoadBalance.java:41`）**仅是一个触发标记**：服务端 `ProfilerServerFilter` 只判断它非空，真正回传的是 `curTime` 与 `load`，**并不产出 `mem`**。所以 `"mem,load"` 里的前半段 `mem` 实际是无效占位——`setProviderMetrics` 也只读 `curTime` / `load` / `rt` 三个 key（见 `AdaptiveMetrics.java:102-126`）。
+> 默认 `attachmentKey = "mem,load"`（`AdaptiveLoadBalance.java`）**仅是一个触发标记**：服务端 `ProfilerServerFilter` 只判断它非空，真正回传的是 `curTime` 与 `load`，**并不产出 `mem`**。所以 `"mem,load"` 里的前半段 `mem` 实际是无效占位——`setProviderMetrics` 也只读 `curTime` / `load` / `rt` 三个 key（见 `AdaptiveMetrics.java`）。
 
 ## RpcStatus Statistics Source
 
-`LeastActiveLoadBalance` 读的 `getActive()` 与 `ShortestResponseLoadBalance` 读的 `getSucceeded()` / `getSucceededElapsed()`，数据都来自 `org.apache.dubbo.rpc.RpcStatus`，按 `url.toIdentityString()` + `methodName` 分桶（`RpcStatus.java:36-81`）。
+`LeastActiveLoadBalance` 读的 `getActive()` 与 `ShortestResponseLoadBalance` 读的 `getSucceeded()` / `getSucceededElapsed()`，数据都来自 `org.apache.dubbo.rpc.RpcStatus`，按 `url.toIdentityString()` + `methodName` 分桶（`RpcStatus.java`）。
 
 ```java
-// dubbo-rpc/dubbo-rpc-api/src/main/java/org/apache/dubbo/rpc/RpcStatus.java:101-156（维护逻辑）
+// dubbo-rpc/dubbo-rpc-api/src/main/java/org/apache/dubbo/rpc/RpcStatus.java（维护逻辑）
 public static boolean beginCount(URL url, String methodName, int max) {
     ... methodStatus.active.compareAndSet(i, i + 1); appStatus.active.incrementAndGet(); ...
 }
 private static void endCount(RpcStatus status, long elapsed, boolean succeeded) {
-    status.active.decrementAndGet();            // 结束调用，active -1
+    status.active.decrementAndGet();  // 结束调用，active -1
     status.total.incrementAndGet();
     status.totalElapsed.addAndGet(elapsed);
     if (succeeded) { ... succeededMaxElapsed ... } else { failed++; failedElapsed += elapsed; }
 }
 ```
 
-关键点：**`succeeded` / `succeededElapsed` 是派生值，不是独立字段**——`getSucceeded() = getTotal() - getFailed()`，`getSucceededElapsed() = getTotalElapsed() - getFailedElapsed()`（`RpcStatus.java:272-283`）。`ShortestResponse` 的滑动窗口正是读这两个派生量做差值。
+关键点：**`succeeded` / `succeededElapsed` 是派生值，不是独立字段**——`getSucceeded() = getTotal() - getFailed()`，`getSucceededElapsed() = getTotalElapsed() - getFailedElapsed()`（`RpcStatus.java`）。`ShortestResponse` 的滑动窗口正是读这两个派生量做差值。
 
 **谁在维护（consumer 侧）？只有 `ActiveLimitFilter`。** 全仓库 grep `beginCount` / `endCount` 的调用方只有两处：
 
-- `ActiveLimitFilter`：`@Activate(group=CONSUMER, value=ACTIVES_KEY)`（`ActiveLimitFilter.java:45`），`invoke` 前后调 `beginCount`/`endCount`（`ActiveLimitFilter.java:56,61,94,110`）。
-- `ExecuteLimitFilter`：`@Activate(group=PROVIDER, value=EXECUTES_KEY)`（`ExecuteLimitFilter.java:40`），维护的是**服务端自己**的 `RpcStatus` 视图，与 consumer 侧的 LeastActive 无关。
+- `ActiveLimitFilter`：`@Activate(group=CONSUMER, value=ACTIVES_KEY)`（`ActiveLimitFilter.java`），`invoke` 前后调 `beginCount`/`endCount`（`ActiveLimitFilter.java`）。
+- `ExecuteLimitFilter`：`@Activate(group=PROVIDER, value=EXECUTES_KEY)`（`ExecuteLimitFilter.java`），维护的是**服务端自己**的 `RpcStatus` 视图，与 consumer 侧的 LeastActive 无关。
 
 > [!WARNING]
-> **`ActiveLimitFilter` 仅在 consumer 配了 `actives` 时才激活。** 若没配 `actives`，consumer 侧**没有任何代码调用 `beginCount`/`endCount`**，于是 `RpcStatus` 的 `active` / `succeeded` 恒为 0。`LeastActiveLoadBalance` 会看到所有节点 `active==0`（全相等→退化为按权重随机），`ShortestResponseLoadBalance` 则 `getSucceededAverageElapsed()` 在 `succeed==0` 时直接返回 0（`ShortestResponseLoadBalance.java:90-93`）→ 所有节点估算值 0 → 同样退化为随机。换言之，**LeastActive / ShortestResponse 的"智能"是挂在 `actives` 限流开关上的**，默认并不生效。
+> **`ActiveLimitFilter` 仅在 consumer 配了 `actives` 时才激活。** 若没配 `actives`，consumer 侧**没有任何代码调用 `beginCount`/`endCount`**，于是 `RpcStatus` 的 `active` / `succeeded` 恒为 0。`LeastActiveLoadBalance` 会看到所有节点 `active==0`（全相等→退化为按权重随机），`ShortestResponseLoadBalance` 则 `getSucceededAverageElapsed()` 在 `succeed==0` 时直接返回 0（`ShortestResponseLoadBalance.java`）→ 所有节点估算值 0 → 同样退化为随机。换言之，**LeastActive / ShortestResponse 的"智能"是挂在 `actives` 限流开关上的**，默认并不生效。
 
 `active` 的语义要厘清：它是「**本 consumer 对该 provider+method 正在进行的调用数**」，由 consumer 用 `invoker.getUrl()`（provider 的 URL）维护，**不是 provider 的真实并发**。多个 consumer 各自独立计数，彼此不可见。
 
@@ -803,14 +805,14 @@ private static void endCount(RpcStatus status, long elapsed, boolean succeeded) 
 `AdaptiveLoadBalance.doSelect` 只暴露了前段，完整 P2C 逻辑在 `selectByP2C` / `chooseLowLoadInvoker` 里：
 
 ```java
-// dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/loadbalance/AdaptiveLoadBalance.java:62-130
+// dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/loadbalance/AdaptiveLoadBalance.java
 private <T> Invoker<T> selectByP2C(List<Invoker<T>> invokers, Invocation invocation) {
     int length = invokers.size();
     if (length == 1) return invokers.get(0);
     if (length == 2) return chooseLowLoadInvoker(invokers.get(0), invokers.get(1), invocation);
     int pos1 = ThreadLocalRandom.current().nextInt(length);
     int pos2 = ThreadLocalRandom.current().nextInt(length - 1);
-    if (pos2 >= pos1) pos2 = pos2 + 1;                 // 保证 pos1 != pos2
+    if (pos2 >= pos1) pos2 = pos2 + 1;  // 保证 pos1 != pos2
     return chooseLowLoadInvoker(invokers.get(pos1), invokers.get(pos2), invocation);
 }
 
@@ -828,7 +830,7 @@ private <T> Invoker<T> chooseLowLoadInvoker(Invoker<T> invoker1, Invoker<T> invo
         adaptiveMetrics.getLoad(getServiceKey(invoker1, invocation), weight1, timeout1));
     long load2 = Double.doubleToLongBits(
         adaptiveMetrics.getLoad(getServiceKey(invoker2, invocation), weight2, timeout2));
-    if (load1 == load2) {                               // 负载相等→按权重随机
+    if (load1 == load2) {  // 负载相等→按权重随机
         int totalWeight = weight1 + weight2;
         if (totalWeight > 0) {
             int offset = ThreadLocalRandom.current().nextInt(totalWeight);
@@ -836,29 +838,29 @@ private <T> Invoker<T> chooseLowLoadInvoker(Invoker<T> invoker1, Invoker<T> invo
         }
         return ThreadLocalRandom.current().nextInt(2) == 0 ? invoker1 : invoker2;
     }
-    return load1 > load2 ? invoker2 : invoker1;         // 挑负载低者
+    return load1 > load2 ? invoker2 : invoker1;  // 挑负载低者
 }
 ```
 
 两点补充（现有文档未展开）：
 
 1. **负载 key 是 `address:protocolServiceKey`，按 provider 维度而非 method 维度**。`buildServiceKey` 拼的是 `url.getAddress()` + `protocolServiceKey`，所以同一 provider 上不同方法的自适应负载是共享一个 `AdaptiveMetrics` 桶的——这与 `LeastActive` / `ShortestResponse` 按 `methodName` 分桶（`RpcStatus.getStatus(url, methodName)`）不同。
-2. **冷启动不崩**：第一次 `doSelect` 里 `selectByP2C` 先于 `addConsumerReq` 执行（`AdaptiveLoadBalance.java:51` 调用 `selectByP2C`，`:56` 才 `addConsumerReq`）。此刻 `consumerReq=0` → `inflight=0`、`providerCPULoad=0` → `getLoad` 返回 0，两端相等走权重随机。等 `ProfilerServerFilter` 回传 `load` 后，`getLoad` 才出现区分度。`getLoad` 里还强制：若 `now - pickTime > timeout*2` 直接返回 `0`（`AdaptiveMetrics.java:53`），避免某节点长期不被选中而"饿死"。
+2. **冷启动不崩**：第一次 `doSelect` 里 `selectByP2C` 先于 `addConsumerReq` 执行（`AdaptiveLoadBalance.java` 调用 `selectByP2C`， 才 `addConsumerReq`）。此刻 `consumerReq=0` → `inflight=0`、`providerCPULoad=0` → `getLoad` 返回 0，两端相等走权重随机。等 `ProfilerServerFilter` 回传 `load` 后，`getLoad` 才出现区分度。`getLoad` 里还强制：若 `now - pickTime > timeout*2` 直接返回 `0`（`AdaptiveMetrics.java`），避免某节点长期不被选中而"饿死"。
 
 ## Warmup Formula
 
 预热默认参数（与 `AbstractLoadBalance.getWeight` 引用一致）：
 
 ```java
-// dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/Constants.java:29, 99
+// dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/Constants.java, 99
 int DEFAULT_WEIGHT = 100;
-int DEFAULT_WARMUP = 10 * 60 * 1000;   // 600000 ms = 10 分钟
+int DEFAULT_WARMUP = 10 * 60 * 1000;  // 600000 ms = 10 分钟
 ```
 
 公式本身：
 
 ```java
-// dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/loadbalance/AbstractLoadBalance.java:46-49
+// dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/loadbalance/AbstractLoadBalance.java
 static int calculateWarmupWeight(int uptime, int warmup, int weight) {
     int ww = (int) (uptime / ((float) warmup / weight));
     return ww < 1 ? 1 : (Math.min(ww, weight));
@@ -895,20 +897,20 @@ static int calculateWarmupWeight(int uptime, int warmup, int weight) {
 ```java
 // 对应 WeightedRoundRobin.increaseCurrent / sel 与 doSelect 的 maxCurrent 选择
 for each invoker:
-    wrr.current += wrr.weight;           // increaseCurrent()  :249-251
+    wrr.current += wrr.weight;  // increaseCurrent()  
     if (wrr.current > maxCurrent) { selected = invoker; maxCurrent = wrr.current; }
-selectedWRR.current -= totalWeight;     // sel(totalWeight)   :253-255, 调用于 :321
+selectedWRR.current -= totalWeight;  // sel(totalWeight)   , 调用于 
 ```
 
-`doSelect` 里 `maxCurrent` 取最大、选中后 `selectedWRR.sel(totalWeight)` 扣掉总权重（`:308-321`），与上面的算法一一对应。
+`doSelect` 里 `maxCurrent` 取最大、选中后 `selectedWRR.sel(totalWeight)` 扣掉总权重，与上面的算法一一对应。
 
 **为什么能避免"慢节点累积"**：朴素轮询给每个节点按权重均分序号，若某节点变慢，它的请求会在同一窗口集中堆积；平滑加权每轮只把 `weight` 累加进 `current`，选中时扣 `totalWeight`，于是高权重节点虽然被选中更频繁，但每次选中都会大幅回退 `current`，请求在时间轴上被**打散**到多轮、不会连续扎堆。
 
-**`RECYCLE_PERIOD=60000` 的意义**（`RoundRobinLoadBalance.java:233, 317-319`）：当 `invokers.size() != map.size()`（有节点下线或新上线）时，移除 `now - lastUpdate > 60000` 的 `WeightedRoundRobin`。否则一个已下线的节点其 `current` 累积值会一直留在 `methodWeightMap` 里，既浪费内存，也可能让慢节点残留的高 `current` 干扰选择。这就是 Dubbo 2.6.5 那次修复的核心——旧实现的"慢的提供者累积请求"问题正是靠这套平滑 + 回收机制解决的（对应 [Pitfall List](/docs/CS/Framework/Dubbo/LoadBalance.md?id=pitfall-list) 第 8 条）。
+**`RECYCLE_PERIOD=60000` 的意义**（`RoundRobinLoadBalance.java, 317-319`）：当 `invokers.size() != map.size()`（有节点下线或新上线）时，移除 `now - lastUpdate > 60000` 的 `WeightedRoundRobin`。否则一个已下线的节点其 `current` 累积值会一直留在 `methodWeightMap` 里，既浪费内存，也可能让慢节点残留的高 `current` 干扰选择。这就是 Dubbo 2.6.5 那次修复的核心——旧实现的"慢的提供者累积请求"问题正是靠这套平滑 + 回收机制解决的（对应 [Pitfall List](/docs/CS/Framework/Dubbo/LoadBalance.md?id=pitfall-list) 第 8 条）。
 
 ## Sticky Selection
 
-「粘性」指在一次调用的重试过程中**尽量复用同一个 Provider**，但它**不属于 LoadBalance 的职责**——代码里没有任何 LoadBalance 实现感知 sticky。粘性的实现位于 `AbstractClusterInvoker.select`（`support/AbstractClusterInvoker.java:155-185`）：当方法参数 `CLUSTER_STICKY_KEY`（默认 `DEFAULT_CLUSTER_STICKY` = `false`）开启时，若 `stickyInvoker` 字段仍处在候选里且可用，直接返回它，不再问 LoadBalance。
+「粘性」指在一次调用的重试过程中**尽量复用同一个 Provider**，但它**不属于 LoadBalance 的职责**——代码里没有任何 LoadBalance 实现感知 sticky。粘性的实现位于 `AbstractClusterInvoker.select`（`support/AbstractClusterInvoker.java`）：当方法参数 `CLUSTER_STICKY_KEY`（默认 `DEFAULT_CLUSTER_STICKY` = `false`）开启时，若 `stickyInvoker` 字段仍处在候选里且可用，直接返回它，不再问 LoadBalance。
 
 这与 LoadBalance 的关系是**解耦**的：LoadBalance 永远只回答「给定候选里挑谁」，而「是否要避开已选过的、是否要粘住上一次的」由外层 `select` 的 `selected` 去重与 sticky 逻辑兜住。需要深入理解见 [cluster](/docs/CS/Framework/Dubbo/cluster.md?id=abstractclusterinvoker-template-method)。
 
@@ -918,7 +920,7 @@ selectedWRR.current -= totalWeight;     // sel(totalWeight)   :253-255, 调用�
 
 - **大样本趋匀**：随着调用量增大，带权随机的统计分布会自然逼近理论权重比例，无需维护任何跨请求的状态（对比 `RoundRobin` 要维护 `WeightedRoundRobin` 计数器、`LeastActive` 要读 `RpcStatus` 活跃数）。
 - **动态权重零成本**：权重（含预热）变化时随机算法天然适配，不需要像轮询那样重新平衡累计值。
-- **快速路径省开销**：3.3.6 的 `RandomLoadBalance.needWeightLoadBalance`（`RandomLoadBalance.java:108-128`）在「未配 `weight` 也未配 `timestamp`」时直接均匀随机，**跳过整套权重累加与二分查找**——这是默认配置下最常见的分支，开销最低。
+- **快速路径省开销**：3.3.6 的 `RandomLoadBalance.needWeightLoadBalance`（`RandomLoadBalance.java`）在「未配 `weight` 也未配 `timestamp`」时直接均匀随机，**跳过整套权重累加与二分查找**——这是默认配置下最常见的分支，开销最低。
 
 代价是「单次瞬时分布不如轮询平滑」，但对无状态服务来说这点抖动通常可接受，因此 Dubbo 把最低认知负担、最低开销的 Random 设为默认，把更精细的策略留给显式配置。
 

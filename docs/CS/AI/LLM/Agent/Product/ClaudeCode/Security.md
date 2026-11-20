@@ -4,7 +4,7 @@
 
 它的自我定位极精确：**「不增加任何自己的策略」**。组织今天能管住的东西（classic hooks、managed CLAUDE.md 与 rules、settings、MCP allowlist、机器上生效的 deny 规则）有些**从来不在个人掌控范围内**，这个插件的作用就是把它们挡在 user tier 之外，其余一律原样放行。
 
-事实基线：据官方仓库 [`mods/sec-default/`](https://github.com/anthropics/claude-code/tree/main/mods/sec-default) 与类型契约（同[Mods](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Mods.md) 一篇，2026-10-18 核实）。
+事实基线：**2.1.326**（由早前的 2.1.302 基线纠偏而来）。据该版本的 `mods/sec-default/`（`README.md`、`hooks/register.ts`、`tests/` 与各 policy 子模块）、类型契约 `mods/types/claude-code.d.ts` 与 `CHANGELOG.md`（2.1.326→2.1.302 区间）逐条核实，2026-11-17；类型契约同[Mods](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Mods.md) 一篇。
 
 ## Three Moves
 
@@ -19,8 +19,19 @@
 
 两个判断依据的来源必须分清：
 
-- **主体来源** = 事件的**钉住的** `e.provider`（引擎钉，不是模块自称）。
-- **策略来源** = `$.settings.read({ source: "policy" })`，**一次读取服务一批工具调用**，且**两侧都fail closed**——读不到策略就等于策略生效。
+- **主体来源** = 事件的**钉住的** `e.provider`（引擎钉，不是模块自称）。它的类型 `Origin` 只有两个只读字段：`{ plugin, tier }`——`plugin` 是发起这次 `$` 调用的插件（引擎自己的调用点记作 `engine`），`tier` 是该插件在链中的落座层（引擎记作 `core`）。`next.trace` 里每一项也用这一对来标记那一环。
+- **策略来源** = `$.settings.read({ source: "policy" })`，`source` 的取值范围由类型契约钉死，其中 `policy` 是所有托管层合并后的那一份：
+
+```ts
+   * `user` is ~/.claude/settings.json, `project` .claude/settings.json,
+   * `local` .claude/settings.local.json, `flag` what `--settings` and the
+   * SDK's inline settings carry, and `policy` the managed settings, every
+   * managed tier merged.
+   */
+  export type SettingsSource = 'user' | 'project' | 'local' | 'flag' | 'policy';
+```
+
+`settings.read` 一次读取服务一批工具调用，且**两侧都 fail closed**——读不到策略就等于策略生效；这一层不经 matcher 细化，matcher 只在事件字段上起作用。
 
 ## Why Tiers Matter
 
@@ -36,13 +47,50 @@
 
 这是整份规格里最重要的机制，也是 mod 平台最漂亮的设计。
 
-### 问题
+### The Problem
 
 `tool.check` 上任何 hook 都能回答任何裁决。所以一个「用来消掉权限提示」的插件（`() => ({ decision: "allow" })`）**同时也能消掉**deny 规则、ask 规则、`PreToolUse` hook 的 ask——**包括受管的**。
 
-### 解法：双跑
+### The Two-Run Solution
 
-该插件在 `tool.check` 上是这样运作的：
+该插件在 `tool.check` 上是这样运作的：同一事件跑两遍链、第二遍只摘掉 user 层，两遍不一致时取更严的那个。`hooks/register.ts` 里这段是连续的真实片段（`next(e)` 第一跑 → `rewrittenByUsers(next.trace)` → `next.to(e, "append")` 第二跑 → `holdsOver` 取更严）：
+
+```ts
+    const answer = await next(e)
+    const mods = HeldVerdict.rewrittenByUsers(next.trace)
+
+    const shouldRecheck =
+      mods.length > 0 &&
+      (await Policy.decidedByPolicy(
+        readPolicy(() => $.settings.read(Policy.SOURCE)),
+        Policy.denyRulesHold,
+      ))
+
+    if (!shouldRecheck) {
+      return answer
+    }
+
+    const held = await next.to(e, 'append')
+
+    const { approver }: { tool: string; approver?: string } = e
+
+    if (!HeldVerdict.holdsOver(held, answer, approver)) {
+      return answer
+    }
+
+    const lines = HeldVerdict.untoldNotices(told, mods, e.tool, {
+      held,
+      answer,
+    })
+
+    for (const line of lines) {
+      $.ui.log(line)
+    }
+
+    return held
+```
+
+`answer` 是第一跑（整链的答案），`held` 是第二跑；只有 `rewrittenByUsers` 在 trace 里看到个人插件改写过、且策略判定 deny 规则仍 hold 时才发起第二跑，`holdsOver` 则决定两跑分歧时返回哪个——摘掉 user 层那跑更严才返回它。展开成步骤：
 
 1. **先照原样跑一遍链**。若没有任何「有权hold 住个人插件的环节」改写过递上来的裁决（改写 = 更宽松的裁决，或同样裁决但换了理由 / 规则 / hook 名；**收紧不算改写**），则原样放行。这由 `next.trace` 读出，其tiers 由引擎钉住：一个从未调用 `next` 的环节会被拿来与 deny 对比；由于引擎把共享同一 worker 的相邻插件作为**一批**列出并归到其首个成员的 tier，本插件之下的 `prepend` 项也一并计入。
 2. **否则把 user 层整个摘掉再跑一次**（`next.to(e, "append")`）。这个裁决从未经过任何个人插件，所以裁决本身和它点名的规则都不可能被改写或抹掉，而且**不调用 `next` 的插件什么也改变不了**——规则就在这一跑里被求值。两次跑**只差一个 user 层**，所以当两者有差异且链的答案不是更严格的那个时，就是 user 层改写了它。
@@ -52,7 +100,7 @@
    - **个人插件更严格的答案（以 deny 覆盖 ask）成立**。
 4. **deny 之所以「不点名」**，是因为它可以站在这种 ask 前面：deny 被消掉的话，这次调用就会在没人被问的情况下执行。**而一个既不点名这些、也不在对话框里由人回答的 ask，不被 hold**。
 
-### 各类「谁来答」的判定
+### Who Can Answer
 
 | 主体 | 是否被 hold | 要点 |
 | :--- | :--- | :--- |
@@ -65,7 +113,109 @@
 | 纯 `-p` 无 host 运行的会话 | **不被 hold** | 该处 ask 会被拒绝，模态自身的ask 是个人插件的 |
 | 组织插件（prepend/append）或 built-in 的放行 | **参与两次跑** | 它的答案成立——**一个前置的、放宽的裁决正是引发第二次跑的原因**，所以这类调用上它的 hook 会跑两次 |
 
-### 一个关键的划界
+### Verdict Fields
+
+上表说的「点名背后是什么、谁来答」，在类型契约里就是 `tool.check` 裁决的字段。`ToolCheckResult` 一共七个字段，`ceiling` 是组织对该工具设的审批上限（由引擎从工具盖在每条裁决上，hook 自己写的会被丢弃）：
+
+```ts
+  type ToolCheckResult = {
+      /**
+       * `allow` runs the tool; `ask` puts it to the mode's decider, or to a
+       * person when a hook made it (`plugin`); `deny` refuses it, the reason the
+       * model's error.
+       *
+       * For a tool that requires the person (a question put to them, a plan to
+       * approve) a hook only tightens: its `allow` does not dismiss the dialog.
+       * In plan mode a hook only tightens a call not shown to be a read, too.
+       * For a tool only auto mode's classifier may allow (a subagent's report) a
+       * hook's `allow` is ignored and core's verdict stands, except on a mod's
+       * own `$.tool.call`.
+       */
+      decision: ToolCheckDecision;
+      /**
+       * Why, in a sentence: from core the rule or check that decided; from a
+       * hook, what the model reads on a deny and the dialog shows on an ask.
+       */
+      reason?: string;
+      /**
+       * The settings rule that decided, as written (`Bash(git push:*)`).
+       *
+       * Absent for a mode or a tool's own check.
+       */
+      rule?: string;
+      /**
+       * The classic hook event that decided, or whose ask the verdict was reached
+       * under (`PreToolUse`), whoever configured the hook.
+       *
+       * Absent on a `$.tool.check` query, which runs no classic hook.
+       */
+      hook?: string;
+      /**
+       * The key of the option whose own check asked, whoever configured it
+       * (`permissions.blockReadsOutsideWorkingDirectories`).
+       *
+       * From core, for the read block: its ask on a shell command that reads
+       * outside the working directories or, the block on, leaves the sandbox.
+       */
+      setting?: string;
+      /**
+       * The plugin whose hook made this ask, set by the engine and pinned:
+       * whatever a hook writes here is dropped.
+       *
+       * On an `ask` a hook answered, rewording included; one it hands up as it
+       * heard it keeps what it carried, so core's own names none. Such an ask is
+       * a person's: the dialog, the host's callback or a PermissionRequest hook
+       * answers. No classifier's allow settles it, its block still refuses, and
+       * a rule for the whole tool is not kept; a narrower rule the person saves
+       * is theirs and settles nothing while the hook asks. Where nobody can be
+       * asked it is a deny, this verdict's reason the model's error. A tool no
+       * prompt is raised for keeps its own rule. A hook above may answer anything
+       * over it.
+       */
+      plugin?: string;
+      /**
+       * The most permissive verdict the organization lets a call of the tool
+       * reach (`ask`), as its administrators set it on a connector's tool.
+       *
+       * The question's own (`e.ceiling`), set by the engine, from the tool, on
+       * every verdict for it, core's and each hook's alike: a hook's own
+       * `ceiling` is dropped. Where the question has none, it is the one that
+       * core's check found for this call, on core's verdict and on each hook's
+       * that asked beneath. Absent where none is set.
+       */
+      ceiling?: ToolCheckDecision;
+  };
+```
+
+事件侧则钉住「谁来答」与「是不是只读」。`ToolCheckInput` 里这两个字段都由引擎填，matcher 只能选中只读调用、不能把写入伪装成只读；`approver` 为 `host` 时是宿主的权限回调、`person` 时是对话框或卡片，缺席即无人可问：
+
+```ts
+      ceiling?: ToolCheckDecision;
+      /**
+       * Who answers this evaluation's asks, known before any hook runs.
+       *
+       * `host` where a host's permission callback does, `person` where a person
+       * can be asked, a pane's card included; absent where nobody can be. Pinned.
+       */
+      approver?: ToolCheckApprover;
+      /**
+       * Set by the engine, present only when the tool's own `isReadOnly` holds
+       * this input read-only, and pinned; a matcher can select reads, never writes.
+       *
+       * Absent also means the tool cannot say: a careful hook reads it as a write.
+       * It is the tool's word, no proof of no effect (a fetch, a sent message, an
+       * agent that delegates all say it); an MCP tool's is its server's, unproven.
+       */
+      isReadOnly?: true;
+```
+
+其中 `decider: "person"` 与 `e.isReadOnly` 都是 **2.1.304** 才加进来的：前者让 mod 的 `tool.check` 回答能声明「只有对话框或宿主回调能批准这个 ask，无人可问时以 mod 的 reason 拒绝」（本表第一行那类 hook 由此而来），后者给只读调用打标。`approver` 的类型就两个值：
+
+```ts
+  type ToolCheckApprover = 'host' | 'person';
+```
+
+### A Key Boundary
 
 被 hold 的 ask **仍然是 ask**——因此凡是替人回答 ask 的东西仍然能回答它，个人安装的 classic `PermissionRequest` hook 也不例外（那由 `allowManagedHooksOnly` 管）。
 
@@ -73,13 +223,13 @@
 
 `tool.check` **钉住问题本身**（`tool` / `input` / `tool_use_id`），所以没有 hook 能让规则对一条命令求值、对另一条重新求值；要改写属于 `tool.call`，而后者跑在这一切之前。
 
-### 告知与计费
+### Notices And Cost
 
 每个名字与种类每会话只告知一次（transcript 与debug log 都有）：形如 `<plugin> tried to lift a deny rule in your settings from a <tool> call (<rule>); the deny rule holds over the plugins you install (allowModsToOverrideDenyRules)`，裁决被保留但措辞或规则被改时用 `tried to reword`。种类共六种：`a deny rule`、`an ask rule`、`a <event> hook's ask`、`a <key> setting's ask`、`a host's ask`、`a refusal`（不点名规则的 deny）——**只有前两种带 "in your settings" 与规则名**。纯 `-p` 运行只在 debug log 里有这行，但调用照样被拒或被问。
 
 这行日志**越过 user tier**（`ui.log` 那行）：用户 hook 若听到它，会跑在这个插件**自己的** `tool.check` hook 内部，而引擎会把 hook 从它自己内部引发的事件里排除。
 
-### 成本
+### The Cost
 
 挂 `tool.check` 有代价：引擎只在**有插件挂了这个事件**时才发起它，所以在这个插件落座处，**每次工具调用都要跑一遍 `tool.check` 链**，而此前只有装了这类插件的会话才跑。`ui.log`、`env.get`、`env.set` 同理。
 
@@ -169,7 +319,17 @@
 - `claude plugin test` **不在覆盖范围**：它在自己的引擎里跑测试，不往会话加载任何东西。
 - **settings hook、status line 与 `/goal` 不受它影响。**
 
-对 `allowModsToOverrideDenyRules`，还有一条容易被忽略的限制：**它只从 managed 源读**——所以一个人自己可写的策略文档（Windows 的 `HKCU` hive）、或服务器尚未确认的远程策略，**都不提供这个选项**；那种策略仍hold 它所 hold 的，只是什么也不授予。
+对 `allowModsToOverrideDenyRules`，还有一条容易被忽略的限制：**它只从 managed 源读**——所以一个人自己可写的策略文档（Windows 的 `HKCU` hive）、或服务器尚未确认的远程策略，**都不提供这个选项**；那种策略仍 hold 它所 hold 的，只是什么也不授予。
+
+这条限制以及「只有字面量 `true` 才松绑」全部写在 `hooks/policy/deny-rules-hold.ts` 的判定式里——这是整份规格最短也最关键的一段源码：
+
+```ts
+export const denyRulesHold = (policy: Settings) =>
+  isPersonWritable(policy) ||
+  ownOption(policy, 'allowModsToOverrideDenyRules') !== true
+```
+
+读法是：只要策略被宿主标记为「个人可写」（`isPersonWritable`，如 `HKCU`），**先短路成 hold**，根本不看选项；否则只有 `allowModsToOverrideDenyRules` 严格等于字面量 `true` 时整个表达式才为 `false`（即选项生效）。错拼的 `"true"`、`1` 都 `!== true`，于是仍 hold。这与 [Deny Rules Hold](#deny-rules-hold) 的 fail-closed 是同一件事的两侧：读不到策略、`policy` 里没有该键、或个人可写，一律当作「deny 照旧 hold」。
 
 ## Policy Presets And MDM Deployment
 
@@ -229,6 +389,36 @@
 
 两条实操要点：`.mobileconfig` 里的 `PayloadUUID` 与 `PayloadOrganization` 要换成自己的（`uuidgen`）；**部署到 fleet 前先在单台机器验证，并确认 `/status` 的 Setting sources 里列出了该来源**（macOS 显示 `Enterprise managed settings (plist)`、Windows 显示 `Enterprise managed settings (HKLM)`）。这种设置位于**优先级最顶端，用户无法覆盖**。
 
+## Runtime Hardening Since 2.1.302
+
+本文的机制主体是 `sec-default` 插件，但权限与沙箱本身也在 2.1.302→2.1.326 之间持续收紧。这些变化不改变插件的双跑逻辑，却直接决定「组织到底能管住什么」。以下按 `CHANGELOG.md` 的实际版本归纳——版本号已逐条对照，个别常被误记的已就地注明。
+
+### Auto Mode Rules
+
+- **`$defaults` 是整体替换的开关**：托管的 `autoMode.environment` 列表不带 `"$defaults"` 时，**替换掉全部内置条目**——2.1.326 起这在 Claude Desktop 与 Agent SDK app 里也一样（此前终端侧已如此）。这正是上文 HIPAA 预设 ⑤ 三档都显式带 `$defaults` 的原因：要么带上它，要么把敏感目标的条目自己抄进列表，否则内置防线被整段清空。
+- **忽略部分通配符 allow 规则**：auto mode 会忽略一批通配符 shell allow 规则，例如没点名程序的、或以 `$HOME` 开头的——把这些命令交回安全检查器判定，而不是直接放行。
+- **Windows 反斜杠路径**：程序是 Windows 反斜杠路径的通配符 allow 规则现在会被 auto mode 判定，这类调用可被拦下；精确规则仍保留 allow；以 `.\` 开头的规则计划后续恢复。
+
+### File And Process Writes
+
+- 文件工具拒绝对 Claude Code 自己的登录凭据文件（如 `.credentials.json`）写入，部分设备文件与进程文件也拒写；部分 `cp` / `mv` 改为先问。
+- bypass permissions 模式下部分工具调用**也要批准**，无人可问时直接拒绝；PowerShell 工具在 bypass 下同样对更多命令发问、拒绝其中一部分。
+
+### Sandbox Writes
+
+- 沙箱命令在 macOS / Linux / WSL 上**默认不再写入部分敏感 home 目录**；确需放行时在 user 或 managed settings 里用 `sandbox.filesystem.allowWrite`。
+- macOS / Linux / WSL 的 Bash 沙箱防护整体加强；会话内 mods 文件夹的改动更常发问，沙箱命令被限制写入更少的文件夹。
+- 2.1.325 起，沙箱拒绝对 added directories（`/add-dir`）里的 `.claude` settings / skills / agents / commands / hooks 写入，与启动目录一致。
+
+### Workspace Trust And Plugin Grants
+
+- `--trust-workspace false`：2.1.319 起自托管 runner 上也阻止仓库 settings 文件里的 hooks 与 skills 运行；2.1.323 起仓库 settings 不能再关掉你的 hooks、开关插件；2.1.326 起进一步忽略更多仓库设置，需要的值改在 user 或 managed settings 里配。（这几条常被误记为 2.1.325。）
+- `allowManagedPermissionRulesOnly`：2.1.305 起 Claude Desktop 按路径挂载的插件不再保留其 `allowed-tools`。（常被误记为 2.1.325。）
+
+### Settings Layers
+
+mod 的 `settings.read` hook 在 2.1.304 改为接收**每一层 settings** 并重写合并后的 settings——于是 managed mod 能把组织的某项设置当成上限（包括 retention sweep 用的 `cleanupPeriodDays`）。这与上文 `settings.read` 越过 user tier 是同一设计的两侧：前者保证没人改写别人读到的 settings，后者让托管 mod 有依据把组织设置钉成上限。
+
 ## Anthropic's Own Hardening
 
 官方仓库根部的 [`CLAUDE.md`](https://github.com/anthropics/claude-code/blob/main/CLAUDE.md) 是**写给 Claude Code 及其他编码 agent 看的仓库自述**，其中记录了 Anthropic 自己在自家 CI 里跑 Claude Code 的**三重防护**——这是「组织管控」在真实工程里的落地样本，也印证本文描述的机制确实被官方自己用着：
@@ -245,7 +435,7 @@
 
 这份文档的信息密度极高，且几乎全部只存在于这里。对写 mod 的人，最实用的三条：
 
-1. **挂 `tool.check` 有全局成本**——会让每次工具调用都跑链（见「成本」）。
+1. **挂 `tool.check` 有全局成本**——会让每次工具调用都跑链（见 [The Cost](?id=the-cost)）。
 2. **你的调用对别人可见**——`fs.write`、`env.set` 这些引擎方法本身是事件，别人可以挂 hook 看到（见 [Mods](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Mods.md)）。
 3. **别指望「内部调用」是私密的**——组织策略明确把「引擎从 hook 内部引发的事件里排除 hook」当作**例外**来写，说明默认情况并不排除。
 

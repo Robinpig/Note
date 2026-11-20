@@ -40,7 +40,7 @@ digraph Nacos {
 
 ## Overview and Startup
 
-- [Nacos](/docs/CS/Framework/nacos/Nacos.md)：架构（用户层 / 业务层 / 内核层 / 插件）、安装编译、启动链路、gRPC 端口、JRaft 与 Cluster 内联段、调优、与 etcd 对照。版本基线见其顶部 NOTE。
+- [Nacos](/docs/CS/Framework/nacos/Nacos.md)：**Codex 式分层架构章**（用户层 / 业务层 / 内核层 / 插件的分层 dot 图 + 真实源码片段 + 成因）；启动链路（`SpringApplicationRunListener` → `NacosStartUpManager` SPI 阶段机）、一致性核心（`ProtocolManager` 懒加载双协议）、四端口对照、JRaft 与 Cluster 段、调优、与 etcd 对照。版本基线 3.2.4 见其顶部 NOTE。
 - [ConfigServer](/docs/CS/Framework/nacos/ConfigServer.md)：阿里内部 ConfigServer 演进来源。
 - [Diamond](/docs/CS/Framework/nacos/Diamond.md)：Diamond 配置中心演进来源。
 

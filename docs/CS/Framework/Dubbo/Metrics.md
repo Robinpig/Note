@@ -1,10 +1,12 @@
+# Dubbo Metrics and Observability
+
 ## Introduction
 
 Dubbo 3.3 的可观测性（metrics + tracing）统一建立在 Micrometer Observation 之上，配置项多、默认值分散，且不少二手文章把「文档描述」当成「源码行为」。本文从源码层面澄清三个最常见的误解：
 
 - **「有个 `dubbo.metrics.enable` 总开关」**——不成立。`MetricsConfig` 里**没有**这个名字，只有 `enableJvm` / `enableThreadpool` / `enableRegistry` / `enableMetadata` / `enableNetty` / `enableRpc` / `enableCollectorSync` / `enableMetricsInit` 这类分项开关；是否启用指标体系的**总闸**是「classpath 上有没有 Micrometer」，由 `MetricsSupportUtil.isSupportMetrics()` 判定。
-- **「Prometheus 抓取默认端口 20888」**——不成立。`MetricsConstants.java:90` 确实定义了 `PROMETHEUS_DEFAULT_METRICS_PORT = 20888`，但它是**死常量**，定义后再无任何主源码引用；`dubbo-metrics-prometheus` 里**没有 HTTP exporter**，实际导出走的是 **QoS 命令 `metrics`**（默认 QoS 端口 22222）。把 20888 写进 Prometheus 抓取配置会抓不到数据。
-- **「Dubbo 有 `TracingFilter`」**——不成立。全树检索 `TracingFilter` 只命中 `FutureContext.java:96,110` 的 javadoc 示例，**没有这个类**。实际埋点是 provider 侧 `ObservationReceiverFilter` 与 consumer 侧 `ObservationSenderFilter`。
+- **「Prometheus 抓取默认端口 20888」**——不成立。`MetricsConstants.java` 确实定义了 `PROMETHEUS_DEFAULT_METRICS_PORT = 20888`，但它是**死常量**，定义后再无任何主源码引用；`dubbo-metrics-prometheus` 里**没有 HTTP exporter**，实际导出走的是 **QoS 命令 `metrics`**（默认 QoS 端口 22222）。把 20888 写进 Prometheus 抓取配置会抓不到数据。
+- **「Dubbo 有 `TracingFilter`」**——不成立。全树检索 `TracingFilter` 只命中 `FutureContext.java` 的 javadoc 示例，**没有这个类**。实际埋点是 provider 侧 `ObservationReceiverFilter` 与 consumer 侧 `ObservationSenderFilter`。
 
 版本基线：Apache Dubbo **3.3.6**，源码 tag `dubbo-3.3.6`。本文所有默认值、类名、SPI 注册均取自该 tag 的源码文件；「不存在」的结论均在同一棵源码树上做过全量检索。
 
@@ -36,7 +38,7 @@ Dubbo 3.3 的可观测性（metrics + tracing）统一建立在 Micrometer Obser
 是否启用指标体系的判定写死在工具类里，判据是**类路径上是否存在 Micrometer 类**：
 
 ```java
-// dubbo-metrics/dubbo-metrics-api/.../metrics/utils/MetricsSupportUtil.java:21-33
+// dubbo-metrics/dubbo-metrics-api/.../metrics/utils/MetricsSupportUtil.java
 public static boolean isSupportMetrics() {
     return isClassPresent("io.micrometer.core.instrument.MeterRegistry");
 }
@@ -59,7 +61,7 @@ public static boolean isSupportPrometheus() {
 `MetricsConfig` 的分项开关是「在已启用指标的前提下」控制各采集器是否工作：
 
 ```java
-// dubbo-common/src/main/java/org/apache/dubbo/config/MetricsConfig.java:34-113（节选）
+// dubbo-common/src/main/java/org/apache/dubbo/config/MetricsConfig.java（节选）
 private String protocol;
 private Boolean enableJvm;
 private Boolean enableThreadpool;
@@ -77,13 +79,13 @@ private String exportServiceProtocol;
 private Integer exportServicePort;
 private Boolean useGlobalRegistry;
 private Boolean enableRpc;
-private String rpcLevel;   // "SERVICE" or "METHOD"，默认 METHOD
+private String rpcLevel;  // "SERVICE" or "METHOD"，默认 METHOD
 ```
 
 其中两个开关在初始化时被显式赋予 `true` 兜底：
 
 ```java
-// dubbo-config/dubbo-config-api/.../deploy/DefaultApplicationDeployer.java:401-404（节选）
+// dubbo-config/dubbo-config-api/.../deploy/DefaultApplicationDeployer.java（节选）
 collector.setThreadpoolCollectEnabled(
         Optional.ofNullable(metricsConfig.getEnableThreadpool()).orElse(true));
 collector.setMetricsInitEnabled(
@@ -99,7 +101,7 @@ collector.setMetricsInitEnabled(
 协议不是写死的常量，而是**运行时推导**：未显式配置时，有 Prometheus 依赖就选 `prometheus`，否则选 `default`。
 
 ```java
-// dubbo-config/dubbo-config-api/.../deploy/DefaultApplicationDeployer.java:392-398（节选）
+// dubbo-config/dubbo-config-api/.../deploy/DefaultApplicationDeployer.java（节选）
 if (PROTOCOL_PROMETHEUS.equals(metricsConfig.getProtocol()) && !MetricsSupportUtil.isSupportPrometheus()) {
     return;
 }
@@ -125,7 +127,7 @@ prometheus=org.apache.dubbo.metrics.prometheus.PrometheusMetricsReporterFactory
 这是本文最重要的打假点。
 
 ```java
-// dubbo-common/src/main/java/org/apache/dubbo/common/constants/MetricsConstants.java:74,90-96
+// dubbo-common/src/main/java/org/apache/dubbo/common/constants/MetricsConstants.java
 String PROMETHEUS_EXPORTER_METRICS_PORT_KEY = "prometheus.exporter.metrics.port";
 int PROMETHEUS_DEFAULT_METRICS_PORT = 20888;
 String PROMETHEUS_DEFAULT_METRICS_PATH = "/metrics";
@@ -148,7 +150,7 @@ String PROMETHEUS_DEFAULT_JOB_NAME = "default_dubbo_job";
 **没有任何 `HttpServer` / `HttpExporter` / Netty HTTP 服务**。导出的真实通道是一个 QoS 命令：
 
 ```java
-// dubbo-metrics/dubbo-metrics-prometheus/.../prometheus/PrometheusMetricsReporterCmd.java:37-38
+// dubbo-metrics/dubbo-metrics-prometheus/.../prometheus/PrometheusMetricsReporterCmd.java
 @Cmd(name = "metrics", summary = "reuse qos report")
 public class PrometheusMetricsReporterCmd implements BaseCommand {
 ```
@@ -156,7 +158,7 @@ public class PrometheusMetricsReporterCmd implements BaseCommand {
 它从 registry 里 `scrape()` 出文本格式，通过 QoS telnet 通道返回：
 
 ```java
-// dubbo-metrics/dubbo-metrics-prometheus/.../prometheus/PrometheusMetricsReporter.java:67-68
+// dubbo-metrics/dubbo-metrics-prometheus/.../prometheus/PrometheusMetricsReporter.java
 public String getResponse() {
     return prometheusRegistry.scrape();
 }
@@ -170,7 +172,7 @@ public String getResponse() {
 推送模式默认关闭，由配置显式打开：
 
 ```java
-// dubbo-metrics/dubbo-metrics-prometheus/.../prometheus/PrometheusMetricsReporter.java:71-79（节选）
+// dubbo-metrics/dubbo-metrics-prometheus/.../prometheus/PrometheusMetricsReporter.java（节选）
 private void schedulePushJob() {
     boolean pushEnabled = url.getParameter(PROMETHEUS_PUSHGATEWAY_ENABLED_KEY, false);
     if (pushEnabled) {
@@ -183,7 +185,7 @@ private void schedulePushJob() {
 }
 ```
 
-- `prometheus.pushgateway.enabled` 默认 `false`（`MetricsConstants.java:78`）。
+- `prometheus.pushgateway.enabled` 默认 `false`（`MetricsConstants.java`）。
 - 推送到 job `default_dubbo_job`，间隔 `30` 秒（`PROMETHEUS_DEFAULT_PUSH_INTERVAL`），支持 basic auth。
 - 推送模式适合短生命周期任务或无法被 Prometheus 主动抓取的实例。
 
@@ -223,9 +225,9 @@ filter/ObservationSenderFilter.java
 > 打假：**不存在 `dubbo-tracing-brave` / `dubbo-tracing-otel` 独立模块。** Brave 与 OTel 是同一模块内的两个包 `org.apache.dubbo.tracing.tracer.brave` 与 `...tracer.otel`，由工厂按 classpath 二选一（OTel 优先）：
 
 ```java
-// dubbo-metrics/dubbo-tracing/.../tracing/tracer/TracerProviderFactory.java:27-38（节选）
+// dubbo-metrics/dubbo-tracing/.../tracing/tracer/TracerProviderFactory.java（节选）
 public static TracerProvider getProvider(ApplicationModel applicationModel, TracingConfig tracingConfig) {
-    // If support OTel firstly, return OTel, then Brave.
+  // If support OTel firstly, return OTel, then Brave.
     if (ObservationSupportUtil.isSupportOTelTracer()) {
         return new OpenTelemetryProvider(applicationModel, tracingConfig);
     }
@@ -243,7 +245,7 @@ public static TracerProvider getProvider(ApplicationModel applicationModel, Trac
 ### `dubbo.tracing.enabled` Defaults to false
 
 ```java
-// dubbo-common/src/main/java/org/apache/dubbo/config/TracingConfig.java:33-36
+// dubbo-common/src/main/java/org/apache/dubbo/config/TracingConfig.java
 /**
  * Indicates whether the feature is enabled (default is false).
  */
@@ -253,14 +255,14 @@ private Boolean enabled = false;
 配置前缀常量在 Spring Boot 侧定义：
 
 ```java
-// dubbo-spring-boot-project/.../observability/ObservabilityUtils.java:29
+// dubbo-spring-boot-project/.../observability/ObservabilityUtils.java
 public static final String DUBBO_TRACING_PREFIX = DUBBO_PREFIX + PROPERTY_NAME_SEPARATOR + "tracing";
 ```
 
 Spring Boot 自动配置由一个条件注解控制：
 
 ```java
-// dubbo-spring-boot-project/.../observability/annotation/ConditionalOnDubboTracingEnable.java:41
+// dubbo-spring-boot-project/.../observability/annotation/ConditionalOnDubboTracingEnable.java
 @ConditionalOnProperty(prefix = ObservabilityUtils.DUBBO_TRACING_PREFIX, name = "enabled")
 ```
 
@@ -287,14 +289,14 @@ observationsender=org.apache.dubbo.tracing.filter.ObservationSenderFilter
 | `ObservationSenderFilter` | `org.apache.dubbo.rpc.cluster.filter.ClusterFilter` | `observationsender` | Consumer（发请求、起客户端 span） |
 
 > [!WARNING]
-> 全树检索 `TracingFilter` 只命中 `dubbo-rpc/dubbo-rpc-api/.../rpc/FutureContext.java:96,110` 的 javadoc 示例代码，**这个类不存在**。任何「自定义 `TracingFilter`」的教程在 3.3.6 上都无法照抄；要扩展埋点应基于 Micrometer 的 `ObservationHandler` / `ObservationRegistry`，或自行实现 `Filter`。
+> 全树检索 `TracingFilter` 只命中 `dubbo-rpc/dubbo-rpc-api/.../rpc/FutureContext.java` 的 javadoc 示例代码，**这个类不存在**。任何「自定义 `TracingFilter`」的教程在 3.3.6 上都无法照抄；要扩展埋点应基于 Micrometer 的 `ObservationHandler` / `ObservationRegistry`，或自行实现 `Filter`。
 
 ### ObservationRegistry Integration
 
 `DefaultApplicationDeployer` 在启动时尝试初始化 ObservationRegistry：
 
 ```java
-// dubbo-config/dubbo-config-api/.../deploy/DefaultApplicationDeployer.java:434-455（节选）
+// dubbo-config/dubbo-config-api/.../deploy/DefaultApplicationDeployer.java（节选）
 private void initObservationRegistry() {
     if (!ObservationSupportUtil.isSupportObservation()) {
         if (logger.isDebugEnabled()) {
@@ -320,9 +322,9 @@ private void initObservationRegistry() {
 真正的注册逻辑有一个「**优先复用外部 registry**」的语义：
 
 ```java
-// dubbo-metrics/dubbo-tracing/.../tracing/DubboObservationRegistry.java:57-88（节选）
+// dubbo-metrics/dubbo-tracing/.../tracing/DubboObservationRegistry.java（节选）
 public void initObservationRegistry() {
-    // If get ObservationRegistry.class from external(eg Spring.), use external.
+  // If get ObservationRegistry.class from external(eg Spring.), use external.
     ObservationRegistry externalObservationRegistry =
             applicationModel.getBeanFactory().getBean(ObservationRegistry.class);
     if (externalObservationRegistry != null) {
@@ -367,56 +369,56 @@ digraph observation {
 | 项 | 默认值 | 来源 | 备注 |
 | :--- | :--- | :--- | :--- |
 | 指标总开关 | classpath 有 `MeterRegistry` 即启用 | `MetricsSupportUtil.isSupportMetrics()` | 无 `dubbo.metrics.enable` |
-| `dubbo.metrics.protocol` | 有 Prometheus 则 `prometheus`，否则 `default` | `DefaultApplicationDeployer.java:392-398` | 运行时推导 |
-| `enableThreadpool` | `true` | `DefaultApplicationDeployer.java:401-402` | 未配置即启用 |
-| `enableMetricsInit` | `true` | `DefaultApplicationDeployer.java:403-404` | 未配置即启用 |
-| `rpcLevel` | `METHOD` | `MetricsConfig.java:113` | 可选 `SERVICE` |
-| `prometheus.exporter.metrics.port` | `20888`（**死常量**） | `MetricsConstants.java:74,90` | 无代码使用 |
-| `prometheus.exporter.metrics.path` | `/metrics` | `MetricsConstants.java:92` | 未被 HTTP exporter 使用 |
-| `prometheus.pushgateway.enabled` | `false` | `MetricsConstants.java:78` / `PrometheusMetricsReporter.java:72` | 默认关闭 |
-| `prometheus.pushgateway.push.interval` | `30` 秒 | `MetricsConstants.java:94` | |
-| `prometheus.pushgateway.job` | `default_dubbo_job` | `MetricsConstants.java:96` | |
-| 指标导出通道 | QoS 命令 `metrics` | `PrometheusMetricsReporterCmd.java:37` | QoS 默认端口 22222 |
-| `dubbo.tracing.enabled` | `false` | `TracingConfig.java:34` | 需显式开启 |
-| tracer 实现选择 | OTel 优先，其次 Brave | `TracerProviderFactory.java:29-35` | classpath 决定 |
-| ObservationRegistry | 复用外部，否则 `ObservationRegistry.create()` | `DubboObservationRegistry.java:57-88` | 外部（如 Spring）优先 |
+| `dubbo.metrics.protocol` | 有 Prometheus 则 `prometheus`，否则 `default` | `DefaultApplicationDeployer.java` | 运行时推导 |
+| `enableThreadpool` | `true` | `DefaultApplicationDeployer.java` | 未配置即启用 |
+| `enableMetricsInit` | `true` | `DefaultApplicationDeployer.java` | 未配置即启用 |
+| `rpcLevel` | `METHOD` | `MetricsConfig.java` | 可选 `SERVICE` |
+| `prometheus.exporter.metrics.port` | `20888`（**死常量**） | `MetricsConstants.java` | 无代码使用 |
+| `prometheus.exporter.metrics.path` | `/metrics` | `MetricsConstants.java` | 未被 HTTP exporter 使用 |
+| `prometheus.pushgateway.enabled` | `false` | `MetricsConstants.java` / `PrometheusMetricsReporter.java` | 默认关闭 |
+| `prometheus.pushgateway.push.interval` | `30` 秒 | `MetricsConstants.java` | |
+| `prometheus.pushgateway.job` | `default_dubbo_job` | `MetricsConstants.java` | |
+| 指标导出通道 | QoS 命令 `metrics` | `PrometheusMetricsReporterCmd.java` | QoS 默认端口 22222 |
+| `dubbo.tracing.enabled` | `false` | `TracingConfig.java` | 需显式开启 |
+| tracer 实现选择 | OTel 优先，其次 Brave | `TracerProviderFactory.java` | classpath 决定 |
+| ObservationRegistry | 复用外部，否则 `ObservationRegistry.create()` | `DubboObservationRegistry.java` | 外部（如 Spring）优先 |
 
 ## QoS / Metrics Source Deep-Dive (3.3.6)
 
 ### QoS admin port: real default, startup, relation to 20888
-- 真实管理端口是 **22222**，定义于 `dubbo-plugin/dubbo-qos/.../common/QosConstants.java:21`（`DEFAULT_PORT = 22222`）。
-- 它由 `QosProtocolWrapper`（`@Activate(order = 200)`）在 `Protocol.export()` / `Protocol.refer()` 内通过 `startQosServer(...)` 随业务协议一起拉起（`QosProtocolWrapper.java:77-86, 99-152`）——**不是**独立守护进程，而是挂在业务 Protocol 启动上。
-- 单 Netty 端口同时服务 **telnet 与 HTTP**：`Server.java:46` 开一个端口；`QosProcessHandler.java:78-115` 嗅首字节（`G`/`P` ⇒ HTTP，否则 telnet）切换到 `HttpProcessHandler` / `TelnetProcessHandler`。
-- 配置 key 是 `qos.enable` / `qos.port`（`QosConstants.java:21,27`），**不是** `dubbo.qos.*`；Spring Boot 属性为 `dubbo.application.qos-enable`（`DubboUtils.java:178`），值作为 URL 参数读取（源自 `ApplicationConfig` 的 `@Parameter`）。
-- ⚠️ `20888`（`MetricsConstants.PROMETHEUS_DEFAULT_METRICS_PORT`，`MetricsConstants.java:90`）是**死常量**——全仓库零引用。它本意给 Prometheus 独立导出端口，但从未接线上；QoS 管理端口（22222）与它无关（见 Pitfall List 第 389 行）。
+- 真实管理端口是 **22222**，定义于 `dubbo-plugin/dubbo-qos/.../common/QosConstants.java`（`DEFAULT_PORT = 22222`）。
+- 它由 `QosProtocolWrapper`（`@Activate(order = 200)`）在 `Protocol.export()` / `Protocol.refer()` 内通过 `startQosServer(...)` 随业务协议一起拉起（`QosProtocolWrapper.java, 99-152`）——**不是**独立守护进程，而是挂在业务 Protocol 启动上。
+- 单 Netty 端口同时服务 **telnet 与 HTTP**：`Server.java` 开一个端口；`QosProcessHandler.java` 嗅首字节（`G`/`P` ⇒ HTTP，否则 telnet）切换到 `HttpProcessHandler` / `TelnetProcessHandler`。
+- 配置 key 是 `qos.enable` / `qos.port`（`QosConstants.java`），**不是** `dubbo.qos.*`；Spring Boot 属性为 `dubbo.application.qos-enable`（`DubboUtils.java`），值作为 URL 参数读取（源自 `ApplicationConfig` 的 `@Parameter`）。
+- ⚠️ `20888`（`MetricsConstants.PROMETHEUS_DEFAULT_METRICS_PORT`，`MetricsConstants.java`）是**死常量**——全仓库零引用。它本意给 Prometheus 独立导出端口，但从未接线上；QoS 管理端口（22222）与它无关（见 Pitfall List 第 389 行）。
 
 ### metrics QoS commands: `metrics` vs `metrics_default`
 - 没有叫 `MetricsCommand` 的类。真实是两个命令：
-  - `metrics` → `PrometheusMetricsReporterCmd`（`@Cmd(name = "metrics")`，`PrometheusMetricsReporterCmd.java:37`），经 `PrometheusMetricsReporter.getResponse()` → `PrometheusMeterRegistry.scrape()` 返回 exposition 文本（`:126` → `PrometheusMetricsReporter.java:67-69`）。
-  - `metrics_default` → `DefaultMetricsReporterCmd`（`@Cmd(name = "metrics_default")`，`DefaultMetricsReporterCmd.java:36`），返回 `DefaultMetricsReporter` 的内存视图（JSON）。
-- HTTP 触发：`GET /metrics` 经 `HttpCommandDecoder.java:38-42` 映射为命令 `metrics`，由 `DefaultCommandExecutor` → `ExtensionLoader<BaseCommand>.getExtension(name)` 分发（`DefaultCommandExecutor.java:58-59`）；每次抓取前先 `resetIfSamplesChanged()`。
+  - `metrics` → `PrometheusMetricsReporterCmd`（`@Cmd(name = "metrics")`，`PrometheusMetricsReporterCmd.java`），经 `PrometheusMetricsReporter.getResponse()` → `PrometheusMeterRegistry.scrape()` 返回 exposition 文本（ → `PrometheusMetricsReporter.java`）。
+  - `metrics_default` → `DefaultMetricsReporterCmd`（`@Cmd(name = "metrics_default")`，`DefaultMetricsReporterCmd.java`），返回 `DefaultMetricsReporter` 的内存视图（JSON）。
+- HTTP 触发：`GET /metrics` 经 `HttpCommandDecoder.java` 映射为命令 `metrics`，由 `DefaultCommandExecutor` → `ExtensionLoader<BaseCommand>.getExtension(name)` 分发（`DefaultCommandExecutor.java`）；每次抓取前先 `resetIfSamplesChanged()`。
 - ⚠️ Prometheus 抓取必须走 `metrics` 而非 `metrics_default`（后者是 JSON 摘要，无 Prometheus 文本）。未引入 `micrometer-prometheus` 时 `metrics` 会因 registry 不可用而回退/报错。
 
 ### Micrometer MetricsReporter
-- 核心接口 `MetricsReporter`（`MetricsReporter.java:23-37`）；`AbstractMetricsReporter` 持有 `CompositeMeterRegistry`（`AbstractMetricsReporter.java:74`），把 `MetricSample` 转成 Micrometer meter（`FunctionCounter.builder` `:200`、`Gauge.builder` `:208`）。
-- `DefaultMetricsReporter` 用 `SimpleMeterRegistry`（`DefaultMetricsReporter.java:35,93`）；`PrometheusMetricsReporter` 用 `PrometheusMeterRegistry`（`PrometheusMetricsReporter.java:54,63`）。
-- reporter 类型由 **`MetricsConfig.protocol`**（`MetricsConfig.java:40`，属性 `dubbo.metrics.protocol`，取值 `prometheus`/`default`）经 `MetricsReporterFactory` 自适应 SPI 选择（`DefaultApplicationDeployer.java:406-425`）。⚠️ **没有** `dubbo.metrics.reporter` 这个 key。
-- 注册的 meter：线程池 Gauge `dubbo.thread.pool.{core,max,active,thread.count,queue}.size`（`MetricsKey.java:92-97`，采样于 `ThreadPoolMetricsSampler.java:107-137`）；RT 作 `Timer`（`HistogramMetricRegister.java:52`）；QPS/请求计数作 `FunctionCounter` / 时间窗 `Gauge`（`AggregateMetricsCollector.java:144,215,253-255`）。
+- 核心接口 `MetricsReporter`（`MetricsReporter.java`）；`AbstractMetricsReporter` 持有 `CompositeMeterRegistry`（`AbstractMetricsReporter.java`），把 `MetricSample` 转成 Micrometer meter（`FunctionCounter.builder` 、`Gauge.builder` ）。
+- `DefaultMetricsReporter` 用 `SimpleMeterRegistry`（`DefaultMetricsReporter.java`）；`PrometheusMetricsReporter` 用 `PrometheusMeterRegistry`（`PrometheusMetricsReporter.java`）。
+- reporter 类型由 **`MetricsConfig.protocol`**（`MetricsConfig.java`，属性 `dubbo.metrics.protocol`，取值 `prometheus`/`default`）经 `MetricsReporterFactory` 自适应 SPI 选择（`DefaultApplicationDeployer.java`）。⚠️ **没有** `dubbo.metrics.reporter` 这个 key。
+- 注册的 meter：线程池 Gauge `dubbo.thread.pool.{core,max,active,thread.count,queue}.size`（`MetricsKey.java`，采样于 `ThreadPoolMetricsSampler.java`）；RT 作 `Timer`（`HistogramMetricRegister.java`）；QPS/请求计数作 `FunctionCounter` / 时间窗 `Gauge`（`AggregateMetricsCollector.java`）。
 
 > [!WARNING]
-> metrics 与 tracing 有**两条不同的生产路径**却汇聚到同一个 `CompositeMeterRegistry`：`(1)` 指标 RT/QPS/线程池经 `dubbo-metrics-*` collector → `MetricSample` → Micrometer；`(2)` tracing 的 `rpc.client.duration` / `rpc.server.duration` 经 Observation（`ObservationSenderFilter.java:63-68`、`ObservationReceiverFilter.java:62-68`）→ `ObservationMeter.addMeterRegistry`（`ObservationMeter.java:27-32`）。两者不是同一条链路，不要混为一谈（本页 `## Micrometer Observation Unified Model` 讲的是第 2 条）。
+> metrics 与 tracing 有**两条不同的生产路径**却汇聚到同一个 `CompositeMeterRegistry`：`(1)` 指标 RT/QPS/线程池经 `dubbo-metrics-*` collector → `MetricSample` → Micrometer；`(2)` tracing 的 `rpc.client.duration` / `rpc.server.duration` 经 Observation（`ObservationSenderFilter.java`、`ObservationReceiverFilter.java`）→ `ObservationMeter.addMeterRegistry`（`ObservationMeter.java`）。两者不是同一条链路，不要混为一谈（本页 `## Micrometer Observation Unified Model` 讲的是第 2 条）。
 
 ### Prometheus export
 - 核心 `dubbo-metrics-prometheus` 模块**没有内置独立 `/metrics` HTTP 服务**；生产可用路径是 QoS 的 `metrics` 命令（端口 22222）返回 `scrape()` 文本。`*Test.java` 里出现的 `com.sun.net.httpserver.HttpServer` 是测试代码，非生产能力。
-- `MetricsConstants.java:68-76` 定义了 `prometheus.exporter.enabled` / `prometheus.exporter.metrics.port` / `prometheus.exporter.metrics.path`，但 main 源码**仅有定义、无消费**（独立 exporter 在 3.3.6 未接线上）。
-- Pushgateway 默认**关闭**：`PrometheusMetricsReporter.java:72` `url.getParameter(PROMETHEUS_PUSHGATEWAY_ENABLED_KEY, false)`；开启时按 `PROMETHEUS_DEFAULT_PUSH_INTERVAL=30s`（`MetricsConstants.java:94`）调度 `PushGateway.pushAdd(...)`。
+- `MetricsConstants.java` 定义了 `prometheus.exporter.enabled` / `prometheus.exporter.metrics.port` / `prometheus.exporter.metrics.path`，但 main 源码**仅有定义、无消费**（独立 exporter 在 3.3.6 未接线上）。
+- Pushgateway 默认**关闭**：`PrometheusMetricsReporter.java` `url.getParameter(PROMETHEUS_PUSHGATEWAY_ENABLED_KEY, false)`；开启时按 `PROMETHEUS_DEFAULT_PUSH_INTERVAL=30s`（`MetricsConstants.java`）调度 `PushGateway.pushAdd(...)`。
 
 ## Pitfall List
 
 | 直觉写法 / 印象 | 源码实际 | 后果 |
 | :--- | :--- | :--- |
 | 「`dubbo.metrics.enable=true` 开启指标」 | 无此总开关，靠 classpath Micrometer 判定 | 配置不生效 |
-| 「Prometheus 抓 `:20888/metrics`」 | 20888 是死常量，无 HTTP exporter | 抓不到数据 |
+| 「Prometheus 抓 `/metrics`」 | 20888 是死常量，无 HTTP exporter | 抓不到数据 |
 | 「引入 `micrometer-prometheus` 就能出指标」 | `isSupportPrometheus()` 还要 Prometheus client 的 `PushGateway` 等类 | 协议被回退为 `default` |
 | 「tracing 默认开启」 | `dubbo.tracing.enabled` 默认 `false` | 没有 span 却不报错 |
 | 「自定义 `TracingFilter` 扩展埋点」 | 该类不存在，只有 `ObservationReceiverFilter` / `ObservationSenderFilter` | 编译不过 |
@@ -427,19 +429,19 @@ digraph observation {
 
 ## Metrics Dimensions and MetricsKey Inventory
 
-`rpcLevel`（`SERVICE` / `METHOD`，默认 `METHOD`）只是采集粒度开关，真正决定指标「挂在哪一级」的是 `MetricsLevel` 枚举（`dubbo-metrics-event/.../metrics/model/key/MetricsLevel.java:19`）。它定义了五级维度，远不止 Application/Service/Method 三档：
+`rpcLevel`（`SERVICE` / `METHOD`，默认 `METHOD`）只是采集粒度开关，真正决定指标「挂在哪一级」的是 `MetricsLevel` 枚举（`dubbo-metrics-event/.../metrics/model/key/MetricsLevel.java`）。它定义了五级维度，远不止 Application/Service/Method 三档：
 
 ```java
-// dubbo-metrics-event/.../model/key/MetricsLevel.java:19
+// dubbo-metrics-event/.../model/key/MetricsLevel.java
 public enum MetricsLevel {
     APP, SERVICE, METHOD, CONFIG, REGISTRY
 }
 ```
 
 > [!NOTE]
-> `MetricsKey`（`MetricsKey.java:19`）是「具体指标项」的枚举，与 `MetricsLevel` 不是同一个类。每个 `MetricsKey` 带一个 Prometheus 名（如 `dubbo.%s.requests.total`）和一段描述，`%s` 在运行时被 `getNameByType(type)` 替换成 `app` / `service` / `method` 维度前缀，因此同一个 key 会按维度展开成多条时间序列。
+> `MetricsKey`（`MetricsKey.java`）是「具体指标项」的枚举，与 `MetricsLevel` 不是同一个类。每个 `MetricsKey` 带一个 Prometheus 名（如 `dubbo.%s.requests.total`）和一段描述，`%s` 在运行时被 `getNameByType(type)` 替换成 `app` / `service` / `method` 维度前缀，因此同一个 key 会按维度展开成多条时间序列。
 
-代表性 `MetricsKey`（节选自 `MetricsKey.java:19`）：
+代表性 `MetricsKey`（节选自 `MetricsKey.java`）：
 
 | 维度 | MetricsKey | Prometheus 名（示例） | 含义 |
 | :--- | :--- | :--- | :--- |
@@ -455,7 +457,7 @@ public enum MetricsLevel {
 
 ### What the QoS metrics Command Actually Returns
 
-上文提到 Metrics 导出走 QoS 的 `metrics` 命令，它返回的就是上面这些 `MetricsKey` 拼出的内容。`PrometheusMetricsReporterCmd.java:37` 通过 `prometheusRegistry.scrape()` 输出 Prometheus exposition 文本（HTTP 头标注 `text/plain; version=0.0.4; charset=utf-8`）；不带参数时取第一个「有数据的 ApplicationModel」，也可 `metrics <appName>` 指定应用。
+上文提到 Metrics 导出走 QoS 的 `metrics` 命令，它返回的就是上面这些 `MetricsKey` 拼出的内容。`PrometheusMetricsReporterCmd.java` 通过 `prometheusRegistry.scrape()` 输出 Prometheus exposition 文本（HTTP 头标注 `text/plain; version=0.0.4; charset=utf-8`）；不带参数时取第一个「有数据的 ApplicationModel」，也可 `metrics <appName>` 指定应用。
 
 与它并列的 `metrics_default`（`DefaultMetricsReporterCmd.java`，`dubbo-qos` 自带、非 prometheus 模块）返回 **JSON** 而不是文本——这是第二个常被混淆的点：**Prometheus 抓取必须走 `metrics`，不是 `metrics_default`**。没有引入 `micrometer-prometheus` 时，`metrics` 命令会因 registry 不可用而回退/报错，此时只有 `metrics_default` 能出 JSON 摘要。
 

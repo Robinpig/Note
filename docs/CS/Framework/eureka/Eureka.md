@@ -15,7 +15,7 @@ Eureka 的选择可以概括为三条：
 2. **服务端无 Leader**：没有选主、没有复制状态机。集群成员变更通过 DNS 或配置动态发现（`PeerEurekaNodes` 每 10 分钟刷新一次），新增节点靠启动时向邻居 `syncUp()` 全量拉取。
 3. **发现逻辑在客户端**：Server 只提供注册表快照与增量；过滤（`UP` 实例）、shuffle、zone 偏好选择、故障重试与黏连都由客户端的 `DiscoveryClient` + 上层负载均衡（早期 Ribbon、现在 Spring Cloud LoadBalancer）完成。
 
-代价也很清晰，见**[自我保护](/docs/CS/Framework/eureka/self_preservation.md)**：当 Server 在短时间内丢失大量心跳（网络抖动、分区、大规模重启），它无法区分「实例真的挂了」和「网络不可达」，于是选择**保留**注册表而不是摘除。这意味着客户端可能拿到已经不存在的实例——Eureka 官方明确要求客户端必须能容忍这一点：快速超时并换下一台。
+代价也很清晰，见**[自我保护](/docs/CS/Framework/eureka/self_preservation.md)**：当 Server 在短时间内丢失大量心跳（网络抖动、分区、大规模重启），它无法区分「实例真的挂了」和「网络不可达」，于是选择**保留**注册表而不是摘除。这意味着客户端可能拿到已经不存在的实例——Eureka 官方明确要求客户端必须能容忍这一点：快速超时并换下一台。这些代价随规模与场景放大会变成哪些结构性不足，见 [Shortcomings](/docs/CS/Framework/eureka/shortcomings.md)。
 
 ## Roles and Data Model
 
@@ -111,7 +111,7 @@ R->>Reg: cancel() -> internalCancel()
 
 ## Migration
 
-Eureka 已进入事实上的**维护期**：GitHub 仓库仍在（1.x 会随依赖升级发补丁版），Spring Cloud 侧保留了 starter 但不再作为推荐起点。常见迁移去向：
+Eureka 已进入事实上的**维护期**：GitHub 仓库仍在（1.x 会随依赖升级发补丁版），Spring Cloud 侧保留了 starter 但不再作为推荐起点。停止维护的时间线与背后结构性不足的逐条分析见 [Shortcomings](/docs/CS/Framework/eureka/shortcomings.md)。常见迁移去向：
 
 - **同栈最小改动**：[Consul](/docs/CS/Framework/consul/Consul.md)（Spring Cloud 原生、CP、带健康检查）或 [Nacos](/docs/CS/Framework/nacos/Nacos.md)（附带配置中心，中文生态友好，`NacosSync` 等工具支持双向同步）。
 - **K8s 原生**：直接用 Service + DNS，配合 [Spring Cloud Kubernetes](/docs/CS/Container/k8s/Service.md) 或网关侧的服务源（如 Higress 的 `McpBridge`，见[Higress 服务发现](/docs/CS/Framework/Higress/Service_Discovery.md)）。
@@ -127,6 +127,7 @@ Eureka 已进入事实上的**维护期**：GitHub 仓库仍在（1.x 会随依�
 - [Registry](/docs/CS/Framework/eureka/registry.md)
 - [Cache](/docs/CS/Framework/eureka/cache.md)
 - [Self Preservation](/docs/CS/Framework/eureka/self_preservation.md)
+- [Shortcomings](/docs/CS/Framework/eureka/shortcomings.md)
 
 ## References
 

@@ -1,3 +1,5 @@
+# Dubbo Architecture: Deployment, Layering and Core Abstractions
+
 ## Introduction
 
 Dubbo 的「架构」这个词在网上同时指三件不同的东西：**部署架构**（Provider / Consumer / Registry / Monitor 四种节点）、**代码分层架构**（十层）、**数据面与控制面的划分**。三者互不冲突但经常被混着讲，导致「Dubbo 有十层，所以有十个模块」这类错误认知——十层是**逻辑分层**，不是模块划分，`dubbo-rpc/` 下只有 4 个模块就是反例。
@@ -91,9 +93,9 @@ Fig.1. Ten-Layer Code Architecture
 
 几点值得强调的源码事实：
 
-- **`ProxyFactory` 的两个 `getProxy` 都标了 `@Adaptive({PROXY_KEY})`**（`ProxyFactory.java:38/43/50`）。`PROXY_KEY="proxy"`，意味着实际用哪个代理实现由运行时 URL 上的 `proxy=` 参数决定，而不是写死——这就是「URL 作为配置总线」+「自适应扩展」的叠加工效。
-- **`Protocol.export()` 与 `refer()` 注释明确要求幂等**（`Protocol.java:72`：`export() must be idempotent`），`refer()` 返回的 `Invoker` 由协议自己实现、负责真正把请求发往远端（`Protocol.java:39/43`）。这把「协议」和「调用模型」彻底解耦：换协议 = 换 `Invoker` 实现，上层 `Cluster`/`Filter` 无感知。
-- **`Router` 与 `StateRouter` 是两套接口**（`Router.java:35` 老接口；`StateRouter.java:39` 新接口）。3.3.6 的路由工厂走 `StateRouterFactory` SPI，`getActivateExtension(url, ROUTER_KEY)` 决定哪些路由器被激活——`StandardMeshRuleRouterFactory` 正是靠 `@Activate(order=-50)` 被纳入，见 [Mesh](/docs/CS/Framework/Dubbo/Mesh.md?id=how-meshrulerouter-joins-the-state-router-chain)。
+- **`ProxyFactory` 的两个 `getProxy` 都标了 `@Adaptive({PROXY_KEY})`**（`ProxyFactory.java`）。`PROXY_KEY="proxy"`，意味着实际用哪个代理实现由运行时 URL 上的 `proxy=` 参数决定，而不是写死——这就是「URL 作为配置总线」+「自适应扩展」的叠加工效。
+- **`Protocol.export()` 与 `refer()` 注释明确要求幂等**（`Protocol.java`：`export() must be idempotent`），`refer()` 返回的 `Invoker` 由协议自己实现、负责真正把请求发往远端（`Protocol.java`）。这把「协议」和「调用模型」彻底解耦：换协议 = 换 `Invoker` 实现，上层 `Cluster`/`Filter` 无感知。
+- **`Router` 与 `StateRouter` 是两套接口**（`Router.java` 老接口；`StateRouter.java` 新接口）。3.3.6 的路由工厂走 `StateRouterFactory` SPI，`getActivateExtension(url, ROUTER_KEY)` 决定哪些路由器被激活——`StandardMeshRuleRouterFactory` 正是靠 `@Activate(order=-50)` 被纳入，见 [Mesh](/docs/CS/Framework/Dubbo/Mesh.md?id=how-meshrulerouter-joins-the-state-router-chain)。
 - **`Logger` 本身不是 `@SPI`**，它通过 `LoggerAdapter` 这个 `@SPI` 接口创建（`Logger.java` 上无 `@SPI` 注解），换日志框架只需换 `LoggerAdapter` 实现。
 - `Exchanger` / `Transporter` / `Codec2` / `Compiler` / `Serialization` 的 `@SPI` 都带 `scope=FRAMEWORK`，意味着这些扩展在 **FrameworkModel 级共享**，而 `RegistryFactory` 是 `APPLICATION` 级（每个应用可不同注册中心）——作用域差异来自三层域模型，见 [ScopeModel](/docs/CS/Framework/Dubbo/ScopeModel.md)。
 
@@ -103,15 +105,15 @@ Fig.1. Ten-Layer Code Architecture
 
 | 路径 | 内容 | 源码出处 |
 | :--- | :--- | :--- |
-| `/dubbo/metadata/...` | 元数据信息 | `MetadataConstants.DEFAULT_PATH_TAG = "metadata"`（`dubbo-metadata/dubbo-metadata-api/src/main/java/org/apache/dubbo/metadata/MetadataConstants.java:21`），ZK 上拼成 `/dubbo/metadata/<interface>/<version>/<group>/<side>/<app>` |
-| `/dubbo/mapping/<interface>` | 接口 → 应用名的映射 | `ServiceNameMapping.DEFAULT_MAPPING_GROUP = "mapping"`（`ServiceNameMapping.java:45`）+ `ZookeeperMetadataReport.buildPathKey()`（`:215-217`） |
-| `/dubbo/config` | 注册中心充当配置中心时的配置数据 | `TreePathDynamicConfiguration.DEFAULT_CONFIG_BASE_PATH = "/config"`（`:55`）+ `DEFAULT_GROUP = "dubbo"`（`DynamicConfiguration.java:38`） |
-| `/services` | 应用级服务发现的实例信息 | `ZookeeperServiceDiscovery.DEFAULT_GROUP = "/services"`（`ZookeeperServiceDiscovery.java:67`） |
+| `/dubbo/metadata/...` | 元数据信息 | `MetadataConstants.DEFAULT_PATH_TAG = "metadata"`（`dubbo-metadata/dubbo-metadata-api/src/main/java/org/apache/dubbo/metadata/MetadataConstants.java`），ZK 上拼成 `/dubbo/metadata/<interface>/<version>/<group>/<side>/<app>` |
+| `/dubbo/mapping/<interface>` | 接口 → 应用名的映射 | `ServiceNameMapping.DEFAULT_MAPPING_GROUP = "mapping"`（`ServiceNameMapping.java`）+ `ZookeeperMetadataReport.buildPathKey()` |
+| `/dubbo/config` | 注册中心充当配置中心时的配置数据 | `TreePathDynamicConfiguration.DEFAULT_CONFIG_BASE_PATH = "/config"`+ `DEFAULT_GROUP = "dubbo"`（`DynamicConfiguration.java`） |
+| `/services` | 应用级服务发现的实例信息 | `ZookeeperServiceDiscovery.DEFAULT_GROUP = "/services"`（`ZookeeperServiceDiscovery.java`） |
 
-根节点 `/dubbo` 来自 `DEFAULT_ROOT = "dubbo"`，**有两处同名常量**：`ZookeeperRegistry.java:63`（接口级注册）与 `AbstractMetadataReport.java:86`（元数据存储），都不在 `CommonConstants` 里。
+根节点 `/dubbo` 来自 `DEFAULT_ROOT = "dubbo"`，**有两处同名常量**：`ZookeeperRegistry.java`（接口级注册）与 `AbstractMetadataReport.java`（元数据存储），都不在 `CommonConstants` 里。
 
 > [!WARNING]
-> 关于 mapping 路径有一个流传很广的误读。**ZK 上确实存在 `/dubbo/mapping/<interface>` 这一层**，被去掉的是**本地缓存 key** 里的 `mapping/` 前缀（issue #4671）：`ServiceNameMapping.buildGroup()` 里 `return DEFAULT_MAPPING_GROUP + SLASH + serviceInterface;` 那一行被注释掉了，改为只返回 `serviceInterface`（`ServiceNameMapping.java:67-71`）。该方法经 `buildMappingKey()` 只用于本地缓存，**不参与远端 ZK 路径拼装**。因此准确表述是「本地缓存 key 去掉了 `mapping/` 前缀，远端路径不变」，而不是「ZK 上没有 mapping 层」。
+> 关于 mapping 路径有一个流传很广的误读。**ZK 上确实存在 `/dubbo/mapping/<interface>` 这一层**，被去掉的是**本地缓存 key** 里的 `mapping/` 前缀（issue #4671）：`ServiceNameMapping.buildGroup()` 里 `return DEFAULT_MAPPING_GROUP + SLASH + serviceInterface;` 那一行被注释掉了，改为只返回 `serviceInterface`（`ServiceNameMapping.java`）。该方法经 `buildMappingKey()` 只用于本地缓存，**不参与远端 ZK 路径拼装**。因此准确表述是「本地缓存 key 去掉了 `mapping/` 前缀，远端路径不变」，而不是「ZK 上没有 mapping 层」。
 
 元数据整体的存储双轨制、revision 聚合与上报周期见 [Metadata](/docs/CS/Framework/Dubbo/Metadata.md)。
 

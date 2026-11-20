@@ -1,3 +1,5 @@
+# Dubbo Governance: Graceful Shutdown, Mock and Rate Limiting
+
 ## Introduction
 
 前面的路由与负载均衡解决的是「流量往哪走」，但一套生产可用的 RPC 框架还要回答另一类问题：进程怎么下线才不杀掉在途请求？新扩容的实例为什么不能一上来就承接满量流量？下游故障时 Consumer 怎么体面地降级？运维如何不重启就上下线一台机器？这些「保障服务可用」的机制——优雅停机、启动预热、Mock 降级、QoS、内置限流——构成了 Dubbo 的服务治理底座，也是本文的主题。
@@ -14,26 +16,26 @@
 
 | key | 含义 | 状态 |
 |---|---|---|
-| `dubbo.service.shutdown.wait` | 停机等待时长（毫秒） | 现行，`CommonConstants.java:310` `SHUTDOWN_WAIT_KEY` |
-| `dubbo.service.shutdown.wait.seconds` | 停机等待时长（秒） | `@Deprecated`（`CommonConstants.java:308`） |
+| `dubbo.service.shutdown.wait` | 停机等待时长（毫秒） | 现行，`CommonConstants.java` `SHUTDOWN_WAIT_KEY` |
+| `dubbo.service.shutdown.wait.seconds` | 停机等待时长（秒） | `@Deprecated`（`CommonConstants.java`） |
 | `shutdown.wait` / `dubbo.shutdown.wait` | — | **不存在**，打了也不生效 |
 
-默认值是 `DEFAULT_SERVER_SHUTDOWN_TIMEOUT = 10000`（毫秒，`CommonConstants.java:184`）。读取逻辑集中在 `ConfigurationUtils.getServerShutdownTimeout`（`ConfigurationUtils.java:121-151`），注意其中一段容易被忽视的短路逻辑：**如果实际停机已经超过预期时间，直接返回 1ms**——避免停机流程被一个已经超时的等待卡住。
+默认值是 `DEFAULT_SERVER_SHUTDOWN_TIMEOUT = 10000`（毫秒，`CommonConstants.java`）。读取逻辑集中在 `ConfigurationUtils.getServerShutdownTimeout`（`ConfigurationUtils.java`），注意其中一段容易被忽视的短路逻辑：**如果实际停机已经超过预期时间，直接返回 1ms**——避免停机流程被一个已经超时的等待卡住。
 
 ### Hook Chain: DubboShutdownHook.doDestroy
 
-`DubboShutdownHook`（`DubboShutdownHook.java:41`）注册为 JVM shutdown hook，核心逻辑在 `doDestroy()`（:86-144）：
+`DubboShutdownHook`（`DubboShutdownHook.java`）注册为 JVM shutdown hook，核心逻辑在 `doDestroy()`：
 
 ```java
-// dubbo-common/src/main/java/org/apache/dubbo/config/bootstrap/DubboShutdownHook.java:86
+// dubbo-common/src/main/java/org/apache/dubbo/config/bootstrap/DubboShutdownHook.java
 private void doDestroy() {
-    // 1. 先把所有模块置为只读，通知 GracefulShutdown 停止接新请求 (:91-95)
+  // 1. 先把所有模块置为只读，通知 GracefulShutdown 停止接新请求 
     applicationModel.getModuleModels().forEach(module -> module.getDeployer().preDestroy());
     applicationModel.getDeployer().preDestroy();
 
-    // 2. 若模块由 Spring 托管，轮询等待 Spring 容器先关闭模块，直到 timeout (:105-139)
-    //    通过 module.isLifeCycleManagedExternally() 判断是否等 Spring 接管
-    // 3. 最后销毁应用模型，执行回调 (:140-143)
+  // 2. 若模块由 Spring 托管，轮询等待 Spring 容器先关闭模块，直到 timeout 
+  //    通过 module.isLifeCycleManagedExternally() 判断是否等 Spring 接管
+  // 3. 最后销毁应用模型，执行回调 
     applicationModel.destroy();
 }
 ```
@@ -48,12 +50,12 @@ private void doDestroy() {
 
 两条监听器在 Spring 关闭时反向驱动 Dubbo：
 
-- `DubboBootstrapApplicationListener.onContextClosedEvent`（:125-131）：收到 `ContextClosedEvent` 时调用 `deployer.stop()`。
-- `DubboDeployApplicationListener.onContextClosedEvent`（:191-200）：未设置 `KEEP_RUNNING_ON_SPRING_CLOSED` 时调用 `moduleModel.destroy()`。
+- `DubboBootstrapApplicationListener.onContextClosedEvent`：收到 `ContextClosedEvent` 时调用 `deployer.stop()`。
+- `DubboDeployApplicationListener.onContextClosedEvent`：未设置 `KEEP_RUNNING_ON_SPRING_CLOSED` 时调用 `moduleModel.destroy()`。
 
 ### Business Custom Shutdown Actions
 
-从 `@since 2.7.5` 起（`dubbo-common/.../common/lang/ShutdownHookCallback.java:37`），可以通过 `ShutdownHookCallback`（配合 `ShutdownHookCallbacks`，:35）注册业务自己的停机回调，执行点在 `DefaultApplicationDeployer.postDestroy → executeShutdownCallbacks`（:1148、:1168-1172）。需要「停机时刷缓存、发通知」之类的动作，这是官方扩展点。
+从 `@since 2.7.5` 起（`dubbo-common/.../common/lang/ShutdownHookCallback.java`），可以通过 `ShutdownHookCallback`（配合 `ShutdownHookCallbacks`）注册业务自己的停机回调，执行点在 `DefaultApplicationDeployer.postDestroy → executeShutdownCallbacks`（、）。需要「停机时刷缓存、发通知」之类的动作，这是官方扩展点。
 
 ### GracefulShutdown: Cleanup of In-Flight Requests
 
@@ -70,42 +72,42 @@ private void doDestroy() {
 ### Common Misoperations Related to Shutdown
 
 - **手动注册 DubboShutdownHook 与 Spring Boot 冲突**：Spring Boot 自身已管理关闭流程，重复注册 hook 会造成双重销毁；3.x 中 Dubbo 与 Spring 的生命周期靠 `isLifeCycleManagedExternally()` 与两条 `ContextClosedEvent` 监听器对齐，用户代码里再手动 `DubboShutdownHook.getDubboShutdownHook().register()` 属于画蛇添足。
-- **`KEEP_RUNNING_ON_SPRING_CLOSED`**：设置后 Spring 关闭时 Dubbo 模块不随之 destroy（`DubboDeployApplicationListener.onContextClosedEvent` :191-200 的判断条件），用于「容器关闭但进程仍需存活」的特殊场景，常规部署不要开。
+- **`KEEP_RUNNING_ON_SPRING_CLOSED`**：设置后 Spring 关闭时 Dubbo 模块不随之 destroy（`DubboDeployApplicationListener.onContextClosedEvent`  的判断条件），用于「容器关闭但进程仍需存活」的特殊场景，常规部署不要开。
 
 ## ApplicationDeployer Destroy Order
 
 `DubboShutdownHook.doDestroy` 只负责「置只读 + 等 Spring + 调 `applicationModel.destroy()`」，真正把资源一个个拆掉的是 `DefaultApplicationDeployer` 的 `preDestroy()` / `postDestroy()`（`dubbo-config-api/.../deploy/DefaultApplicationDeployer.java`）。两者由 `ApplicationModel.destroy()` 串联：先 `preDestroy`，再销毁各模块，最后 `postDestroy`。
 
-`preDestroy()`（:1086-1104）按「先摘流、后清理」的顺序做：
+`preDestroy()`按「先摘流、后清理」的顺序做：
 
 ```java
-// dubbo-config-api/.../deploy/DefaultApplicationDeployer.java:1086
+// dubbo-config-api/.../deploy/DefaultApplicationDeployer.java
 public void preDestroy() {
     ...
     onStopping();
-    offline();                   // 1. 遍历所有 ModuleModel 的 exportedServices，对 isRegistered() 的 RegisterStatedURL 调 registry.unregister(providerUrl)（:1106-1135）
-    unregisterServiceInstance();  // 2. ServiceInstanceMetadataUtils.unregisterMetadataAndInstance（:1095/1074）
-    unexportMetricsService();     // 3. metricsServiceExporter.unexport()（:1097/855）
-    unRegisterShutdownHook();     // 4. 卸载 DubboShutdownHook（:1099/186）
+    offline();  // 1. 遍历所有 ModuleModel 的 exportedServices，对 isRegistered() 的 RegisterStatedURL 调 registry.unregister(providerUrl)
+    unregisterServiceInstance();  // 2. ServiceInstanceMetadataUtils.unregisterMetadataAndInstance
+    unexportMetricsService();  // 3. metricsServiceExporter.unexport()
+    unRegisterShutdownHook();  // 4. 卸载 DubboShutdownHook
 }
 ```
 
-`postDestroy()`（:1138-1166）在模块都停了之后执行，顺序是关键：
+`postDestroy()`在模块都停了之后执行，顺序是关键：
 
 ```java
-// DefaultApplicationDeployer.java:1138
+// DefaultApplicationDeployer.java
 public void postDestroy() {
-    destroyRegistries();        // RegistryManager.destroyAll()（:1425）
-    destroyMetadataReports();   // 各 MetadataReportFactory.destroy()（:1442）
-    executeShutdownCallbacks(); // ShutdownHookCallbacks.callback()（:1168，业务停机回调点）
-    destroyExecutorRepository();// 最后才关线程池（:1158/1418）
+    destroyRegistries();  // RegistryManager.destroyAll()
+    destroyMetadataReports();  // 各 MetadataReportFactory.destroy()
+    executeShutdownCallbacks(); // ShutdownHookCallbacks.callback()（业务停机回调点）
+    destroyExecutorRepository();// 最后才关线程池
 }
 ```
 
-`destroyExecutorRepository()`（:1418-1423）是**整条销毁链的最后一步**：
+`destroyExecutorRepository()`是**整条销毁链的最后一步**：
 
 ```java
-// DefaultApplicationDeployer.java:1418
+// DefaultApplicationDeployer.java
 private void destroyExecutorRepository() {
     executorRepository.shutdownServiceExportExecutor();
     executorRepository.shutdownServiceReferExecutor();
@@ -125,12 +127,12 @@ private void destroyExecutorRepository() {
 打假：很多资料写「`delay` 默认 `-1`，表示不延迟」，但源码里 `AbstractServiceConfig` 的声明是：
 
 ```java
-// dubbo-config-api/src/main/java/org/apache/dubbo/config/AbstractServiceConfig.java:59
+// dubbo-config-api/src/main/java/org/apache/dubbo/config/AbstractServiceConfig.java
 @Parameter(required = false)
-protected Integer delay;         // 没有初始化，默认 null
+protected Integer delay;  // 没有初始化，默认 null
 ```
 
-判定逻辑在 `ServiceConfigBase.shouldDelay()`（`ServiceConfigBase.java:138-141`）：只在 `delay != null && delay > 0` 时返回 true——所以**默认行为是完全不延迟，`-1` 并非默认值**。`-1` 只在手动注册场景有一个特殊分支（`ServiceConfig.java:338-342`）。
+判定逻辑在 `ServiceConfigBase.shouldDelay()`（`ServiceConfigBase.java`）：只在 `delay != null && delay > 0` 时返回 true——所以**默认行为是完全不延迟，`-1` 并非默认值**。`-1` 只在手动注册场景有一个特殊分支（`ServiceConfig.java`）。
 
 延迟暴露的典型用途：应用启动时有大量初始化任务（缓存预热、连接池建立），此时注册中心里服务已可见但实例还没准备好接流量。给 `delay=15000` 可以让 Provider 晚 15 秒再向注册中心注册。但注意：延迟暴露**不等于**延迟接流量后就有保护——真正防「冷实例被打爆」的是下面的预热权重。
 
@@ -138,8 +140,8 @@ protected Integer delay;         // 没有初始化，默认 null
 
 预热权重生效需要三个条件同时成立：
 
-1. Provider URL 带有 `timestamp` 参数（默认自动带上），Consumer 用 `now - timestamp` 算 uptime（`AbstractLoadBalance.java:58-61`）。
-2. `uptime > 0 && uptime < warmup`（:91-94）——uptime 为 0 或已过预热期都不插值。
+1. Provider URL 带有 `timestamp` 参数（默认自动带上），Consumer 用 `now - timestamp` 算 uptime（`AbstractLoadBalance.java`）。
+2. `uptime > 0 && uptime < warmup`——uptime 为 0 或已过预热期都不插值。
 3. `weight > 0`——weight 配成负数或 0 时另有处理逻辑，预热不介入。
 
 拿 `weight=100`、`warmup=600000` 算几个采样点：
@@ -153,17 +155,17 @@ protected Integer delay;         // 没有初始化，默认 null
 
 ### Warmup Weight Formula
 
-服务启动预热通过负载均衡权重插值实现：`DEFAULT_WARMUP = 10 * 60 * 1000`，即 **600000ms / 10 分钟**（`dubbo-cluster/.../cluster/Constants.java:97-99`）。
+服务启动预热通过负载均衡权重插值实现：`DEFAULT_WARMUP = 10 * 60 * 1000`，即 **600000ms / 10 分钟**（`dubbo-cluster/.../cluster/Constants.java`）。
 
 ```java
-// dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/loadbalance/AbstractLoadBalance.java:46
+// dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/loadbalance/AbstractLoadBalance.java
 static int calculateWarmupWeight(int uptime, int warmup, int weight) {
     int ww = (int) ( uptime / ((float) warmup / weight));
     return ww < 1 ? 1 : (Math.min(ww, weight));
 }
 ```
 
-这是一个**线性插值**公式：`uptime / warmup` 是启动进度（0 到 1），乘以目标 `weight` 即当前应有权重。刚启动时 `ww` 小于 1 会被压到 **1**——新实例至少分到一点流量用于验证健康，但不会被打爆；随 uptime 增长权重线性抬升，到 warmup（默认 10 分钟）恢复满权重。生效条件在 `getWeight` 中：`uptime > 0 && uptime < warmup`（`AbstractLoadBalance.java:91-94`），uptime 由 Provider URL 的 timestamp 参数推算。
+这是一个**线性插值**公式：`uptime / warmup` 是启动进度（0 到 1），乘以目标 `weight` 即当前应有权重。刚启动时 `ww` 小于 1 会被压到 **1**——新实例至少分到一点流量用于验证健康，但不会被打爆；随 uptime 增长权重线性抬升，到 warmup（默认 10 分钟）恢复满权重。生效条件在 `getWeight` 中：`uptime > 0 && uptime < warmup`（`AbstractLoadBalance.java`），uptime 由 Provider URL 的 timestamp 参数推算。
 
 > [!TIP]
 > 容器化场景（K8s HPA、频繁滚动发布）建议显式调小 `warmup`（如 `warmup=60000`），否则每次发布后的 10 分钟里新实例都在低权重运行，流量会被旧实例硬扛。
@@ -172,25 +174,25 @@ static int calculateWarmupWeight(int uptime, int warmup, int weight) {
 
 ### Configuration Entry and Semantics
 
-Mock 的配置 key 就是 `"mock"`（`dubbo-rpc-api/.../rpc/Constants.java:24`），注解侧 `@DubboReference` 与 `@DubboService` 都有 `String mock() default ""`（`DubboReference.java:239`、`DubboService.java:228`）。前缀常量：`RETURN_PREFIX="return "`、`THROW_PREFIX="throw"`、`FAIL_PREFIX="fail:"`、`FORCE_PREFIX="force:"`（`Constants.java:31,33,35,37`）。
+Mock 的配置 key 就是 `"mock"`（`dubbo-rpc-api/.../rpc/Constants.java`），注解侧 `@DubboReference` 与 `@DubboService` 都有 `String mock() default ""`（`DubboReference.java`、`DubboService.java`）。前缀常量：`RETURN_PREFIX="return "`、`THROW_PREFIX="throw"`、`FAIL_PREFIX="fail:"`、`FORCE_PREFIX="force:"`（`Constants.java`）。
 
-语义判定发生在 `MockClusterInvoker.invoke`（:102-151）——**先于真实调用**：
+语义判定发生在 `MockClusterInvoker.invoke`——**先于真实调用**：
 
 ```java
-// dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/support/wrapper/MockClusterInvoker.java:102
+// dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/support/wrapper/MockClusterInvoker.java
 public Result invoke(Invocation invocation) throws RpcException {
-    // value = directory.getUrl().getMethodParameter(methodName, MOCK_KEY, ...)
+  // value = directory.getUrl().getMethodParameter(methodName, MOCK_KEY, ...)
     if (value.startsWith(FORCE_KEY)) {
-        // force:return null 等：直接走 mock，【不发真实请求】(:102-112)
+  // force:return null 等：直接走 mock，【不发真实请求】
         ...
     } else {
-        // fail-mock：先发真实请求 (:114-118)
+  // fail-mock：先发真实请求 
         try {
             result = this.invoker.invoke(invocation);
             ...
         } catch (RpcException e) {
-            // 只有【非业务】RpcException（如超时、网络）才降级 mock
-            // 业务侧主动抛的 RpcException 不会被 mock 吞掉
+  // 只有【非业务】RpcException（如超时、网络）才降级 mock
+  // 业务侧主动抛的 RpcException 不会被 mock 吞掉
         }
     }
 }
@@ -200,13 +202,13 @@ public Result invoke(Invocation invocation) throws RpcException {
 
 ### mock Value Parsing
 
-真正产出降级结果的是 `MockInvoker.invoke`（:104-138）：
+真正产出降级结果的是 `MockInvoker.invoke`：
 
 - `return xxx` → 直接返回常量值（`return null` / `return empty` / JSON 值）。
 - `throw xxx` → 实例化并抛出指定异常类（如 `java.lang.RuntimeException`）。
 - 其他 → 视为**自定义实现类**（如 `mock=com.xxx.MockImpl`，需要实现与接口同参的方法）。
 
-解析前 `normalizeMock` 会先剥离 `fail:`/`force:` 前缀，并把反引号 `` ` `` 替换为双引号（:233-265）——所以 `fail:throw` 里的异常参数想带字符串字面量时要用反引号。
+解析前 `normalizeMock` 会先剥离 `fail:`/`force:` 前缀，并把反引号 `` ` `` 替换为双引号——所以 `fail:throw` 里的异常参数想带字符串字面量时要用反引号。
 
 ### Comparison of Four Usage Patterns
 
@@ -223,16 +225,16 @@ public Result invoke(Invocation invocation) throws RpcException {
 
 ```text
 Consumer 侧 Cluster 层
-  └─ MockClusterInvoker            ← 语义判定（force/fail），见上文 :102-151
+  └─ MockClusterInvoker            ← 语义判定（force/fail），见上文。
        └─ AbstractCluster$ClusterFilterInvoker（filter 链）
             └─ FailoverClusterInvoker 真实调用失败
-                 └─ 失败路径回到 MockClusterInvoker 的 catch → MockInvoker.invoke (:104-138)
+                 └─ 失败路径回到 MockClusterInvoker 的 catch → MockInvoker.invoke 
                       ├─ return null / return empty / return JSON → 常量结果
                       ├─ throw com.xxx.XxxException               → 抛异常实例
                       └─ com.xxx.MockImpl                          → 反射实例化自定义类并调用同名方法
 ```
 
-`MockInvoker` 内部（:104-138）按 `normalizeMock` 清洗后的值分发到 `ReturnValueMockInvoker` / `ThrowExceptionMockInvoker` / 自定义类路径。自定义 MockImpl 的要求：与接口**同名 + Mock 后缀**（或 `mock=` 直接指定类名），并实现接口方法——`mock=true` 的便捷写法就等价于 `mock=接口全限定名 + "Mock"`。
+`MockInvoker` 内部按 `normalizeMock` 清洗后的值分发到 `ReturnValueMockInvoker` / `ThrowExceptionMockInvoker` / 自定义类路径。自定义 MockImpl 的要求：与接口**同名 + Mock 后缀**（或 `mock=` 直接指定类名），并实现接口方法——`mock=true` 的便捷写法就等价于 `mock=接口全限定名 + "Mock"`。
 
 方法级配置同样支持：`@DubboReference(methods = {@Method(name = "findUser", mock = "fail:return null")})`，方法级优先于接口级。
 
@@ -253,7 +255,7 @@ dubbo:
 
 ### Difference from MockInvokersSelector
 
-`mock=` 配置之外还有一个**独立的路由实现** `MockInvokersSelector`（扩展名 `mock`，走 legacy Router 链，保留原名未改名）。它依据 invocation attachment `invocation.need.mock`（`INVOCATION_NEED_MOCK`，`dubbo-cluster/.../cluster/Constants.java:80`）在 mock invoker 与 normal invoker 之间选择（`MockInvokersSelector.java:73-84`）——即「把调用定向到 MockProtocol 暴露的 invoker」的机制，与「调用失败后返回假数据」的 `mock=` 配置是两套东西，不要混为一谈。
+`mock=` 配置之外还有一个**独立的路由实现** `MockInvokersSelector`（扩展名 `mock`，走 legacy Router 链，保留原名未改名）。它依据 invocation attachment `invocation.need.mock`（`INVOCATION_NEED_MOCK`，`dubbo-cluster/.../cluster/Constants.java`）在 mock invoker 与 normal invoker 之间选择（`MockInvokersSelector.java`）——即「把调用定向到 MockProtocol 暴露的 invoker」的机制，与「调用失败后返回假数据」的 `mock=` 配置是两套东西，不要混为一谈。
 
 ## QoS
 
@@ -261,10 +263,10 @@ dubbo:
 
 | 配置 | 默认值 | 源码 |
 |---|---|---|
-| `qos.enable` | **true（默认开启）** | `QosProtocolWrapper.java:107` |
-| `qos.port` | **22222** | `QosConstants.java:21`、`QosProtocolWrapper.java:116` |
-| `qos.check` | `false` | `QosProtocolWrapper.java:100` |
-| `qos.accept.foreign.ip` | `false`（只接受本机连接） | `QosProtocolWrapper.java:117` |
+| `qos.enable` | **true（默认开启）** | `QosProtocolWrapper.java` |
+| `qos.port` | **22222** | `QosConstants.java`、`QosProtocolWrapper.java` |
+| `qos.check` | `false` | `QosProtocolWrapper.java` |
+| `qos.accept.foreign.ip` | `false`（只接受本机连接） | `QosProtocolWrapper.java` |
 
 常用命令（telnet 22222 后交互）：
 
@@ -338,9 +340,9 @@ active-limit=org.apache.dubbo.rpc.filter.ActiveLimitFilter
 
 | Filter | `@Activate` | key | 语义 |
 |---|---|---|---|
-| `ExecuteLimitFilter` | `group=PROVIDER, value=EXECUTES_KEY`（:40-41） | `executes`（`Constants.java:61`） | **按并发数限流**：Provider 侧同一时刻最多 N 个在途请求 |
-| `TpsLimitFilter` | `group=PROVIDER, value=TPS_LIMIT_RATE_KEY`（:45） | `tps`（:45 引用 `TPS_LIMIT_RATE_KEY`） | **按 TPS 限流**：固定窗口计数，超限抛 RpcException |
-| `AccessLogFilter` | `group=PROVIDER` 恒激活 | `accesslog` | 未配置 `accesslog` 时 `invoke` 直接放行（:109-115），配置后异步记访问日志 |
+| `ExecuteLimitFilter` | `group=PROVIDER, value=EXECUTES_KEY` | `executes`（`Constants.java`） | **按并发数限流**：Provider 侧同一时刻最多 N 个在途请求 |
+| `TpsLimitFilter` | `group=PROVIDER, value=TPS_LIMIT_RATE_KEY` | `tps`（ 引用 `TPS_LIMIT_RATE_KEY`） | **按 TPS 限流**：固定窗口计数，超限抛 RpcException |
+| `AccessLogFilter` | `group=PROVIDER` 恒激活 | `accesslog` | 未配置 `accesslog` 时 `invoke` 直接放行，配置后异步记访问日志 |
 
 此外 `active-limit`（`ActiveLimitFilter`）作用于 Consumer 侧，控制单个客户端对同一方法的最大并发（`actives` 参数）。
 
@@ -377,15 +379,15 @@ active-limit=org.apache.dubbo.rpc.filter.ActiveLimitFilter
 
 | 配置 | 默认值 | 源码位置 |
 |---|---|---|
-| `dubbo.service.shutdown.wait` | `10000` ms（`DEFAULT_SERVER_SHUTDOWN_TIMEOUT`） | `CommonConstants.java:184`、`ConfigurationUtils.java:121-151` |
-| `delay` | `null`（不延迟，非 -1） | `AbstractServiceConfig.java:59-62`、`ServiceConfigBase.java:138-141` |
-| `warmup` | `600000` ms（10 分钟） | `dubbo-cluster/.../cluster/Constants.java:97-99` |
-| `weight` | `DEFAULT_WEIGHT = 5`（预热插值目标） | `AbstractLoadBalance.java:91-94` |
-| `mock` | `""`（不启用） | `DubboReference.java:239`、`DubboService.java:228` |
-| `qos.enable` | `true` | `QosProtocolWrapper.java:107` |
-| `qos.port` | `22222` | `QosConstants.java:21` |
-| `qos.check` | `false` | `QosProtocolWrapper.java:100` |
-| `qos.accept.foreign.ip` | `false`（仅本机） | `QosProtocolWrapper.java:117` |
+| `dubbo.service.shutdown.wait` | `10000` ms（`DEFAULT_SERVER_SHUTDOWN_TIMEOUT`） | `CommonConstants.java`、`ConfigurationUtils.java` |
+| `delay` | `null`（不延迟，非 -1） | `AbstractServiceConfig.java`、`ServiceConfigBase.java` |
+| `warmup` | `600000` ms（10 分钟） | `dubbo-cluster/.../cluster/Constants.java` |
+| `weight` | `DEFAULT_WEIGHT = 5`（预热插值目标） | `AbstractLoadBalance.java` |
+| `mock` | `""`（不启用） | `DubboReference.java`、`DubboService.java` |
+| `qos.enable` | `true` | `QosProtocolWrapper.java` |
+| `qos.port` | `22222` | `QosConstants.java` |
+| `qos.check` | `false` | `QosProtocolWrapper.java` |
+| `qos.accept.foreign.ip` | `false`（仅本机） | `QosProtocolWrapper.java` |
 | `executes` / `tps` / `actives` | 未配置则不启用对应 Filter | `dubbo-rpc-api` Filter SPI |
 
 ## TpsLimitFilter Source Reality
@@ -393,49 +395,49 @@ active-limit=org.apache.dubbo.rpc.filter.ActiveLimitFilter
 `TpsLimitFilter`（`dubbo-rpc/dubbo-rpc-api/src/main/java/org/apache/dubbo/rpc/filter/TpsLimitFilter.java`）的真实实现是 `DefaultTPSLimiter` + `StatItem` 两个类（包 `org.apache.dubbo.rpc.filter.tps`），**不存在 `TpsLimitUtil`，也不存在 `RateLimiter`**（全仓库 `find` 均无命中）。算法是**固定窗口计数**：
 
 ```java
-// StatItem.java:46-54
+// StatItem.java
 public boolean isAllowable() {
     long now = System.currentTimeMillis();
-    if (now > lastResetTime.get() + interval) {   // :48 窗口到期判定
-        token.set(rate);                          // :49 一次性重置为满额
-        lastResetTime.set(now);                   // :50
+    if (now > lastResetTime.get() + interval) {  // 窗口到期判定
+        token.set(rate);  // 一次性重置为满额
+        lastResetTime.set(now);
     }
-    return token.decrementAndGet() >= 0;          // :53 递减到 0 后全部拒绝
+    return token.decrementAndGet() >= 0;  // 递减到 0 后全部拒绝
 }
 ```
 
-字段（`StatItem.java`）：`name:28`、`AtomicLong lastResetTime:30`、`long interval:32`、`AtomicInteger token:34`、`int rate:36`；构造时 `token = new AtomicInteger(rate)`（`:42-43`）。
+字段（`StatItem.java`）：`name`、`AtomicLong lastResetTime`、`long interval`、`AtomicInteger token`、`int rate`；构造时 `token = new AtomicInteger(rate)`。
 
-**它不是令牌桶**：没有 refill 速率、没有按时间比例补发，只有 `token.set(rate)` 的一次性重置——字段叫 `token` 只是命名惯性。单测 `StatItemTest.java:42-48`（`new StatItem("test", 5, 1000L)`，sleep 1100ms 后 `getToken()==4`）坐实「整桶重置」而非匀速补发。**它也不是滑动窗口**：只有 `lastResetTime` 一个时间戳，没有任何分片桶结构。
+**它不是令牌桶**：没有 refill 速率、没有按时间比例补发，只有 `token.set(rate)` 的一次性重置——字段叫 `token` 只是命名惯性。单测 `StatItemTest.java`（`new StatItem("test", 5, 1000L)`，sleep 1100ms 后 `getToken()==4`）坐实「整桶重置」而非匀速补发。**它也不是滑动窗口**：只有 `lastResetTime` 一个时间戳，没有任何分片桶结构。
 
 > [!WARNING]
-> **`tps` 不等于「每秒 N 次」**。分母是 `tps.interval`，而 `DEFAULT_TPS_LIMIT_INTERVAL = 60 * 1000`（`dubbo-rpc-api/.../rpc/Constants.java:49`）。只写 `tps=100` 不写 `tps.interval`，真实含义是**每 60 秒 100 次 ≈ 1.67 QPS**，与直觉差 60 倍。要「每秒 100」必须显式配 `tps.interval=1000`。
+> **`tps` 不等于「每秒 N 次」**。分母是 `tps.interval`，而 `DEFAULT_TPS_LIMIT_INTERVAL = 60 * 1000`（`dubbo-rpc-api/.../rpc/Constants.java`）。只写 `tps=100` 不写 `tps.interval`，真实含义是**每 60 秒 100 次 ≈ 1.67 QPS**，与直觉差 60 倍。要「每秒 100」必须显式配 `tps.interval=1000`。
 
 ### 限流维度与配置读取
 
 ```java
-// DefaultTPSLimiter.java:42-49
+// DefaultTPSLimiter.java
 boolean isMethodLevelTpsConfigured =
-        url.hasMethodParameter(RpcUtils.getMethodName(invocation), TPS_LIMIT_RATE_KEY);  // :43
+        url.hasMethodParameter(RpcUtils.getMethodName(invocation), TPS_LIMIT_RATE_KEY);
 String key = isMethodLevelTpsConfigured
-        ? url.getServiceKey() + "#" + RpcUtils.getMethodName(invocation)   // :45 方法级
-        : url.getServiceKey();                                             // :46 服务级
-int rate      = url.getMethodParameter(methodName, TPS_LIMIT_RATE_KEY, -1);                     // :47
-long interval = url.getMethodParameter(methodName, TPS_LIMIT_INTERVAL_KEY, DEFAULT_TPS_LIMIT_INTERVAL); // :48-49
+        ? url.getServiceKey() + "#" + RpcUtils.getMethodName(invocation)  // 方法级
+        : url.getServiceKey();  // 服务级
+int rate      = url.getMethodParameter(methodName, TPS_LIMIT_RATE_KEY, -1);
+long interval = url.getMethodParameter(methodName, TPS_LIMIT_INTERVAL_KEY, DEFAULT_TPS_LIMIT_INTERVAL);
 ```
 
-- **维度 key 是 `url.getServiceKey()`，不是 full URL**：`getServiceKey()`（`URL.java:1336-1346`）→ `BaseServiceMetadata.buildServiceKey`（`BaseServiceMetadata.java:36-48`），格式 `group/interface:version`，**不含 host/port/参数**。同进程内指向同一服务的多个 URL 会**共用同一个计数器**。
-- **方法级优先**：用 `hasMethodParameter` 判断（`:43`），命中则 key 变 `serviceKey#method`，与服务级 `serviceKey` 是两个独立计数器，不互相污染。
-- 配置常量：`TPS_LIMIT_RATE_KEY="tps"`（`Constants.java:45`）、`TPS_LIMIT_INTERVAL_KEY="tps.interval"`（`:47`）。
-- **动态改 `tps` 会丢弃已有计数**：`:58-61` 检测到 rate 或 interval 变化直接 `new StatItem` 覆盖，窗口重新开始。
-- 计数状态在 `DefaultTPSLimiter.stats`（`ConcurrentMap`，`:38`），而 `DefaultTPSLimiter` 是 `TpsLimitFilter` 的实例字段（`TpsLimitFilter.java:43`）——单机单实例内存态，无分布式配额。
+- **维度 key 是 `url.getServiceKey()`，不是 full URL**：`getServiceKey()`（`URL.java`）→ `BaseServiceMetadata.buildServiceKey`（`BaseServiceMetadata.java`），格式 `group/interface:version`，**不含 host/port/参数**。同进程内指向同一服务的多个 URL 会**共用同一个计数器**。
+- **方法级优先**：用 `hasMethodParameter` 判断，命中则 key 变 `serviceKey#method`，与服务级 `serviceKey` 是两个独立计数器，不互相污染。
+- 配置常量：`TPS_LIMIT_RATE_KEY="tps"`（`Constants.java`）、`TPS_LIMIT_INTERVAL_KEY="tps.interval"`。
+- **动态改 `tps` 会丢弃已有计数**： 检测到 rate 或 interval 变化直接 `new StatItem` 覆盖，窗口重新开始。
+- 计数状态在 `DefaultTPSLimiter.stats`（`ConcurrentMap`），而 `DefaultTPSLimiter` 是 `TpsLimitFilter` 的实例字段（`TpsLimitFilter.java`）——单机单实例内存态，无分布式配额。
 
 ### 限流命中的失败形态
 
-`TpsLimitFilter` **不 `throw`**，而是返回一个携带异常的 `AsyncRpcResult`（`TpsLimitFilter.java:48-53`），且用的是**无错误码的单参构造器** `RpcException(String)`（`RpcException.java:58-60`，`code` 默认 `0`）：
+`TpsLimitFilter` **不 `throw`**，而是返回一个携带异常的 `AsyncRpcResult`（`TpsLimitFilter.java`），且用的是**无错误码的单参构造器** `RpcException(String)`（`RpcException.java`，`code` 默认 `0`）：
 
 ```java
-// TpsLimitFilter.java:48-54
+// TpsLimitFilter.java
 if (!tpsLimiter.isAllowable(invoker.getUrl(), invocation)) {
     return AsyncRpcResult.newDefaultAsyncResult(
             new RpcException("Failed to invoke service " + invoker.getInterface().getName() + "."
@@ -445,15 +447,15 @@ if (!tpsLimiter.isAllowable(invoker.getUrl(), invocation)) {
 ```
 
 > [!WARNING]
-> **TPS 限流的异常 `isLimitExceed()` 是 `false`**。它 `code=0`，而 `RpcException.java:123` 判定的是 `code == LIMIT_EXCEEDED_EXCEPTION || cause instanceof LimitExceededException`。想按错误码区分「被限流」，`tps` 这条路走不通——只能靠 message 匹配。
+> **TPS 限流的异常 `isLimitExceed()` 是 `false`**。它 `code=0`，而 `RpcException.java` 判定的是 `code == LIMIT_EXCEEDED_EXCEPTION || cause instanceof LimitExceededException`。想按错误码区分「被限流」，`tps` 这条路走不通——只能靠 message 匹配。
 
-另外 `StatItem.java:48` 的「窗口到期判断」与 `:49-50` 的「重置赋值」**非原子**，并发下可重复重置；`token` 在 `:53` 无下界保护，打满后会持续递减为负数直到下次重置。
+另外 `StatItem.java` 的「窗口到期判断」与  的「重置赋值」**非原子**，并发下可重复重置；`token` 在  无下界保护，打满后会持续递减为负数直到下次重置。
 
 ### 激活条件与 SPI 注册
 
-- `@Activate(group = CommonConstants.PROVIDER, value = TPS_LIMIT_RATE_KEY)`（`TpsLimitFilter.java:40`）。**注解上未声明 `order`**，取 `Activate` 默认 `0`（`Activate.java:93`）。
-- SPI 注册名 **`tps`**，位置是 `META-INF/dubbo/internal/org.apache.dubbo.rpc.Filter:14`——**不是 `META-INF/dubbo/`**（该路径文件在整个仓库不存在）。
-- **默认不启用，双重保险**：① `@Activate(value="tps")` 要求 URL 上出现 `tps` 参数才会被激活；② 即使进链，`rate <= 0` 时 `DefaultTPSLimiter.java:51` 走 else 分支，移除 `StatItem` 并 `return true`。
+- `@Activate(group = CommonConstants.PROVIDER, value = TPS_LIMIT_RATE_KEY)`（`TpsLimitFilter.java`）。**注解上未声明 `order`**，取 `Activate` 默认 `0`（`Activate.java`）。
+- SPI 注册名 **`tps`**，位置是 `META-INF/dubbo/internal/org.apache.dubbo.rpc.Filter`——**不是 `META-INF/dubbo/`**（该路径文件在整个仓库不存在）。
+- **默认不启用，双重保险**：① `@Activate(value="tps")` 要求 URL 上出现 `tps` 参数才会被激活；② 即使进链，`rate <= 0` 时 `DefaultTPSLimiter.java` 走 else 分支，移除 `StatItem` 并 `return true`。
 
 ## TPS vs Executes: Two Different Rate Limiting Semantics
 
@@ -462,17 +464,17 @@ if (!tpsLimiter.isAllowable(invoker.getUrl(), invocation)) {
 | 维度 | `ExecuteLimitFilter` / `executes` | `TpsLimitFilter` / `tps` |
 |---|---|---|
 | 度量对象 | **在途并发数**（`RpcStatus.active`） | **时间窗内累计请求数**（`StatItem.token`） |
-| 计数方向 | +1 / −1 配对（`RpcStatus.java:137`） | 单调递减，仅窗口到期重置（`StatItem.java:49`） |
-| 时间维度 | 无（瞬时量） | 有，`interval` 默认 60000 ms（`Constants.java:49`） |
-| 维度 key | `RpcStatus.getStatus(url, methodName)` | `serviceKey` 或 `serviceKey#method`（`DefaultTPSLimiter.java:45-46`） |
-| 作用端 | PROVIDER（`ExecuteLimitFilter.java:40`） | PROVIDER（`TpsLimitFilter.java:40`） |
-| 失败行为 | **同步 `throw`**（`ExecuteLimitFilter.java:51`） | **返回带异常的 Result**（`TpsLimitFilter.java:49`） |
-| 错误码 | `LIMIT_EXCEEDED_EXCEPTION = 7`（`RpcException.java:37`） | **0 / UNKNOWN**（无参构造） |
+| 计数方向 | +1 / −1 配对（`RpcStatus.java`） | 单调递减，仅窗口到期重置（`StatItem.java`） |
+| 时间维度 | 无（瞬时量） | 有，`interval` 默认 60000 ms（`Constants.java`） |
+| 维度 key | `RpcStatus.getStatus(url, methodName)` | `serviceKey` 或 `serviceKey#method`（`DefaultTPSLimiter.java`） |
+| 作用端 | PROVIDER（`ExecuteLimitFilter.java`） | PROVIDER（`TpsLimitFilter.java`） |
+| 失败行为 | **同步 `throw`**（`ExecuteLimitFilter.java`） | **返回带异常的 Result**（`TpsLimitFilter.java`） |
+| 错误码 | `LIMIT_EXCEEDED_EXCEPTION = 7`（`RpcException.java`） | **0 / UNKNOWN**（无参构造） |
 | `isLimitExceed()` | `true` | **false** |
-| 释放时机 | `onResponse`/`onError` 回调（`ExecuteLimitFilter.java:72,83`） | 无释放，只能等窗口到期 |
-| 默认 | 未配 `executes` → `max = Integer.MAX_VALUE`（`RpcStatus.java:102`） | 未配 `tps` → `rate = -1` 放行（`DefaultTPSLimiter.java:47,51`） |
+| 释放时机 | `onResponse`/`onError` 回调（`ExecuteLimitFilter.java`） | 无释放，只能等窗口到期 |
+| 默认 | 未配 `executes` → `max = Integer.MAX_VALUE`（`RpcStatus.java`） | 未配 `tps` → `rate = -1` 放行（`DefaultTPSLimiter.java`） |
 
-`ExecuteLimitFilter` 实现的是 `Filter.Listener`（`ExecuteLimitFilter.java:41`），靠 `onResponse`/`onError` 配对 `RpcStatus.beginCount`（`RpcStatus.java:101-123`，`:110-114` CAS 自旋判 `i + 1 > max`）；被限流拒绝的那次**不会 `endCount`**（`:77-82`，否则会误减计数）。`TpsLimitFilter` 只实现 `Filter`（`TpsLimitFilter.java:41`），**没有任何回调**——这也是它只能做「单向计数 + 窗口重置」而不能做并发信号量的结构性原因。
+`ExecuteLimitFilter` 实现的是 `Filter.Listener`（`ExecuteLimitFilter.java`），靠 `onResponse`/`onError` 配对 `RpcStatus.beginCount`（`RpcStatus.java`， CAS 自旋判 `i + 1 > max`）；被限流拒绝的那次**不会 `endCount`**（否则会误减计数）。`TpsLimitFilter` 只实现 `Filter`（`TpsLimitFilter.java`），**没有任何回调**——这也是它只能做「单向计数 + 窗口重置」而不能做并发信号量的结构性原因。
 
 一句话：**`executes` 管「同时在跑几个」，`tps` 管「这段时间里一共来了几个」**，二者不可互换，也不叠加成一套限流。
 
@@ -480,7 +482,7 @@ if (!tpsLimiter.isAllowable(invoker.getUrl(), invocation)) {
 
 1. **优雅停机 key 记错不生效**：真实 key 是 `dubbo.service.shutdown.wait`（毫秒）；`shutdown.wait`、`dubbo.shutdown.wait` 均不存在；`...seconds` 结尾的旧 key 已 `@Deprecated` 且单位是秒——毫秒/秒混写会让等待时间差 1000 倍。
 2. **`getServerShutdownTimeout` 的 1ms 短路**：停机已超时（如 JVM 已被 SIGKILL 倒计时）时返回 1ms，不要误以为 1 是什么特殊配置值。
-3. **`delay` 默认是 `null` 不是 `-1`**：`shouldDelay()` 判 `delay != null && delay > 0`；`-1` 只在手动注册分支有含义（`ServiceConfig.java:338-342`）。
+3. **`delay` 默认是 `null` 不是 `-1`**：`shouldDelay()` 判 `delay != null && delay > 0`；`-1` 只在手动注册分支有含义（`ServiceConfig.java`）。
 4. **预热权重公式是线性插值**：`ww = uptime / (warmup / weight)`，下限 1、上限 weight；误写成「启动即全量权重」会在线上打出雪崩。
 5. **fail-mock 只降级非业务 RpcException**：业务代码主动抛的 RpcException 不会触发 mock，别指望 mock 吞掉业务异常。
 6. **`force:` 与 `fail:` 的区别是「发不发请求」**：`force:` 直接返回 mock 值，连一次真实调用都没有——用它演练降级时注意它测不到下游。

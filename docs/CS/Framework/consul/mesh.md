@@ -1,85 +1,207 @@
 ## Introduction
 
-**Consul service mesh**（早期叫 Connect）是 Consul 相对 etcd / ZooKeeper / Nacos 的差异化王牌：把"服务间 mTLS + 授权"做成开箱能力，业务代码零改造。开启网格后，每个服务旁部署一个 **Envoy sidecar**，由 Consul 通过 gRPC（端口 `8502`，xDS 协议）下发配置；服务间流量不再直连，而是经 sidecar 强制双向 TLS + 意图校验。
+**Consul service mesh**（早期叫 Connect）是 Consul 相对 etcd / ZooKeeper / Nacos 的差异化王牌：把"服务间 mTLS + 授权"做成开箱能力，业务代码零改造。开启网格后，每个服务旁部署一个 **Envoy sidecar**，由 Consul 通过 gRPC xDS 下发配置；服务间流量强制双向 TLS + 意图校验。本文源码核自 **v2.1.0**。
 
-> [!NOTE]
-> Consul 2.0.x 中服务网格是主力方向：Envoy 升级到 1.37.x（2.0.0 起），并引入 multi-port（命名端口）服务（Enterprise）、passive health check（outlier detection）等增强。
+> [!WARNING]
+> 2.x 关键变化：① xDS 的 **state-of-the-world ADS 已废弃**——`StreamAggregatedResources` 硬性返回 `not implemented`，只剩 **delta xDS**（`DeltaAggregatedResources`）。② Connect CA 的协调从 1.x 单体 `reconcileCA` 循环重构为 **`CAManager` 显式状态机** + 后台 routine。③ transparent proxy 的流量重定向从 iptables 迁移到 **nftables**。
 
-## Sidecar and xDS
+## Sidecar and delta xDS
 
-- 每个服务实例旁运行 Envoy，通过 **gRPC xDS（8502）** 从 Consul 拉取监听器 / 集群 / 路由 / 端点配置；
-- 业务无需改代码：只要把出站流量指到本地 sidecar（透明代理 transparent proxy 模式下连改代码都不用）；
-- sidecar 自动从 Consul CA 获取并轮转证书，服务身份由 SPIFFE 风格的 `spiffe://<trust-domain>/ns/<ns>/svc/<svc>` URI 表示。
+xDS server 注册在 agent 的 external gRPC server（8502；server 模式另有 8503 TLS）：
+
+```go
+	a.xdsServer = xds.NewServer(
+		a.config.NodeName,
+		a.logger.Named(logging.Envoy),
+		proxyWatcher,
+		func(id string) (acl.Authorizer, error) {
+			return a.delegate.ResolveTokenAndDefaultMeta(id, nil, nil)
+		},
+		a,
+	)
+	a.xdsServer.Register(a.externalGRPCServer)
+```
+
+`agent/agent.go`
+
+```go
+// StreamAggregatedResources implements
+// envoy_discovery_v3.AggregatedDiscoveryServiceServer. This is the ADS endpoint which is
+// the only xDS API we directly support for now.
+//
+// Deprecated: use DeltaAggregatedResources instead
+func (s *Server) StreamAggregatedResources(stream ADSStream) error {
+	return errors.New("not implemented")
+}
+
+// Register the XDS server handlers to the given gRPC server.
+func (s *Server) Register(srv *grpc.Server) {
+	envoy_discovery_v3.RegisterAggregatedDiscoveryServiceServer(srv, s)
+}
+```
+
+`agent/xds/server.go`
+
+push 触发来自 **proxycfg watch**：agent 维护每个 sidecar 的 `ConfigSnapshot`，快照变化即经 `stateCh` 触发 delta xDS 重新生成资源。五种资源类型各自处理"允许空"的语义（listener/route/cluster 可空，endpoint/secret 不可）：
+
+```go
+	handlers := map[string]*xDSDeltaType{
+		xdscommon.ListenerType: newDeltaType(logger, stream, xdscommon.ListenerType, func() bool {
+			return snapshot.AllowEmptyListeners()
+		}),
+		xdscommon.RouteType: newDeltaType(logger, stream, xdscommon.RouteType, func() bool {
+			return snapshot.AllowEmptyRoutes()
+		}),
+		xdscommon.ClusterType: newDeltaType(logger, stream, xdscommon.ClusterType, func() bool {
+			return snapshot.AllowEmptyClusters()
+		}),
+		xdscommon.EndpointType: newDeltaType(logger, stream, xdscommon.EndpointType, nil),
+		xdscommon.SecretType:   newDeltaType(logger, stream, xdscommon.SecretType, nil),
+	}
+```
+
+`agent/xds/delta.go`
+
+`envoyextensions/` 是独立 Go module（Envoy 扩展框架 `extensioncommon` + 资源索引 `xdscommon`），xDS 包导入它做 `IndexResources` 与 `DetermineSupportedProxyFeatures`。2.1.0 还新增了 api-gateway 冷启动 **bootstrap gate**（默认 30s，`CONSUL_XDS_APIGATEWAY_BOOTSTRAP_GATE_TIMEOUT` 可覆盖）与 failover guard（`CONSUL_XDS_DISABLE_APIGATEWAY_FAILOVER_GUARD`）。
+
+业务无需改代码：透明代理模式下出站流量由 nftables 规则重定向到 sidecar（见下文）；sidecar 证书从 Connect CA 自动获取并轮转，服务身份是 SPIFFE 风格 `spiffe://<trust-domain>/ns/<ns>/svc/<svc>`。
 
 ## mTLS and Connect CA
 
-Consul 内置 CA，自动为服务签发、轮转证书。CA provider 可插拔：
+证书体系：RootCA（默认 TTL ~10 年）→ IntermediateCA（~1 年，secondary DC 向 primary 请求签发）→ leaf 证书（默认 **72h**，agent 自动轮转）。默认值：
 
-| provider | 说明 |
-| :--- | :--- |
-| `consul`（内置） | 默认，Consul 自管根 CA + 中间 CA |
-| `vault` | 用 HashiCorp Vault 作为 PKI 后端 |
-| `aws-pca` | AWS Private CA 签发 |
-| `gcp` | Google Cloud CA |
-| `azure` | Azure Key Vault CA |
-| `external` | SPIFFE 联合 / 外部 issuer（如 CyberArk WIM，Enterprise） |
+```go
+const (
+	DefaultLeafCertTTL         = "72h"
+	DefaultIntermediateCertTTL = "8760h"  // ~ 1 year = 365 * 24h
+	DefaultRootCertTTL         = "87600h" // ~ 10 years = 365 * 24h * 10
+)
+```
 
-> [!TIP]
-> `primary_datacenter` 是 connect CA 的根——它持有根 CA，其他 DC 通过 CA 复制获得中间 CA。跨 DC 服务网格的 mTLS 信任链由此收敛到主 DC。
+`agent/structs/connect_ca.go`
 
-## Intentions: Inter-Service Authorization
+2.x 的 CA 协调是 `CAManager` 显式状态机：
 
-intentions 控制"哪个服务能调哪个服务"，**默认 deny**——未显式放行即拒绝：
+```go
+const (
+	caStateUninitialized     caState = "UNINITIALIZED"
+	caStateInitializing      caState = "INITIALIZING"
+	caStateInitialized       caState = "INITIALIZED"
+	caStateRenewIntermediate caState = "RENEWING"
+	caStateReconfig          caState = "RECONFIGURING"
+)
+```
 
-- **L4 粒度**：服务到服务是否允许（最常用）；
-- **L7 粒度**：按 HTTP 路径 / 方法 / 头进一步放行（需 sidecar 支持 L7 路由）；
-- 配置方式：旧 `intentions` API 已被 **`service-intentions` 配置项**（config entry）取代（1.18+ 推荐），支持前缀匹配、L7 规则、与 `service-router` / `service-splitter` 联动。
+`agent/consul/leader_connect_ca.go`
 
-> [!WARNING]
-> 2.0.4 起，给 Envoy 附加"可执行代码的 EnvoyExtension"或 proxy escape-hatch 键，需要同时具备 `mesh:write` 与 `service:write`（CVE 修复）。配置 ACL 时别漏 `mesh:write`。
+```go
+func (c *CAManager) Start(ctx context.Context) {
+	// Attempt to initialize the Connect CA now. This will
+	// happen during leader establishment and it would be great
+	// if the CA was ready to go once that process was finished.
+	if err := c.Initialize(); err != nil {
+		c.logger.Error("Failed to initialize Connect CA", "error", err)
+		c.leaderRoutineManager.Start(ctx, backgroundCAInitializationRoutineName, c.backgroundCAInitialization)
+	} else {
+		c.startPostInitializeRoutines(ctx)
+	}
+}
+```
 
-## Traffic Governance Config Items (config entries)
+`agent/consul/leader_connect_ca.go`
 
-服务网格的路由 / 切分 / 默认值由一组 config entry 声明：
+初始化失败不再阻塞 leader（转入后台重试 routine）；secondary DC 的 routine 有两个：`secondaryCARootWatch`（跟随 primary 根）与 `runRenewIntermediate`（中间证书续期）。secondary 请求签名走跨 DC RPC `ConnectCA.SignIntermediate`，携带本地 provider 生成的 CSR：
 
-| 配置项 | 作用 |
-| :--- | :--- |
-| `proxy-defaults` | 全局 sidecar 默认（协议、透明代理、上游连接池） |
-| `service-defaults` | 单服务的协议（http/grpc/tcp）、transparent proxy |
-| `service-resolver` | 服务发现 + 故障转移（failover 到邻近 DC） |
-| `service-router` | L7 路由规则（按路径/头分流） |
-| `service-splitter` | 流量百分比切分（金丝雀 / 灰度） |
-| `service-intentions` | 服务间访问授权（L4/L7） |
+```go
+	csr, opaque, err := provider.GenerateIntermediateCSR()
+	...
+	if err := c.delegate.forwardDC("ConnectCA.SignIntermediate", c.serverConf.PrimaryDatacenter, c.delegate.generateCASignRequest(csr), &intermediatePEM); err != nil {
+```
 
-这套能力与 Istio 的 VirtualService/DestinationRule 同源思路，但 Consul 的卖点是**同一套控制面同时管 VM 与 K8s 上的工作负载**（Istio 仅 K8s）。
+`agent/consul/leader_connect_ca.go`
 
-## Transparent Proxy
+CA 状态（`CARoot` 的 `RootCert` + `IntermediateCerts []string` 字段）存在 state store 的 `connect-ca-*` 表里，约束"**恰好一个 active CA**"。CA provider 默认 consul 内置，可换 Vault。
 
-开启后，服务出站流量被 iptables 重定向到本地 sidecar，应用**完全无感**即可获得 mTLS + 意图校验——这是 Consul 在"混合云（VM + K8s + 多云）"场景相对 Istio 的关键易用性优势。
+## Intentions
 
-## Comparison with etcd / Nacos
+服务间授权以 **`service-intentions` config entry** 存储（2.x 文件名 `config_entry_intentions.go`；legacy `Intention` 结构保留 SourceNS/SourceName/DestinationNS/DestinationName + Action）。
 
-| 维度 | Consul mesh | etcd | Nacos |
+**默认 deny** 的判定不是一个写死的常量，而是"继承 ACL 默认策略、可被 agent 的 `default_intentionPolicy` 覆盖"：
+
+```go
+func DefaultIntentionAllow(authz acl.Authorizer, defaultIntentionPolicy string) bool {
+	// The default intention policy inherits from ACLs but
+	// is overridden by the agent's DefaultIntentionPolicy.
+	//nolint:staticcheck
+	defaultAllow := authz.IntentionDefaultAllow(nil) == acl.Allow
+	if defaultIntentionPolicy != "" {
+		defaultAllow = defaultIntentionPolicy == structs.IntentionDefaultPolicyAllow
+	}
+	return defaultAllow
+}
+```
+
+`agent/consul/util.go`
+
+决策计算走 state store 的 `IntentionDecision`（匹配 source/destination + 通配符 + 权限）。数据面上 deny 的表现是**不生成 cluster/listener**（隐式黑洞）而非显式 REJECT——排查"连不通"时要先查 intention 是否缺配。
+
+## Transparent Proxy: iptables → nftables
+
+2.x 的透明代理重定向已从 iptables 迁移到 **nftables**（`consul connect redirect-traffic`），用 inet family 一套规则同时覆盖 IPv4/IPv6，不再需要 ip6tables 二次配置：
+
+```go
+	// ProxyInboundRedirectChain is the chain to redirect inbound traffic to the proxy.
+	ProxyInboundRedirectChain = "CONSUL_PROXY_IN_REDIRECT"
+
+	// ProxyOutputRedirectChain is the chain to redirect outbound traffic to the proxy
+	ProxyOutputRedirectChain = "CONSUL_PROXY_REDIRECT"
+
+	// DNSChain is the chain to redirect outbound DNS traffic to Consul DNS.
+	DNSChain = "CONSUL_DNS_REDIRECT"
+```
+
+`sdk/nftables/nftables.go`
+
+```go
+// Setup will set up nftables interception and redirection rules
+// based on the configuration provided in cfg.
+// The inet address family is used so that a single rule set covers both
+// IPv4 and IPv6 traffic — no separate ip6tables pass is required.
+func Setup(cfg Config, dualStack bool) error {
+```
+
+`sdk/nftables/nftables.go`
+
+出站重定向端口默认 15001（`DefaultTProxyOutboundPort`）。2.x 的 mesh config entry 还新增了 cluster 级 TPROXY 选项（`TransparentProxyMeshConfig`）。
+
+## Config Entries
+
+网格的行为全部由 config entry 声明：`service-defaults`（协议）、`service-resolver`（子集/failover）、`service-router`（L7 路由）、`service-splitter`（流量切分）、`proxy-defaults`（Envoy 全局配置）、`mesh`、`ingress-gateway` / `terminating-gateway`（2.x 已合并进单文件 `config_entry_gateways.go`，terminating gateway 新增凭据注入 `CredentialInjection`）。这些 entry 存在 state store、经 Raft 复制，agent 侧由 `config_entry_backend` 订阅增量并喂给 proxycfg。
+
+## Comparison with Other Meshes
+
+| 维度 | Consul Mesh | Istio | Nacos |
 | :--- | :--- | :--- | :--- |
-| 服务网格 | 原生（Envoy mTLS + intentions） | 无（需自拼） | 无 |
-| mTLS | connect CA 自动签发轮转 | 需显式配 TLS | 无原生 |
-| L7 授权 | service-intentions | 无 | 无 |
-| 工作负载 | VM + K8s 统一 | — | — |
+| 发现底座 | 自带 catalog（同源） | 依赖外部（K8s/Istiod） | 无 mesh |
+| CA | Connect CA（内置/Vault） | istiod 自签 | 无 |
+| 授权 | intentions（L4/L7） | AuthorizationPolicy | 无 |
+| xDS | delta ADS（SOTW 已废弃） | SOTW + delta | 无 |
+| 控制面依赖 | 无（agent 即控制面） | istiod 独立部署 | 无 |
 
-Consul 的不可替代点正是"注册发现 + mTLS 零信任 + 跨机房"一条龙；etcd 只做 KV，网格要自己拿 Envoy 拼（见 [etcd security](/docs/CS/Framework/etcd/security.md)）。代价是引入了 sidecar 资源开销与 xDS 配置复杂度。
+Consul mesh 的独特优势是**控制面与注册中心同源**——不需要额外的发现组件；代价是仅 Consul 目录内的服务可入网格，跨系统服务要用 terminating gateway 桥接。
 
 ## Links
 
-- [Consul（架构与启动流程）](/docs/CS/Framework/consul/Consul.md)
+- [Consul（枢纽与架构）](/docs/CS/Framework/consul/Consul.md)
+- [Security（ACL 与传输 TLS）](/docs/CS/Framework/consul/security.md)
 - [Gateway（网关与联邦）](/docs/CS/Framework/consul/gateway.md)
-- [Security（安全）](/docs/CS/Framework/consul/security.md)
 - [Discovery（服务发现）](/docs/CS/Framework/consul/discovery.md)
-- [Troubleshooting（故障排查）](/docs/CS/Framework/consul/troubleshooting.md)
-- [etcd security](/docs/CS/Framework/etcd/security.md)
+- [Raft（共识）](/docs/CS/Framework/consul/raft.md)
+- [Istio](/docs/CS/Framework/Istio/Istio.md)
 
 ## References
 
 1. [Consul Service Mesh](https://developer.hashicorp.com/consul/docs/connect)
-2. [Consul Config Entries](https://developer.hashicorp.com/consul/docs/reference/config-entries)
-3. [Consul Connect CA](https://developer.hashicorp.com/consul/docs/connect/ca)
-4. [Consul Service Intentions](https://developer.hashicorp.com/consul/docs/connect/intentions)
+2. [Envoy xDS delta protocol](https://www.envoyproxy.io/docs/envoy/latest/api-docs/xds_protocol)
+3. [hashicorp/consul v2.1.0 xds/delta.go](https://github.com/hashicorp/consul/blob/v2.1.0/agent/xds/delta.go)
+4. [Intentions](https://developer.hashicorp.com/consul/docs/connect/intentions)

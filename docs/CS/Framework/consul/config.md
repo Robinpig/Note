@@ -3,7 +3,7 @@
 Consul 用 **HCL**（也接受 JSON）描述配置：`consul agent -config-file=<f>` 读单个文件，或 `-config-dir=<dir>` 合并目录下所有 `.hcl`/`.json`（按字母序，后加载覆盖前）。本篇按子系统罗列最常用的 HCL 参数与三类典型组合；逐项默认值与全量字段以官方 [Agent Configuration](https://developer.hashicorp.com/consul/docs/reference/configuration) 为准。集群引导/备份/升级见 [Cluster](/docs/CS/Framework/consul/cluster.md)，安全细节见 [Security](/docs/CS/Framework/consul/security.md)，调优项见 [Tuning](/docs/CS/Framework/consul/tuning.md)。
 
 > [!NOTE]
-> 版本事实：2.0.x 当前主线（2.0.4，2026-09-09）。2.0.0 把默认 HTTP 读超时提高到 15 分钟、Go 升到 1.26，配置项总体向后兼容。
+> 版本事实：2.x 主线（本文核自 v2.1.0）。2.x 新增 **`raft_logstore.backend`**（`wal`/`boltdb`，全新数据目录默认 WAL）与 gRPC TLS 端口（server 模式默认 8503）；2.0.0 把默认 HTTP 读超时提高到 15 分钟，配置项总体向后兼容。
 
 ## Key Parameters by Group
 
@@ -18,8 +18,10 @@ Consul 用 **HCL**（也接受 JSON）描述配置：`consul agent -config-file=
 | Server | `server` | `false` | `true` 即以 server 模式启动 |
 | Server | `bootstrap_expect` | 0 | 期望 server 数（3/5）；达到即自动引导 |
 | Server | `retry_join` | — | 启动时尝试加入的 server 地址列表（支持云自动发现） |
-| Raft | `raft_multiplier` | `5` | 缩放 Raft 心跳/选举节拍，调小更激进、调大更省 |
-| Raft | `raft_snapshot_threshold` | `16384` | 两次快照间最少提交条目数 |
+| Raft | `raft_multiplier` | `5` | 缩放 Raft 心跳/选举节拍（范围 1–10），调小更激进、调大更省 |
+| Raft | `raft_snapshot_threshold` | `16384` | 两次快照间最少提交条目数；`raft_snapshot_interval` 默认 30s |
+| Raft | `raft_logstore.backend` | `wal`（新目录）/ `boltdb` | 2.x 新增；已有 `raft.db` 时 wal 配置被忽略并告警 |
+| Blocking | `limits.http_max_conns_per_client` 等 | — | 阻塞查询默认等待 300s、硬上限 600s（`agent/consul/config.go`） |
 | Serf | `retry_join_wan` | — | 跨 DC 加入 WAN gossip 池 |
 | Serf | `serf_lan_reconnect_timeout` | — | LAN 重连窗口（跨 AZ 可调大） |
 | ACL | `acl.enabled` | `false` | 是否启用 ACL（生产必须 `true`） |
@@ -106,7 +108,6 @@ primary_datacenter = "dc1"      # ACL / connect CA 权威源，所有 DC 必须�
 - [Cluster（集群运维）](/docs/CS/Framework/consul/cluster.md)
 - [Security（安全）](/docs/CS/Framework/consul/security.md)
 - [Tuning（调优）](/docs/CS/Framework/consul/tuning.md)
-- [Architecture（架构深潜）](/docs/CS/Framework/consul/architecture.md)
 - [Troubleshooting（故障排查）](/docs/CS/Framework/consul/troubleshooting.md)
 - [etcd 配置对照](/docs/CS/Framework/etcd/etcd.md)
 

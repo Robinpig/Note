@@ -2,7 +2,7 @@
 
 cc-haha、Claude Code、OpenCode 是三条**不同的架构路线**，常被混为一谈。把三者放在一起对照，能看清「桌面复刻」「官方闭源」「开源客户端/服务器」各自的选择与代价。
 
-- **Claude Code** = Anthropic 官方终端 harness，把厂商能力用得最透（基线 `@anthropic-ai/claude-code` 2.1.302，官方仓库已公开但不开放应用源码，详见 [ClaudeCode](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/ClaudeCode.md)）。
+- **Claude Code** = Anthropic 官方终端 harness，把厂商能力用得最透（基线 `@anthropic-ai/claude-code` 2.1.326，官方仓库已公开但不开放应用源码——可源码级挖的是类型契约与 5 个官方 mod，详见 [ClaudeCode](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/ClaudeCode.md)）。
 - **OpenCode** = 开源（MIT）客户端/服务器架构，内核是本地 HTTP 服务，TUI/Web/IDE 都是客户端，模型无关（基线 npm `opencode-ai` 1.19.2，详见 [OpenCode](/docs/CS/AI/LLM/Agent/Product/OpenCode/OpenCode.md)）。
 - **cc-haha** = 开源（MIT）**Claude Code 引擎复刻 + Electron 桌面工作台**（基线 v0.7.7 本地源码快照），在同源 harness 上叠 GUI 层与远程/IM 通道（详见 [CcHaha](/docs/CS/AI/LLM/Agent/Product/CcHaha/CcHaha.md)）。
 
