@@ -153,7 +153,7 @@ Embedding 与 Rerank 是独立可替换的：
 
 > [!WARNING]
 >
-> 上表钉的 `minio/minio:RELEASE.2025-06-13T11-33-47Z-cpuv1` 属于已停更的 MinIO 社区版：官方镜像 `minio/minio` 与 `minio/mc` 已于 2026-09-11 从 Docker Hub 删除，该 tag 如今拉不到。沿用同一份 compose 时可换成社区维护 fork [Silo](/docs/CS/Distributed/Silo.md)（`pgsty/silo`，S3 协议与 `xl.meta` 磁盘格式兼容、drop-in 替换、继续收 CVE 修复）。
+> 上表钉的 `minio/minio:RELEASE.2025-06-13T11-33-47Z-cpuv1` 属于已停更的 MinIO 社区版：官方镜像 `minio/minio` 与 `minio/mc` 已于 2026-09-11 从 Docker Hub 删除，该 tag 如今拉不到。沿用同一份 compose 时可换成社区维护 fork [Silo](/docs/CS/Distributed/Silo/Silo.md)（`pgsty/silo`，S3 协议与 `xl.meta` 磁盘格式兼容、drop-in 替换、继续收 CVE 修复）。
 
 ## Event Bus
 
