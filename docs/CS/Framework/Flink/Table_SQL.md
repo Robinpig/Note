@@ -32,6 +32,105 @@ SELECT * FROM TO_CHANGELOG(aggregated_table);
 
 `TO_CHANGELOG` 是**第一个在 SQL 层把 retract / upsert 流转成 append 形式**的算子，适合归档、审计、写 append-only sink。2.3 只覆盖基础场景，`PARTITION BY` / `invalid_op_handling` / `produces_full_deletes` 留到 2.4。
 
+#### Source-level mechanics
+
+> [!NOTE]
+> 版本基线：Flink **2.3.0**（tag `release-2.3.0`）。下文源码片段均取自该 tag，路径相对仓库根目录，不带行号。
+
+这两个 PTF 在 `flink-table/flink-table-runtime/.../functions/ptf/` 下各对应一个 `BuiltInProcessTableFunction`，实现比概念描述更直白——**它们只做 RowKind 与操作码字符串的互转，不碰状态**：
+
+`ToChangelogFunction` 把每条输入行的 `RowKind` 映射成操作码，拼到输出行的最前面（输出 schema 为 `[op_column, ...input_columns]`），因此输出一定是 INSERT-only：
+
+```java
+/**
+ * Converts each input row into an INSERT-only output row with an operation code column. The
+ * output schema is {@code [op_column, ...all_input_columns...]}.
+ */
+public class ToChangelogFunction extends BuiltInProcessTableFunction<RowData> {
+
+    private static final Map<RowKind, String> DEFAULT_OP_MAPPING =
+            Map.of(
+                    RowKind.INSERT, "INSERT",
+                    RowKind.UPDATE_BEFORE, "UPDATE_BEFORE",
+                    RowKind.UPDATE_AFTER, "UPDATE_AFTER",
+                    RowKind.DELETE, "DELETE");
+```
+
+无法映射的 RowKind 直接跳过（不报错），这正是"转换成 append 流"的实现方式——把撤回语义编码进数据列：
+
+```java
+public void eval(
+        final Context ctx,
+        final RowData input,
+        @Nullable final ColumnList op,
+        @Nullable final MapData opMapping) {
+    final StringData opCode = opMap.get(input.getRowKind());
+    if (opCode == null) {
+        return;
+    }
+
+    opRow.setField(0, opCode);
+    collect(output.replace(opRow, input));
+}
+```
+
+`FromChangelogFunction` 是逆过程：从 append 流里读操作码列，设置回 `RowKind`；**NULL 或非法操作码直接抛 `TableRuntimeException`**，不做容错——这与 `TO_CHANGELOG` 的静默跳过不对称，是排障时要留意的点：
+
+```java
+public void eval(
+        final Context ctx,
+        final RowData input,
+        @Nullable final ColumnList op,
+        @Nullable final MapData opMapping) {
+    if (input.isNullAt(opColumnIndex)) {
+        throw new TableRuntimeException(
+                "Received NULL op code. Every changelog row must carry an operation code.");
+    }
+    final StringData opCode = input.getString(opColumnIndex);
+    final RowKind rowKind = opMap.get(opCode);
+    if (rowKind == null) {
+        throw new TableRuntimeException(
+                String.format(
+                        "Received invalid op code '%s'. Defined op codes are: %s.",
+                        opCode, opMap.keySet()));
+    }
+
+    projectedOutput.replaceRow(input);
+    projectedOutput.setRowKind(rowKind);
+    collect(projectedOutput);
+}
+```
+
+操作码映射支持逗号分隔的"多 RowKind → 同一码"（如 `"INSERT, UPDATE_AFTER"`），因此可以把 upsert 流折叠成更粗粒度的语义。
+
+> [!NOTE]
+> 别把这里的 `ChangelogStreamWrapper` 与 SQL changelog 混淆：`flink-dstl/flink-dstl-dfs/.../ChangelogStreamWrapper.java` 是 **DSTL 状态变更日志的文件流包装器**（Snappy 压缩 + seek），服务于 changelog state backend，与 `FROM_CHANGELOG` / `TO_CHANGELOG` 两个 SQL PTF 无关。
+
+changelog 模式本身在 `flink-table-common/.../connector/ChangelogMode.java` 定义，四种标准模式由 `RowKind` 集合 + `keyOnlyDeletes` 标志构成：
+
+```java
+private static final ChangelogMode INSERT_ONLY =
+        ChangelogMode.newBuilder().addContainedKind(RowKind.INSERT).build();
+
+private static final ChangelogMode UPSERT =
+        ChangelogMode.newBuilder()
+                .addContainedKind(RowKind.INSERT)
+                .addContainedKind(RowKind.UPDATE_AFTER)
+                .addContainedKind(RowKind.DELETE)
+                .keyOnlyDeletes(true)
+                .build();
+
+private static final ChangelogMode ALL =
+        ChangelogMode.newBuilder()
+                .addContainedKind(RowKind.INSERT)
+                .addContainedKind(RowKind.UPDATE_BEFORE)
+                .addContainedKind(RowKind.UPDATE_AFTER)
+                .addContainedKind(RowKind.DELETE)
+                .build();
+```
+
+`UPSERT` 与 `UPSERT_WITH_FULL_DELETES` 的**唯一差别是 `keyOnlyDeletes`**——这决定 DELETE 消息是否只带主键。这就是为什么 Upsert Kafka 能只靠 key 删除，而普通 sink 需要整行。
+
 ### Upsert Sink 的显式冲突策略（2.3）
 
 当上游 upsert key 与 sink 主键不一致时（多级变换、projection、join 常见），旧版靠 `SinkUpsertMaterializer` 物化全量更新历史，状态无界增长。2.3（FLIP-558）改为**默认在 plan 阶段直接报错**，必须显式声明冲突策略：
@@ -123,6 +222,49 @@ AS SELECT user_id, COUNT(*) AS cnt, SUM(amount) AS total
 - 2.3 进一步（FLIP-557 / FLIP-550）支持**原地演进查询定义**：改定义不必 drop + recreate 再重跑全部历史，直接省掉重算开销；
 - 与 Paimon 等湖格式结合后，就是 Flink 主推的 **Streaming Lakehouse**：实时写入湖表，查询侧既能读实时增量也能读历史快照。
 
+#### Source-level refresh workflow
+
+`MaterializedTableManager`（`flink-table/flink-sql-gateway/.../materializedtable/`）按 `RefreshMode` 走两条完全不同的路，这是理解"物化表到底跑什么作业"的关键：
+
+```java
+if (RefreshMode.CONTINUOUS == materializedTable.getRefreshMode()) {
+    createMaterializedTableInContinuousMode(
+            operationExecutor, handle, createMaterializedTableOperation);
+} else {
+    createMaterializedTableInFullMode(
+            operationExecutor, handle, createMaterializedTableOperation);
+}
+```
+
+- **CONTINUOUS**：直接提交一个常驻流作业（`executeContinuousRefreshJob`）。提交失败时会反过来 drop 已建的表，源码注释明确这是 "weak atomicity"——不是事务，靠补偿动作兜底：
+```java
+} catch (Exception e) {
+    // drop materialized table while submit flink streaming job occur exception. Thus, weak
+    // atomicity is guaranteed
+    operationExecutor.callExecutableOperation(
+            handle, new DropMaterializedTableOperation(materializedTableIdentifier, true));
+    throw new SqlExecutionException(...);
+}
+```
+- **FULL**：不提交常驻作业，而是把 freshness 转成 cron，通过 `WorkflowScheduler.createRefreshWorkflow()` 交给外部调度器（`CreatePeriodicRefreshWorkflow`），并把序列化后的 `RefreshHandler` 写回 catalog。没有配置 scheduler 就直接报错：
+```java
+if (workflowScheduler == null) {
+    throw new SqlExecutionException(
+            "The workflow scheduler must be configured when creating materialized table in full refresh mode.");
+}
+final IntervalFreshness freshness = catalogMaterializedTable.getDefinitionFreshness();
+String cronExpression = convertFreshnessToCron(freshness);
+CreateRefreshWorkflow createRefreshWorkflow =
+        new CreatePeriodicRefreshWorkflow(
+                materializedTableIdentifier,
+                catalogMaterializedTable.getExpandedQuery(),
+                cronExpression,
+                ...);
+RefreshHandler refreshHandler = workflowScheduler.createRefreshWorkflow(createRefreshWorkflow);
+```
+
+`RefreshMode` 枚举只有 `CONTINUOUS` 与 `FULL` 两个值（在 `CatalogMaterializedTable` 内定义）。所以"改查询定义原地演进"不是改了作业本身，而是按模式分别更新流作业或周期 workflow 的定义。
+
 > [!WARNING]
 > 2.3 修复了 `MiniBatchGroupAggFunction` 的**静默丢数据**缺陷（FLINK-35661）：当某个 key 的 mini-batch 全是撤回且无既有状态时，函数会提前返回，把 bundle 里剩余 key 全部丢掉。触发条件是 `ONE_PHASE` 聚合 + minibatch，这是从 2.2 升级到 2.3 的硬理由。
 
@@ -133,6 +275,13 @@ AS SELECT user_id, COUNT(*) AS cnt, SUM(amount) AS total
 - 主体 ETL、聚合、join 用 SQL 写（开发快、优化器兜底）；
 - 复杂状态机、CEP、自定义调度用 DataStream 的 `ProcessFunction` 写（控制力强）；
 - 二者在中间通过 changelog 流衔接。
+
+## Why This Shape
+
+- **为什么 changelog 模式是 connector 契约**：`ChangelogMode` 用 `RowKind` 集合 + `keyOnlyDeletes` 精确描述"上游会发什么"，sink 据此决定能否接受；模式不匹配要在规划期发现，而不是运行时写出重复行。
+- **为什么 `TO_CHANGELOG` 只是加操作码列**：它不维护任何状态，把 `-U/-D` 的语义编码进 append 行的首列，从而让不支持 retract 的 append-only sink 也能消费更新流；代价是下游必须理解操作码才能还原语义。
+- **为什么两个 PTF 的错误处理不对称**：`FROM_CHANGELOG` 遇到非法操作码抛异常（数据本身坏了，继续跑只会污染结果），`TO_CHANGELOG` 遇到无法映射的 RowKind 跳过（正常的模式收敛行为）。
+- **为什么物化表要分 CONTINUOUS / FULL 两条路**：前者是常驻流作业、低延迟；后者是 cron 触发的批作业、省资源。把二者塞进一个执行模型会同时在延迟和成本上妥协，所以源码在 `RefreshMode` 处就分叉。
 
 ## Links
 
@@ -149,3 +298,7 @@ AS SELECT user_id, COUNT(*) AS cnt, SUM(amount) AS total
 2. [Flink Docs - Window TVF](https://nightlies.apache.org/flink/flink-docs-stable/docs/dev/table/sql/queries/window-tvf/)
 3. [Flink Docs - Joins in Continuous Queries](https://nightlies.apache.org/flink/flink-docs-stable/docs/dev/table/sql/queries/joins/)
 4. [Apache Flink 2.0.0 Release Announcement（物化表、自适应批执行、Streaming Lakehouse）](https://flink.apache.org/2025/03/24/apache-flink-2.0.0-a-new-era-of-real-time-data-processing)
+5. [Flink 2.3.0 Source: ToChangelogFunction.java](https://github.com/apache/flink/blob/release-2.3.0/flink-table/flink-table-runtime/src/main/java/org/apache/flink/table/runtime/functions/ptf/ToChangelogFunction.java)
+6. [Flink 2.3.0 Source: FromChangelogFunction.java](https://github.com/apache/flink/blob/release-2.3.0/flink-table/flink-table-runtime/src/main/java/org/apache/flink/table/runtime/functions/ptf/FromChangelogFunction.java)
+7. [Flink 2.3.0 Source: ChangelogMode.java](https://github.com/apache/flink/blob/release-2.3.0/flink-table/flink-table-common/src/main/java/org/apache/flink/table/connector/ChangelogMode.java)
+8. [Flink 2.3.0 Source: MaterializedTableManager.java](https://github.com/apache/flink/blob/release-2.3.0/flink-table/flink-sql-gateway/src/main/java/org/apache/flink/table/gateway/service/materializedtable/MaterializedTableManager.java)
