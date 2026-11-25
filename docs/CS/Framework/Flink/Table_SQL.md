@@ -19,6 +19,31 @@ Table API 与 SQL 是 Flink 的**声明式**编程接口：用户描述"要什�
 
 下游 sink 必须能匹配上游的 changelog 模式：upsert 流写普通 Kafka topic 会产生重复行，应写入 Upsert Kafka、JDBC（带主键）、湖表等支持更新的目标（见 [Connector](/docs/CS/Framework/Flink/Connector.md)）。
 
+### Changelog Conversion Operators（2.3）
+
+DataStream API 早就有 `toChangelogStream()` / `fromChangelogStream()`，2.3 把等价能力带进 SQL（FLIP-564，两个内置 PTF）：
+
+```sql
+-- 带操作列的 append 流 → 动态表（op_mapping 可映射自定义 CDC 格式）
+SELECT * FROM FROM_CHANGELOG(append_stream, DESCRIPTOR(op), ['I','U','D']);
+-- 动态表 → append-only changelog 流（把 retract/upsert 流转成 append）
+SELECT * FROM TO_CHANGELOG(aggregated_table);
+```
+
+`TO_CHANGELOG` 是**第一个在 SQL 层把 retract / upsert 流转成 append 形式**的算子，适合归档、审计、写 append-only sink。2.3 只覆盖基础场景，`PARTITION BY` / `invalid_op_handling` / `produces_full_deletes` 留到 2.4。
+
+### Upsert Sink 的显式冲突策略（2.3）
+
+当上游 upsert key 与 sink 主键不一致时（多级变换、projection、join 常见），旧版靠 `SinkUpsertMaterializer` 物化全量更新历史，状态无界增长。2.3（FLIP-558）改为**默认在 plan 阶段直接报错**，必须显式声明冲突策略：
+
+```sql
+INSERT INTO target_table SELECT * FROM source
+ON CONFLICT DO DEDUPLICATE;   -- DO NOTHING / DO ERROR / DO DEDUPLICATE
+```
+
+> [!WARNING]
+> 这是 2.3 的**有意为之的破坏性变化**：2.2 能正常规划的查询，在 2.3 可能因缺 `ON CONFLICT` 而规划失败。升级前先检查所有写入主键表的 INSERT 语句。
+
 ## 时间属性
 
 SQL 里的时间与 DataStream 一一对应，通过 DDL 定义：
@@ -95,7 +120,11 @@ AS SELECT user_id, COUNT(*) AS cnt, SUM(amount) AS total
 
 - 用户只写查询结果的定义，框架按刷新间隔在后台持续维护这张表；
 - 2.0 起支持**修改 schema 与查询定义**（无需重跑历史数据），并支持把刷新作业提交到 YARN / Kubernetes；
+- 2.3 进一步（FLIP-557 / FLIP-550）支持**原地演进查询定义**：改定义不必 drop + recreate 再重跑全部历史，直接省掉重算开销；
 - 与 Paimon 等湖格式结合后，就是 Flink 主推的 **Streaming Lakehouse**：实时写入湖表，查询侧既能读实时增量也能读历史快照。
+
+> [!WARNING]
+> 2.3 修复了 `MiniBatchGroupAggFunction` 的**静默丢数据**缺陷（FLINK-35661）：当某个 key 的 mini-batch 全是撤回且无既有状态时，函数会提前返回，把 bundle 里剩余 key 全部丢掉。触发条件是 `ONE_PHASE` 聚合 + minibatch，这是从 2.2 升级到 2.3 的硬理由。
 
 ## 与 DataStream 的关系
 

@@ -1,4 +1,4 @@
-# Silo Storage Guard
+# Storage Guard
 
 ## Introduction
 
@@ -184,9 +184,9 @@ Windows 的 `Win32` 规范化层会剥掉路径分量末尾的空格与点，所
 
 ## Links
 
-- [Silo（专题枢纽）](/docs/CS/Distributed/Silo.md)
+- [Silo（专题枢纽）](/docs/CS/Distributed/Silo/Silo.md)
 - [Security Advisories（公告账本与 CVE 修复）](/docs/CS/Distributed/Silo/Security_Advisories.md)
-- [Architecture（fork 基线与 replace 机制）](/docs/CS/Distributed/Silo/Architecture.md)
+- [Architecture（fork 基线与 replace 机制）](/docs/CS/Distributed/Silo/Silo.md?id=architecture)
 - [Compatibility Guard（协议标识符冻结）](/docs/CS/Distributed/Silo/Compatibility_Guard.md)
 - [MinIO（上游与架构基准）](/docs/CS/Distributed/MinIO.md)
 

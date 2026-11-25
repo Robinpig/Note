@@ -178,8 +178,8 @@ CI 侧有 `vulncheck` workflow 做依赖漏洞扫描，配合 `buildscripts/reso
 
 ## Links
 
-- [Silo（专题枢纽）](/docs/CS/Distributed/Silo.md)
-- [Architecture（fork 基线与模块替换）](/docs/CS/Distributed/Silo/Architecture.md)
+- [Silo（专题枢纽）](/docs/CS/Distributed/Silo/Silo.md)
+- [Architecture（fork 基线与模块替换）](/docs/CS/Distributed/Silo/Silo.md?id=architecture)
 - [Storage Guard（节点间信任边界实现）](/docs/CS/Distributed/Silo/Storage_Guard.md)
 - [S3 Select Defense（有界读取与 SIMD 路径）](/docs/CS/Distributed/Silo/S3_Select_Defense.md)
 - [Compatibility Guard（协议标识符冻结）](/docs/CS/Distributed/Silo/Compatibility_Guard.md)

@@ -185,10 +185,10 @@ Silo 提供了 `buildscripts/heal-inconsistent-versions.sh` 与 `heal-inconsiste
 
 ## Links
 
-- [Silo（专题枢纽）](/docs/CS/Distributed/Silo.md)
+- [Silo（专题枢纽）](/docs/CS/Distributed/Silo/Silo.md)
 - [Compatibility Guard（兼容契约的 CI 强制）](/docs/CS/Distributed/Silo/Compatibility_Guard.md)
 - [Release Engineering（发布与制品矩阵）](/docs/CS/Distributed/Silo/Release_Engineering.md)
-- [Architecture（模块身份与 replace 机制）](/docs/CS/Distributed/Silo/Architecture.md)
+- [Architecture（模块身份与 replace 机制）](/docs/CS/Distributed/Silo/Silo.md?id=architecture)
 - [MinIO（上游与架构基准）](/docs/CS/Distributed/MinIO.md)
 - [Distributed Storage（对象存储分类枢纽）](/docs/CS/Distributed/Distributed_Storage.md)
 

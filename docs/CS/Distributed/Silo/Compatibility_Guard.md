@@ -247,8 +247,8 @@ ExecStart=/usr/bin/silo server $MINIO_OPTS $MINIO_VOLUMES
 
 ## Links
 
-- [Silo（专题枢纽）](/docs/CS/Distributed/Silo.md)
-- [Architecture（模块身份与 replace 机制）](/docs/CS/Distributed/Silo/Architecture.md)
+- [Silo（专题枢纽）](/docs/CS/Distributed/Silo/Silo.md)
+- [Architecture（模块身份与 replace 机制）](/docs/CS/Distributed/Silo/Silo.md?id=architecture)
 - [Release Engineering（守卫在 CI 中的位置）](/docs/CS/Distributed/Silo/Release_Engineering.md)
 - [Deployment and Migration（交付面改名的操作手册）](/docs/CS/Distributed/Silo/Deployment_and_Migration.md)
 - [MinIO（上游与架构基准）](/docs/CS/Distributed/MinIO.md)

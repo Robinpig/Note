@@ -184,10 +184,10 @@ git diff --check
 
 ## Links
 
-- [Silo（专题枢纽）](/docs/CS/Distributed/Silo.md)
+- [Silo（专题枢纽）](/docs/CS/Distributed/Silo/Silo.md)
 - [Security Advisories（公告账本与 CVE 条目）](/docs/CS/Distributed/Silo/Security_Advisories.md)
 - [Storage Guard（节点间信任边界）](/docs/CS/Distributed/Silo/Storage_Guard.md)
-- [Architecture（fork 基线与模块替换）](/docs/CS/Distributed/Silo/Architecture.md)
+- [Architecture（fork 基线与模块替换）](/docs/CS/Distributed/Silo/Silo.md?id=architecture)
 - [MinIO（上游与架构基准）](/docs/CS/Distributed/MinIO.md)
 
 ## References
