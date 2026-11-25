@@ -46,7 +46,7 @@ Spark 的部署回答两件事：**Driver 跑在哪**（deploy mode），以及*
 | SQL 默认行为 | ANSI 模式默认开启；默认表 provider 由 `spark.sql.sources.default` 决定 |
 | 其他 | servlet API 从 `javax` 迁到 `jakarta`；事件日志默认压缩与滚动归档 |
 
-稳定版节奏上，4.0 系列（2025 起）、4.1 系列、4.2.0（2026-07）都在维护中，生产选版本时应以官方 downloads 页标注的稳定版为准。
+稳定版节奏上，4.x 已进入季度发布节奏。截至源码基线核实日（2026-11），官方 downloads 页列出的稳定版为 **4.3.0（2026-10-30，最新）**、4.2.1 / 4.1.4 / 4.0.5（均 2026-10-27）与 3.5.10（2026-11-22，3.x 维护线）。生产选版本应以官方 downloads 页标注为准。本子树源码片段统一取自 4.3.0（tag `v4.3.0`，commit `98bc0212`）。
 
 ## Spark Connect
 
@@ -58,7 +58,7 @@ Spark Connect 把"客户端"与"Spark 集群"解耦：客户端通过 gRPC 把�
 - 多语言客户端（Python / Java / Scala / Go / Rust / Swift），跨语言能力对齐；
 - driver 与客户端隔离，稳定性更好、便于多租户与远程开发。
 
-Spark 4.0 起可用 `spark.api.mode` 开关，并提供了默认启用 Connect 的发行包；SQL/DataFrame 功能已基本对齐传统模式。
+Spark 4.0 起可用 `spark.api.mode` 开关，并提供了默认启用 Connect 的发行包；SQL/DataFrame 功能已基本对齐传统模式。4.3.0 进一步补上 REST 端点（列出与查看 sessions / operations）、端到端请求归因的 operation IDs，以及更完整的 JDBC driver（SPARK-57941 / 58547）。
 
 ## 资源与弹性
 

@@ -1,5 +1,8 @@
 ## Introduction
 
+> [!NOTE]
+> 本页源码基线：**Spark 4.3.0**（tag `v4.3.0`，commit `98bc0212`，2026-10-27）。以下片段均取自该 tag，不混用其它版本。
+
 Spark 的内存管理要同时伺候两类需求：**执行内存（execution）**（shuffle、排序、join、聚合）与**存储内存（storage）**（RDD 缓存、广播变量）。Spark 1.6 起引入**统一内存管理（Unified Memory Manager）**，让两者共享同一块内存池并允许互相借用——这就是 Spark 内存模型的核心。
 
 它与 [Shuffle](/docs/CS/Framework/Spark/Shuffle.md) 直接相关（shuffle 的缓冲区从这里申请），也是 [RDD](/docs/CS/Framework/Spark/RDD.md) 缓存能否放得下的决定因素。
@@ -35,9 +38,94 @@ Spark 的内存管理要同时伺候两类需求：**执行内存（execution）
 | 情形 | 行为 |
 | ---- | ---- |
 | execution 不够用，storage 有富余 | execution 可以**借** storage 的空间；必要时驱逐 storage 的缓存块（但不会把 storage 压到低于初始边界） |
-| storage 不够用，execution 有富余 | storage 可以**借** execution 的空间；但反过来 execution 不能强制收回这部分（只有 execution 自身释放后才归还） |
+| storage 不够用，execution 有富余 | storage 只能借 execution 的**空闲**部分；execution 不驱逐正在运行的 task 来让位 |
 
 这套设计的效果是：缓存少的作业几乎拿到全部内存做计算；缓存多的作业也能保住一部分缓存不被计算挤掉。代价是**缓存不再"一放就一辈子"**——被驱逐后用到时会重算（对 `MEMORY_ONLY` 尤其明显，必要时用 `MEMORY_AND_DISK`）。
+
+> [!WARNING]
+> 常见教材说"execution 借给 storage 的那部分，execution 不能强制收回，只能等 execution 自己释放"——**这在 4.3.0 源码里是错的**。execution 申请内存时会通过 `maybeGrowExecutionPool` 把 storage 借走的部分（`storagePool.poolSize - storageRegionSize`）也算进可回收量，主动驱逐缓存块收回。真正不可被夺的只有 `storageRegionSize` 以内的 storage 保留区。详见下面的源码。
+
+### Source: Borrowing Boundaries in `UnifiedMemoryManager`
+
+`maybeGrowExecutionPool` 是"execution 能收回多少 storage 内存"的权威答案。可回收量是 `max(storagePool.memoryFree, storagePool.poolSize - storageRegionSize)`——第二项正是 storage 从 execution 借走的部分。
+
+```scala
+    def maybeGrowExecutionPool(extraMemoryNeeded: Long): Unit = {
+      if (extraMemoryNeeded > 0) {
+        // There is not enough free memory in the execution pool, so try to reclaim memory from
+        // storage. We can reclaim any free memory from the storage pool. If the storage pool
+        // has grown to become larger than `storageRegionSize`, we can evict blocks and reclaim
+        // the memory that storage has borrowed from execution.
+        val memoryReclaimableFromStorage = math.max(
+          storagePool.memoryFree,
+          storagePool.poolSize - storageRegionSize)
+        if (memoryReclaimableFromStorage > 0) {
+          val spaceToReclaim = storagePool.freeSpaceToShrinkPool(
+            math.min(extraMemoryNeeded, memoryReclaimableFromStorage))
+          storagePool.decrementPoolSize(spaceToReclaim)
+          executionPool.incrementPoolSize(spaceToReclaim)
+        }
+      }
+    }
+```
+
+`computeMaxExecutionPoolSize` 则划出不可逾越的下界：扣掉 `min(storagePool.memoryUsed, storageRegionSize)`，保住 storage 的保留区不被 execution 抢走。
+
+```scala
+    def computeMaxExecutionPoolSize(): Long = {
+      val unmanagedMemory = getUnmanagedMemoryUsed(memoryMode)
+      val availableMemory = maxMemory - math.min(storagePool.memoryUsed, storageRegionSize)
+      math.max(0L, availableMemory - unmanagedMemory)
+    }
+
+    executionPool.acquireMemory(
+      numBytes, taskAttemptId, maybeGrowExecutionPool, () => computeMaxExecutionPoolSize())
+```
+
+反方向——storage 向 execution 借——只能拿空闲量，源码里没有驱逐 execution 的动作：
+
+```scala
+    if (numBytes > storagePool.memoryFree) {
+      val memoryBorrowedFromExecution = Math.min(executionPool.memoryFree,
+        numBytes - storagePool.memoryFree)
+      executionPool.decrementPoolSize(memoryBorrowedFromExecution)
+      storagePool.incrementPoolSize(memoryBorrowedFromExecution)
+    }
+    storagePool.acquireMemory(blockId, numBytes)
+```
+
+### Source: Fair Share in `ExecutionMemoryPool`
+
+execution pool 的分配用 `lock.synchronized` + `while(true)` 保证每个 task 的份额在 `[0, 1/N]` 之间，且至少要拿到 `1/(2N)` 才返回，否则 `lock.wait()` 等别人释放。每轮循环先调 `maybeGrowPool`——这是为了规避"新缓存块抢走本 task 正在等的 execution 空闲内存"的竞态。
+
+```scala
+      // In every iteration of this loop, we should first try to reclaim any borrowed execution
+      // space from storage. This is necessary because of the potential race condition where new
+      // storage blocks may steal the free execution memory that this task was waiting for.
+      maybeGrowPool(numBytes - memoryFree)
+      val maxPoolSize = computeMaxPoolSize()
+      val maxMemoryPerTask = maxPoolSize / numActiveTasks
+      val minMemoryPerTask = poolSize / (2 * numActiveTasks)
+      val maxToGrant = math.min(numBytes, math.max(0, maxMemoryPerTask - curMem))
+      val toGrant = math.min(maxToGrant, memoryFree)
+      if (toGrant < numBytes && curMem + toGrant < minMemoryPerTask) {
+        lock.wait()
+      } else {
+        memoryForTask(taskAttemptId) += toGrant
+        return toGrant
+      }
+```
+
+这解释了"executor cores 越多、单 task 内存越少"的机理：`numActiveTasks` 在分母上，cores 增加直接压低 `maxMemoryPerTask` 与 `minMemoryPerTask`。
+
+> [!TIP]
+> 4.3.0 新增 **unmanaged memory 追踪**（`getUnmanagedMemoryUsed`，注释点名 RocksDB state store、native lib、off-heap cache）。它同时从 `computeMaxExecutionPoolSize` 与 `acquireStorageMemory` 的上限里扣减，防止 JVM 之外分配的内存导致容器超限。另：经典教材里的 `dropBlockToMakeSpace` 在两个 Pool 中已不存在，驱逐统一收口到 `MemoryStore.evictBlocksToFreeSpace`。
+
+### Why This Shape
+
+- 用"可移动软边界 + 单向不可剥夺的保留区"而非静态硬分区，是为了让缓存少的计算型作业几乎拿到全部内存，同时保证缓存型作业的最低缓存不被挤出。
+- execution 能主动收回 storage 借走的部分（而非只能被动等待），是为了避免"一边 OOM、一边缓存占着借来的内存"的僵局；保留区机制则把驱逐的破坏性限制在缓存块（可重算）而非运行中的 task（不可重算）。
+- `1/N ~ 1/(2N)` 的份额区间用等待换公平：既防单个 task 独占全部 execution 内存饿死并发 task，又允许短任务快速拿到超过严格均分的空间。
 
 ## Tungsten：为什么 Spark 要自己管内存
 
@@ -89,3 +177,5 @@ JVM 对象模型对数据密集计算很不友好：每个对象有对象头、�
 1. [Spark Docs - Memory Tuning](https://spark.apache.org/docs/latest/tuning.html#memory-tuning)
 2. [Spark Docs - Configuration: Application / Memory](https://spark.apache.org/docs/latest/configuration.html#memory-management)
 3. [Project Tungsten: Bringing Apache Spark Closer to Bare Metal](https://www.databricks.com/blog/2015/04/28/project-tungsten-bringing-spark-closer-to-bare-metal.html)
+4. [UnifiedMemoryManager.scala @ v4.3.0](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/memory/UnifiedMemoryManager.scala)
+5. [ExecutionMemoryPool.scala @ v4.3.0](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/memory/ExecutionMemoryPool.scala)
