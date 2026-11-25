@@ -1,6 +1,8 @@
+# Redis Intset: Source Deep Dive
+
 ## Introduction
 
-
+> 版本基线：Redis 8.10.2（commit 498ecd0d）。以下结构定义与函数均取自该 tag。
 
 intset 是 [set](/docs/CS/DB/Redis/struct/set.md) 的一种实现
 
@@ -175,4 +177,5 @@ static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
 
 ## References
 
-1. [Redis intset.c](https://github.com/redis/redis/blob/unstable/src/intset.c)
+- <https://github.com/redis/redis/blob/8.10.2/src/intset.c>
+- <https://github.com/redis/redis/blob/8.10.2/src/intset.h>

@@ -1,6 +1,10 @@
+# etcd Index
+
 ## Introduction
 
 etcd 是 Kubernetes 的默认后端存储，也是一个通用的强一致键值仓库。本目录按"从对外 API 到底层存储"的纵向分层来组织笔记：请求先进入客户端 / API 接入层，经 Raft 达成共识，再落到 KV 状态机（MVCC + boltdb）完成持久化；协调原语、安全、运维、版本与横向对比则横贯或补充在这条主链之外。
+
+> 版本基线：etcd 3.7.4（commit 2e8a5c99，Go 1.26）。全目录笔记按该 tag 源码级重写；Raft 自 3.7 起外置为 `go.etcd.io/raft/v3` v3.7.0、v2store 已移除、protobuf 改 `google.golang.org/protobuf`、新增 `RangeStream`。详细纠偏见 [etcd 枢纽](/docs/CS/Framework/etcd/etcd.md)。
 
 [etcd](/docs/CS/Framework/etcd/etcd.md) 是概念枢纽：版本基线、分层导航与逐页索引都在这里。原先承载全部细节的单一长文（架构、构建部署、启动链、server、quota、节点消息处理、网络、Peer、特性）已按「启动 → 请求 → 特性」拆成 [boot](/docs/CS/Framework/etcd/boot.md) / [request](/docs/CS/Framework/etcd/request.md) / [features](/docs/CS/Framework/etcd/features.md)，避免与成熟的 [raft](/docs/CS/Framework/etcd/raft.md) / [net](/docs/CS/Framework/etcd/net.md) 分册重复。本页是这些笔记的导航索引：建议阅读顺序是「枢纽 → 启动与生命周期 → 请求处理路径 → 共识层 Raft → 存储与 MVCC 引擎 → 客户端与 API」，再按需跳到协调原语、安全、运维与版本对比。
 

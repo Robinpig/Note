@@ -4,7 +4,7 @@ Redis 本质上是一个通用的内存数据存储（in-memory datastore），�
 
 Pub/Sub 与 Streams 的核心区别在于"消息是否被存储"：Pub/Sub 是纯推送、即发即弃（fire-and-forget），服务器不保存消息；Streams 则是追加式（append-only）的持久化日志，支持消费者组、ACK 与重投。这与专门的消息中间件（Kafka、RabbitMQ）有明显差异：Kafka 是分布式、分区、可水平扩展的提交日志；RabbitMQ 是带交换器/队列、支持复杂路由与 ACK 的 AMQP broker。Redis 作为 MQ 胜在"零额外组件、延迟极低、与缓存/存储共用一个实例"，但牺牲了开箱即用的高可用复制语义、跨节点分区与默认持久化强度。
 
-> 版本说明（已联网核实）：截至 2026-10-06，Redis Open Source 当前稳定版为 **8.4.x**（`8.4.0` 于 **2025-11-18** GA，来源 redis.io 8.4 发版说明与 endoflife.date）。7.4 系列仍处支持期，但 8.4 为最新主干稳定版。下文命令以 Redis 8.x 为准。
+> 版本基线：Redis 8.10.2（commit 498ecd0d）。本文只讲「把 Redis 当队列用」的模式与投递语义；Stream 的底层数据结构（radix tree / listpack、PEL 的内部表示、 Consumer Group 结构）见 [struct/Stream](/docs/CS/DB/Redis/struct/Stream.md)，两者不重复。
 
 ```dot
 digraph RedisMQ {

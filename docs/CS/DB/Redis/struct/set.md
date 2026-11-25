@@ -1,4 +1,8 @@
+# Redis Set: Source Deep Dive
+
 ## Introduction
+
+> 版本基线：Redis 8.10.2（commit 498ecd0d）。以下编码与默认值均以该 tag 为准。
 
 set是无序集合 
 
@@ -21,7 +25,7 @@ Sets can be encoded as:
 1. [lookupKeyWrite](/docs/CS/DB/Redis/redisDb.md?id=add)
 2. [setTypeCreate](/docs/CS/DB/Redis/struct/zset.md)
 3. [dbAdd](/docs/CS/DB/Redis/redisDb.md?id=add)
-4. [setTypeCreate](/docs/CS/DB/Redis/struct/zset.md?id=zsetadd)
+4. [setTypeCreate](/docs/CS/DB/Redis/struct/zset.md?id=insertion-zsetadd)
 
 ```c
 // server.c
@@ -158,4 +162,5 @@ Set 的差集、并集和交集的计算复杂度较高，在数据量较大的�
 
 ## References
 
-1. [Redis sets](https://redis.io/docs/latest/develop/data-types/sets/)
+- <https://github.com/redis/redis/blob/8.10.2/src/t_set.c>
+- [Redis sets](https://redis.io/docs/latest/develop/data-types/sets/)

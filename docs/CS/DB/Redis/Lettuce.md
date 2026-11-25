@@ -1,5 +1,7 @@
 ## Introduction
 
+> 版本基线：Redis 8.10.2（commit 498ecd0d）。
+
 Lettuce 是基于 **Netty 的可伸缩 Redis 客户端**（Spring Data Redis / Spring Boot 2.x 起的默认客户端），与老牌 [Jedis](/docs/CS/DB/Redis/Jedis.md) 的关键差异是：它**线程安全且天生异步**——单个连接通过 Netty 的事件循环多路复用并发处理多个命令，不需要为每个线程借还连接；而 Jedis 的连接对象非线程安全，必须依赖 commons-pool2 连接池。
 
 ## Three Calling Methods

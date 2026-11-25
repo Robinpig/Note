@@ -1,4 +1,11 @@
+# Redis Ziplist (Historical): Source Deep Dive
+
 ## Introduction
+
+> [!WARNING]
+> 本篇是**历史/兼容篇**。Redis 7.0 起 ziplist 已被 **listpack** 全面接替；8.10.2 的 `object.h` 明确标注 `OBJ_ENCODING_ZIPLIST 5 /* No longer used: old list/hash/zset encoding. */`。`ziplist.c` 仍保留在源码树中，仅用于 RDB 旧格式加载与兼容，不再作为任何对象的当前编码。理解 8.x 的 hash/zset/list 请看 [Hash](/docs/CS/DB/Redis/struct/hash.md)、[Zset](/docs/CS/DB/Redis/struct/zset.md)、[List](/docs/CS/DB/Redis/struct/list.md) 与 [Listpack](/docs/CS/DB/Redis/struct/listpack.md)。
+
+> 版本基线：Redis 8.10.2（commit 498ecd0d）。本篇源码片段为**历史实现**（ziplist 在 8.10.2 仅存兼容代码），仅作原理背景，不代表当前对象的编码方式。
 
 The ziplist is a specially encoded dually linked list that is designed to be very memory efficient.
 It stores both strings and integer values, where **integers are encoded as actual integers instead of a series of characters**.
@@ -31,21 +38,21 @@ digraph  {
 
 
 
-[hash](/docs/CS/DB/Redis/struct/hash.md) and [zset](/docs/CS/DB/Redis/struct/zset.md) default use ziplist.
+> [!NOTE]
+> 以下「hash and zset default use ziplist」「list use quicklist based on ziplist」是 **7.0 以前的历史口径**，在 8.10.2 已不成立：hash/zset 小对象用 **listpack**（配置主名 `hash-max-listpack-*` / `zset-max-listpack-*`），list 小对象用单个 **listpack**、大对象用 QUICKLIST（节点是 listpack）。旧名 `hash-max-ziplist-*` / `zset-max-ziplist-*` / `list-max-ziplist-size` 仅作为兼容别名保留。
 
-[list use quicklist( based on ziplist)](/docs/CS/DB/Redis/struct/list.md).
-
-Hashes are encoded using a memory efficient data structure when they have a small number of entries, and the biggest entry does not exceed a given threshold.
-These thresholds can be configured using the following directives.
+历史上 [hash](/docs/CS/DB/Redis/struct/hash.md) 和 [zset](/docs/CS/DB/Redis/struct/zset.md) 在小对象时默认用 ziplist；[list](/docs/CS/DB/Redis/struct/list.md) 用基于 ziplist 的 quicklist。Hashes are encoded using a memory efficient data structure when they have a small number of entries, and the biggest entry does not exceed a given threshold. 历史阈值配置如下（8.10.2 已改名为 `hash-max-listpack-entries/value`）：
 
 ```
-# redis.conf
+# 历史 redis.conf（7.0 前）
 hash-max-ziplist-entries 512
 hash-max-ziplist-value 64
 ```
 
+历史工厂函数（**8.10.2 已删除 `createZiplistObject`**，此处仅作历史留档）：
+
 ```c
-// object.c
+// object.c（历史版本）
 robj *createZiplistObject(void) {
     unsigned char *zl = ziplistNew();
     robj *o = createObject(OBJ_LIST,zl);
@@ -510,7 +517,7 @@ unsigned char *__ziplistCascadeUpdate(unsigned char *zl, unsigned char *p) {
 虽然 ziplist 通过紧凑的内存布局来保存数据，节省了内存空间，但是 ziplist 也面临着随之而来的两个不足：查找复杂度高和潜在的连锁更新风险
 
 要查找列表中间的元素时，ziplist 就得从列表头或列表尾遍历才行。而当 ziplist 保存的元素过多时，查找中间数据的复杂度就增加了。更糟糕的是，如果 ziplist 里面保存的是字符串，ziplist 在查找某个元素时，还需要逐一判断元素的每个字符，这样又进一步增加了复杂度。
-也正因为如此，我们在使用 ziplist 保存 Hash 或 Sorted Set 数据时，都会在 redis.conf 文件中，通过 hash-max-ziplist-entries 和 zset-max-ziplist-entries 两个参数，来控制保存在 ziplist 中的元素个数
+也正因为如此，历史上用 ziplist 保存 Hash 或 Sorted Set 数据时，会通过 `hash-max-ziplist-entries` 和 `zset-max-ziplist-entries` 控制元素个数；8.10.2 对应主名已改为 `hash-max-listpack-entries` / `zset-max-listpack-entries`（旧名仍是兼容别名），且底层编码已是 listpack。连锁更新正是 listpack 用「各 entry 自描述长度、不记录前驱长度」来解决的问题，详见 [Listpack](/docs/CS/DB/Redis/struct/listpack.md)。
 
 除了查找复杂度高以外，ziplist 在插入元素时，如果内存空间不够了，ziplist 还需要重新分配一块连续的内存空间，而这还会进一步引发连锁更新的问题
 因为 ziplist 必须使用一块连续的内存空间来保存数据，所以当新插入一个元素时，ziplist 就需要计算其所需的空间大小，并申请相应的内存空间
@@ -521,9 +528,13 @@ unsigned char *__ziplistCascadeUpdate(unsigned char *zl, unsigned char *p) {
 
 ## Links
 
-- [Sorted sets](/docs/CS/DB/Redis/struct/zset.md) 
+- [Sorted sets](/docs/CS/DB/Redis/struct/zset.md)
+- [Listpack（ziplist 的接替者）](/docs/CS/DB/Redis/struct/listpack.md)
+- [Quicklist](/docs/CS/DB/Redis/struct/quicklist.md)
 
 
 ## References
 
-1. [Redis ziplist.c (7.0 前)](https://github.com/redis/redis/blob/6.2/src/ziplist.c)
+- <https://github.com/redis/redis/blob/8.10.2/src/ziplist.c>（8.10.2 仅存兼容代码）
+- <https://github.com/redis/redis/blob/8.10.2/src/object.h>（`OBJ_ENCODING_ZIPLIST` 标注 No longer used）
+- <https://github.com/redis/redis/blob/6.2/src/ziplist.c>（历史实现参考）

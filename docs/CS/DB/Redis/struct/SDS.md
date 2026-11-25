@@ -1,4 +1,8 @@
+# Redis SDS (Simple Dynamic String): Source Deep Dive
+
 ## Introduction
+
+> 版本基线：Redis 8.10.2（commit 498ecd0d）。以下片段均取自该 tag，路径为 `src/` 相对路径。下文的 sdshdr5/8/16/32/64 结构仍与 8.10.2 的 `sds.h` 一致（sdshdr5 从不使用）。
 
 字符串的使用场景最为广泛， 例如计数器、缓存、分布式锁、用户登录 token 和登录信息存储等
 
@@ -698,4 +702,6 @@ SDS的特征
 
 ## References
 
-1. [Simple Dynamic Strings](https://github.com/antirez/sds)
+- <https://github.com/redis/redis/blob/8.10.2/src/sds.c>
+- <https://github.com/redis/redis/blob/8.10.2/src/sds.h>
+- [Simple Dynamic Strings](https://github.com/antirez/sds)

@@ -1,7 +1,7 @@
 ## Introduction
 
 > [!NOTE]
-> 版本基线 **Redis 8.10.2**；本页机制若与其他版本口径冲突，以 [Redis 版本基线](/docs/CS/DB/Redis/Redis.md?id=version-baseline) 为准。
+> 版本基线：Redis 8.10.2（commit 498ecd0d）。本页机制若与其他版本口径冲突，以 [Redis 版本基线](/docs/CS/DB/Redis/Redis.md?id=version-baseline) 为准。
 
 Redis Cluster is a distributed implementation of Redis with the following goals in order of importance in the design:
 
@@ -27,23 +27,29 @@ why redis-cluster use 16384 slots?
 >
 So 16k was in the right range to ensure enough slots per master with a max of 1000 maters, but a small enough number to propagate the slot configuration as a raw bitmap easily. Note that in small clusters the bitmap would be hard to compress because when N is small the bitmap would have slots/N bits set that is a large percentage of bits set.
 
+> [!NOTE]
+> 8.10.2 `src/cluster.h` 原文 `CLUSTER_SLOT_MASK_BITS 14` / `CLUSTER_SLOTS (1<<CLUSTER_SLOT_MASK_BITS)` = **16384**，所以 `clusterNode.slots[CLUSTER_SLOTS/8]` 正好 2048 字节——上面「2k of space」的出处就在源码里。
+>
+> **全覆盖是全有全无，不是「覆盖一半也能用」**：`cluster_legacy.c` 的 `clusterUpdateState()` 遍历 `j = 0..CLUSTER_SLOTS-1`，只要某 slot `slots[j] == NULL` 或其持有节点带 `CLUSTER_NODE_FAIL`，立即 `new_state = CLUSTER_FAIL; break;`——不存在中间态。该检查由 `cluster-require-full-coverage`（`config.c` 默认 `1`）控制，设为 `no` 才会跳过。
 
 clusterState
 
-```c
+8.10.2 的 `clusterState` 定义在 `cluster_legacy.h`（不再有 `slots_keys_count` / `slots_to_keys`，改为 `topology_change_flags` / `shards` / `internal_secret` 等）：
 
-typedef struct clusterState {
+```c
+struct clusterState {
     clusterNode *myself;  /* This node */
     uint64_t currentEpoch;
     int state;            /* CLUSTER_OK, CLUSTER_FAIL, ... */
     int size;             /* Num of master nodes with at least one slot */
+    uint64_t topology_change_flags; /* Pending RedisModuleEvent_ClusterTopologyChange reasons (REDISMODULE_CLUSTER_TOPOLOGY_CHANGE_FLAG_* bits) */
     dict *nodes;          /* Hash table of name -> clusterNode structures */
+    dict *shards;         /* Hash table of shard_id -> list (of nodes) structures */
     dict *nodes_black_list; /* Nodes we don't re-add for a few seconds. */
     clusterNode *migrating_slots_to[CLUSTER_SLOTS];
     clusterNode *importing_slots_from[CLUSTER_SLOTS];
     clusterNode *slots[CLUSTER_SLOTS];
-    uint64_t slots_keys_count[CLUSTER_SLOTS];
-    rax *slots_to_keys;
+    char internal_secret[CLUSTER_INTERNALSECRETLEN];
     /* The following fields are used to take the slave state on elections. */
     mstime_t failover_auth_time; /* Time of previous or next election. */
     int failover_auth_count;    /* Number of votes received so far. */
@@ -65,32 +71,43 @@ typedef struct clusterState {
     /* The following fields are used by masters to take state on elections. */
     uint64_t lastVoteEpoch;     /* Epoch of the last vote granted. */
     int todo_before_sleep; /* Things to do in clusterBeforeSleep(). */
+    /* Stats */
     /* Messages received and sent by type. */
     long long stats_bus_messages_sent[CLUSTERMSG_TYPE_COUNT];
     long long stats_bus_messages_received[CLUSTERMSG_TYPE_COUNT];
     long long stats_pfail_nodes;    /* Number of nodes in PFAIL status,
                                        excluding nodes without address. */
-} clusterState;
+    unsigned long long stat_cluster_links_buffer_limit_exceeded;  /* Total number of cluster links freed due to exceeding buffer limit */
+
+    /* Bit map for slots that are no longer claimed by the owner in cluster PING
+     * messages. During slot migration, the owner will stop claiming the slot after
+     * the ownership transfer. Set the bit corresponding to the slot when a node
+     * stops claiming the slot. This prevents spreading incorrect information (that
+     * source still owns the slot) using UPDATE messages. */
+    unsigned char owner_not_claiming_slot[CLUSTER_SLOTS / 8];
+};
 ```
 
 clusterNode
 
 ```c
-
-typedef struct clusterNode {
+struct _clusterNode {
     mstime_t ctime; /* Node object creation time. */
     char name[CLUSTER_NAMELEN]; /* Node name, hex string, sha1-size */
+    char shard_id[CLUSTER_NAMELEN]; /* shard id, hex string, sha1-size */
     int flags;      /* CLUSTER_NODE_... */
     uint64_t configEpoch; /* Last configEpoch observed for this node */
     unsigned char slots[CLUSTER_SLOTS/8]; /* slots handled by this node */
-    sds slots_info; /* Slots info represented by string. */
+    uint16_t *slot_info_pairs; /* Slots info represented as (start/end) pair (consecutive index). */
+    int slot_info_pairs_count; /* Used number of slots in slot_info_pairs */
     int numslots;   /* Number of slots handled by this node */
     int numslaves;  /* Number of slave nodes, if this is a master */
-    struct clusterNode **slaves; /* pointers to slave nodes */
-    struct clusterNode *slaveof; /* pointer to the master node. Note that it
-                                    may be NULL even if the node is a slave
-                                    if we don't have the master node in our
-                                    tables. */
+    clusterNode **slaves; /* pointers to slave nodes */
+    clusterNode *slaveof; /* pointer to the master node. Note that it
+                             may be NULL even if the node is a slave
+                             if we don't have the master node in our
+                             tables. */
+    unsigned long long last_in_ping_gossip; /* The number of the last carried in the ping gossip section */
     mstime_t ping_sent;      /* Unix time we sent latest ping */
     mstime_t pong_received;  /* Unix time we received the pong */
     mstime_t data_received;  /* Unix time we received any data */
@@ -99,14 +116,16 @@ typedef struct clusterNode {
     mstime_t repl_offset_time;  /* Unix time we received offset for this node */
     mstime_t orphaned_time;     /* Starting time of orphaned master condition */
     long long repl_offset;      /* Last known repl offset for this node. */
-    char ip[NET_IP_STR_LEN];  /* Latest known IP address of this node */
-    int port;                   /* Latest known clients port (TLS or plain). */
-    int pport;                  /* Latest known clients plaintext port. Only used
-                                   if the main clients port is for TLS. */
+    char ip[NET_IP_STR_LEN];    /* Latest known IP address of this node */
+    sds hostname;               /* The known hostname for this node */
+    sds human_nodename;         /* The known human readable nodename for this node */
+    int tcp_port;               /* Latest known clients TCP port. */
+    int tls_port;               /* Latest known clients TLS port */
     int cport;                  /* Latest known cluster port of this node. */
-    clusterLink *link;          /* TCP/IP link with this node */
+    clusterLink *link;          /* TCP/IP link established toward this node */
+    clusterLink *inbound_link;  /* TCP/IP link accepted from this node */
     list *fail_reports;         /* List of nodes signaling this as failing */
-} clusterNode;
+};
 ```
 
 
@@ -573,7 +592,7 @@ cluster-node-timeout 15000
 ## Msg
 
 ```c
-// cluster.h
+// cluster_legacy.h
 
 /* Message types.
  *
@@ -591,7 +610,8 @@ cluster-node-timeout 15000
 #define CLUSTERMSG_TYPE_UPDATE 7        /* Another node slots configuration */
 #define CLUSTERMSG_TYPE_MFSTART 8       /* Pause clients for manual failover */
 #define CLUSTERMSG_TYPE_MODULE 9        /* Module cluster API message. */
-#define CLUSTERMSG_TYPE_COUNT 10        /* Total number of message types. */
+#define CLUSTERMSG_TYPE_PUBLISHSHARD 10 /* Pub/Sub Publish shard propagation */
+#define CLUSTERMSG_TYPE_COUNT 11        /* Total number of message types. */
 ```
 
 ### handshake
@@ -658,6 +678,42 @@ int clusterStartHandshake(char *ip, int port, int cport) {
 ```
 
 ## Failover
+
+把前面的 Message types 与 Gossip 串起来看，一次完整的「故障发现 → 选主 → 接管」消息流是这样的：
+
+```dot
+digraph ClusterFailoverFlow {
+  rankdir=TB;
+  node [shape=box, style=rounded];
+
+  subgraph cluster_discover {
+    label="故障发现 / Gossip";
+    cron [label="clusterCron\n每秒 10 次"];
+    ping [label="PING / PONG\n携带 1/10 gossip 条目"];
+    pfail [label="PFAIL\nnode_delay > node-timeout"];
+    fail [label="FAIL\nFAIL 消息广播达多数"];
+    cron -> ping;
+    ping -> pfail [label="超时"];
+    pfail -> fail;
+  }
+
+  subgraph cluster_elect {
+    label="选主 / Election";
+    rep [label="Replica\nclusterHandleSlaveFailover"];
+    rank [label="计算 rank\n按 repl_offset 排名延迟 1s/rank"];
+    req [label="FAILOVER_AUTH_REQUEST\ncurrentEpoch++"];
+    ack [label="FAILOVER_AUTH_ACK\n每个 master 每 epoch 一票"];
+    win [label="拿到 N/2+1 票\nclusterFailoverReplaceYourMaster"];
+    rep -> rank;
+    rank -> req;
+    req -> ack;
+    ack -> win;
+  }
+
+  fail -> rep [label="master 进入 FAIL"];
+  win -> ping [label="广播 PONG 新配置", style=dashed];
+}
+```
 
 ### handleSlave
 

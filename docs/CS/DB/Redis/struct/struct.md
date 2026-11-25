@@ -1,4 +1,8 @@
+# Redis Data Structures: Overview
+
 ## Introduction
+
+> 版本基线：Redis 8.10.2（commit 498ecd0d）。本页及 `struct/` 子树所有编码枚举、默认值与命令可用性均以该 tag 为准；与 7.x 旧口径冲突处一律以本基线为准。
 
 要理解一个程序如何工作，最直接的办法是先理解它使用的数据结构。
 
@@ -49,7 +53,7 @@ Redis 内部大量使用 redis object，但为了避开间接访问的开销，�
 
 **压缩表示**：[ziplist](/docs/CS/DB/Redis/struct/ziplist.md) 与 [listpack](/docs/CS/DB/Redis/struct/listpack.md) 是 ziplist 及其后继listpack 的实现，小元素聚合编码依赖它们。
 
-**专用结构**：[Stream](/docs/CS/DB/Redis/struct/Stream.md) 是持久化消息流（rax 索引 + listpack 打包，消费组与 PEL）；[geo](/docs/CS/DB/Redis/struct/geo.md) 是经纬度编码（Zset 的 52 位地理哈希）；[HyperLogLog](/docs/CS/DB/Redis/struct/HyperLogLog.md) 与 [BloomFilter](/docs/CS/DB/Redis/struct/BloomFilter.md) 是两个近似基数/概率结构。
+**专用结构**：[Stream](/docs/CS/DB/Redis/struct/Stream.md) 是持久化消息流（rax 索引 + listpack 打包，消费组与 PEL）；[geo](/docs/CS/DB/Redis/struct/geo.md) 是经纬度编码（Zset 的 52 位地理哈希）；[HyperLogLog](/docs/CS/DB/Redis/struct/HyperLogLog.md) 与 [BloomFilter](/docs/CS/DB/Redis/struct/BloomFilter.md) 是两个近似基数/概率结构。Bloom / Cuckoo / Top-K / Count-min sketch 等概率结构自 **8.0 起作为 Redis 发行版内建组件**提供（`BF.*` 等命令随发行版捆绑、由 `redis-full.conf` 加载，**不是编译进 `redis-server` 核心**，在 redis/redis 主仓库 `src/commands.def` 搜不到）；全文搜索则由 Query Engine（原 RediSearch，8.0 起成为 Redis 一部分，`FT.*`）提供，详见 [RediSearch](/docs/CS/DB/Redis/RediSearch.md)。
 
 ## Data Types
 
@@ -104,13 +108,16 @@ Redis 实现的数据结构有几个特别之处：
 #define OBJ_ENCODING_RAW 0     /* Raw representation */
 #define OBJ_ENCODING_INT 1     /* Encoded as integer */
 #define OBJ_ENCODING_HT 2      /* Encoded as hash table */
-#define OBJ_ENCODING_ZIPMAP 3  /* Encoded as zipmap */
-#define OBJ_ENCODING_ZIPLIST 5 /* Encoded as ziplist */
+#define OBJ_ENCODING_ZIPMAP 3  /* No longer used: old hash encoding. */
+#define OBJ_ENCODING_LINKEDLIST 4 /* No longer used: old list encoding. */
+#define OBJ_ENCODING_ZIPLIST 5 /* No longer used: old list/hash/zset encoding. */
 #define OBJ_ENCODING_INTSET 6  /* Encoded as intset */
 #define OBJ_ENCODING_SKIPLIST 7  /* Encoded as skiplist */
 #define OBJ_ENCODING_EMBSTR 8  /* Embedded sds string encoding */
-#define OBJ_ENCODING_QUICKLIST 9 /* Encoded as linked list of ziplists */
+#define OBJ_ENCODING_QUICKLIST 9 /* Encoded as linked list of listpacks */
 #define OBJ_ENCODING_STREAM 10 /* Encoded as a radix tree of listpacks */
+#define OBJ_ENCODING_LISTPACK 11 /* Encoded as a listpack */
+#define OBJ_ENCODING_LISTPACK_EX 12 /* Encoded as listpack, extended with metadata */
 ```
 
 <!-- tabs:end -->
@@ -124,10 +131,10 @@ Redis 实现的数据结构有几个特别之处：
 | type | 常见 encoding | 底层结构 | 本库详页 |
 | :-- | :-- | :-- | :-- |
 | `OBJ_STRING` | `RAW`、`INT`、`EMBSTR` | SDS | [SDS](/docs/CS/DB/Redis/struct/SDS.md)、[bitmap](/docs/CS/DB/Redis/struct/bitmap.md) |
-| `OBJ_LIST` | `QUICKLIST` | 由 listpack（旧版 ziplist）串成的链表 | [list](/docs/CS/DB/Redis/struct/list.md)、[quicklist](/docs/CS/DB/Redis/struct/quicklist.md) |
+| `OBJ_LIST` | `LISTPACK`、`QUICKLIST` | 小 list 用单个 listpack，长大转由 listpack 串成的 quicklist | [list](/docs/CS/DB/Redis/struct/list.md)、[quicklist](/docs/CS/DB/Redis/struct/quicklist.md) |
 | `OBJ_SET` | `INTSET`、`HT` | 整数用紧凑数组，否则用字典 | [set](/docs/CS/DB/Redis/struct/set.md)、[intset](/docs/CS/DB/Redis/struct/intset.md) |
-| `OBJ_ZSET` | `SKIPLIST`、`LISTPACK` | 小集合用压缩列表，否则跳表 + 字典 | [zset](/docs/CS/DB/Redis/struct/zset.md)、[skiplist](/docs/CS/DB/Redis/struct/skiplist.MD) |
-| `OBJ_HASH` | `HT`、`LISTPACK` | 小集合用压缩列表，否则字典 | [hash](/docs/CS/DB/Redis/struct/hash.md) |
+| `OBJ_ZSET` | `LISTPACK`、`SKIPLIST` | 小集合用 listpack，否则跳表 + 字典 | [zset](/docs/CS/DB/Redis/struct/zset.md)、[skiplist](/docs/CS/DB/Redis/struct/skiplist.MD) |
+| `OBJ_HASH` | `LISTPACK`、`HT` | 小集合用 listpack，否则字典 | [hash](/docs/CS/DB/Redis/struct/hash.md) |
 | `OBJ_STREAM` | 由 listpack 组成的 radix tree | Stream 的条目打包 | [Stream](/docs/CS/DB/Redis/struct/Stream.md) |
 | `OBJ_MODULE` | 模块自定义 | 由模块自己决定 | [module](/docs/CS/DB/Redis/module.md) |
 
@@ -349,5 +356,6 @@ Redis 事务提供隔离性与一致性；若开启 AOF 且 `appendfsync always`
 
 ## References
 
-1. [A Crash Course in Redis](https://blog.bytebytego.com/p/a-crash-course-in-redis)
-2. [OBJECT ENCODING](https://redis.io/docs/latest/commands/object-encoding/)
+- <https://github.com/redis/redis/blob/8.10.2/src/object.h>
+- [OBJECT ENCODING](https://redis.io/docs/latest/commands/object-encoding/)
+- [A Crash Course in Redis](https://blog.bytebytego.com/p/a-crash-course-in-redis)

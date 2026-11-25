@@ -4,7 +4,7 @@
 > 版本基线 **Redis 8.10.2**。本页聚焦两件事：**IO 线程**（网络读写，主线程之外的 `io-threads`）与**惰性释放**（`bio.c` 的 lazy-free worker + `lazyfree.c`）。
 > 子进程模型与后台线程 worker 的划分见 [Concurrency.md](/docs/CS/DB/Redis/Concurrency.md)，本页不重复。
 >
-> ⚠️ 下文`struct bio_job` / `BIO_NUM_OPS 3` 的代码片段是 **Redis 6.x 形态**，仅作演进对照；8.10.2 已改为 `bio_worker_t`（3 个worker）+ `bio_job_type_t`（7 种 job）的双枚举结构，`bio_job` 被 `bio_job_hdr_t` 取代。**当前版本的代码以 [Concurrency.md](/docs/CS/DB/Redis/Concurrency.md) 一节为准。**
+> ⚠️ 下文 `struct bio_job` / `BIO_NUM_OPS 3` 的代码片段是 **Redis 6.x 形态**，仅作演进对照；8.10.2 已改为 `bio_worker_t`（3 个 worker）+ `bio_job_type_t`（7 种 job）的双枚举结构，`bio_job` 被 `bio_job_hdr_t` 取代。8.10.2 的真实定义见本页 [Background Jobs](#background-jobs) 开头的 `bio.h` 片段，完整辨析见 [Concurrency.md](/docs/CS/DB/Redis/Concurrency.md)。
 
 从 Redis 调试代码中，我们可以看到，Redis 线程主要分为 3 类：
 1. 主线程：负责程序的主逻辑，当然也负责 IO。
@@ -115,6 +115,29 @@ Redis 的多线程方案中，I/O 线程任务仅仅是通过 socket 读取客�
 #define BIO_AOF_FSYNC     1 /* Deferred AOF fsync. */
 #define BIO_LAZY_FREE     2 /* Deferred objects freeing. */
 #define BIO_NUM_OPS       3
+```
+
+8.10.2 的真实 `src/bio.h` 把它拆成两组枚举——**线程数看 `BIO_WORKER_NUM`，任务类型数看 `BIO_NUM_OPS`**，两者不要混用：
+
+```c
+typedef enum bio_worker_t {
+    BIO_WORKER_CLOSE_FILE = 0,
+    BIO_WORKER_AOF_FSYNC,
+    BIO_WORKER_LAZY_FREE,
+    BIO_WORKER_NUM
+} bio_worker_t;
+
+/* Background job opcodes */
+typedef enum bio_job_type_t {
+    BIO_CLOSE_FILE = 0,     /* Deferred close(2) syscall. */
+    BIO_AOF_FSYNC,          /* Deferred AOF fsync. */
+    BIO_LAZY_FREE,          /* Deferred objects freeing. */
+    BIO_CLOSE_AOF,
+    BIO_COMP_RQ_CLOSE_FILE,  /* Job completion request, registered on close-file worker's queue */
+    BIO_COMP_RQ_AOF_FSYNC,  /* Job completion request, registered on aof-fsync worker's queue */
+    BIO_COMP_RQ_LAZY_FREE,  /* Job completion request, registered on lazy-free worker's queue */
+    BIO_NUM_OPS
+} bio_job_type_t;
 ```
 
 ```c
@@ -369,17 +392,8 @@ Return the amount of work needed in order to free an object.
 - Objects composed of single allocations are always reported as having a single item even if they are actually logical composed of multiple elements. 
 - For lists the function returns the number of elements in the quicklist representing the list.
 ```c
-// lazyfree.c
-
-
-/* Delete a key, value, and associated expiration entry if any, from the DB.
- * If there are enough allocations to free the value object may be put into
- * a lazy free list instead of being freed synchronously. The lazy free list
- * will be reclaimed in a different bio.c thread. */
-#define LAZYFREE_THRESHOLD 64
-
-size_t lazyfreeGetFreeEffort(robj *key, robj *obj) {
-    if (obj->type == OBJ_LIST) {
+size_t lazyfreeGetFreeEffort(robj *key, robj *obj, int dbid) {
+    if (obj->type == OBJ_LIST && obj->encoding == OBJ_ENCODING_QUICKLIST) {
         quicklist *ql = obj->ptr;
         return ql->len;
     } else if (obj->type == OBJ_SET && obj->encoding == OBJ_ENCODING_HT) {
@@ -391,6 +405,9 @@ size_t lazyfreeGetFreeEffort(robj *key, robj *obj) {
     } else if (obj->type == OBJ_HASH && obj->encoding == OBJ_ENCODING_HT) {
         dict *ht = obj->ptr;
         return dictSize(ht);
+    } else if (obj->type == OBJ_HASH && obj->encoding == OBJ_ENCODING_TMPL_ARRAY) {
+        hashTemplateArray *hta = obj->ptr;
+        return hta->field_count;
     } else if (obj->type == OBJ_STREAM) {
         size_t effort = 0;
         stream *s = obj->ptr;
@@ -416,22 +433,23 @@ size_t lazyfreeGetFreeEffort(robj *key, robj *obj) {
         }
         return effort;
     } else if (obj->type == OBJ_MODULE) {
-        moduleValue *mv = obj->ptr;
-        moduleType *mt = mv->type;
-        if (mt->free_effort != NULL) {
-            size_t effort  = mt->free_effort(key,mv->value);
-            /* If the module's free_effort returns 0, it will use asynchronous free
-             memory by default */
-            return effort == 0 ? ULONG_MAX : effort;
-        } else {
-            return 1;
-        }
+        size_t effort = moduleGetFreeEffort(key, obj, dbid);
+        /* If the module's free_effort returns 0, we will use asynchronous free
+         * memory by default. */
+        return effort == 0 ? ULONG_MAX : effort;
+    } else if (obj->type == OBJ_ARRAY) {
+        redisArray *ar = obj->ptr;
+        return arCount(ar);
     } else {
         return 1; /* Everything else is a single allocation. */
     }
 }
 ```
 
+> [!NOTE]
+> `OBJ_ENCODING_SKIPLIST` 这一支在 8.10.2 **仍然存在**（大 zset 依旧用 skiplist），判断没有失效。小 zset 已改用 `OBJ_ENCODING_LISTPACK`，不匹配任何分支而落到 `return 1`——视为单次分配、不值得异步释放。8.10.2 还新增了 `OBJ_HASH` + `OBJ_ENCODING_TMPL_ARRAY` 与 `OBJ_ARRAY` 两个分支。
+
+下面两个片段是 6.x 时代的演进对照：8.10.2 已没有 `dbAsyncDelete()`，`freeObjAsync()` 签名变为 `(robj *key, robj *obj, int dbid)`，module 键改用 `moduleGetFreeEffort(key, obj, dbid)`。
 
 ```c
 int dbAsyncDelete(redisDb *db, robj *key) {

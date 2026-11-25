@@ -1,7 +1,7 @@
 ## Introduction
 
 > [!NOTE]
-> 版本基线 **Redis 8.10.2**；本页机制若与其他版本口径冲突，以 [Redis 版本基线](/docs/CS/DB/Redis/Redis.md?id=version-baseline) 为准。
+> 版本基线：Redis 8.10.2（commit 498ecd0d）。本页机制若与其他版本口径冲突，以 [Redis 版本基线](/docs/CS/DB/Redis/Redis.md?id=version-baseline) 为准。
 
 Redis Transactions allow the execution of a group of commands in a single step, they are centered around the commands `MULTI`, `EXEC`, `DISCARD` and `WATCH`.
 Redis Transactions make two important guarantees:
@@ -56,10 +56,14 @@ An argument against Redis point of view is that bugs happen, however it should b
 
 ## process
 
-表示事务状态
+表示事务状态。注意 8.10.2 里 `multiCmd` 已被 `pendingCommand` 取代，`commands` 是指针数组，`server.h` 还多了 `executing_cmd` 字段——这是 8.x 为事务内逐 key 通知（module keyed jobs）加的：
 ```c
+// server.h
+typedef struct pendingCommand pendingCommand;
 typedef struct multiState {
-    multiCmd *commands;     /* Array of MULTI commands */
+    pendingCommand **commands;     /* Array of pointers to MULTI commands */
+    int executing_cmd;      /* The index of the currently executed transaction 
+                               command (index in commands field) */
     int count;              /* Total number of MULTI commands */
     int cmd_flags;          /* The accumulated command flags OR-ed together.
                                So if at least a command has a given flag, it
@@ -68,7 +72,7 @@ typedef struct multiState {
                                is possible to know if all the commands have a
                                certain flag. */
     size_t argv_len_sums;    /* mem used by all commands arguments */
-    int alloc_count;         /* total number of multiCmd struct memory reserved. */
+    int alloc_count;         /* total number of pendingCommand struct memory reserved. */
 } multiState;
 ```
 进入事务状态后 把命令暂存到队列
@@ -90,14 +94,16 @@ queueMultiCommand in [processCommand](/docs/CS/DB/Redis/server.md?id=processcomm
 
 ### Exec
 
-```c
+先看入口与 abort 条件。8.10.2 把 abort 的条件判断合并进 `isWatchedKeyExpired` 与 `CLIENT_DIRTY_CAS|CLIENT_DIRTY_EXEC` 分支，且 `was_master` / `propagate_in_transaction` 那段复制传播逻辑已移出 `execCommand`（见下方 `multi.c` 现状）：
 
+```c
+// multi.c
 void execCommand(client *c) {
     int j;
     robj **orig_argv;
-    int orig_argc;
+    int orig_argc, orig_argv_len;
+    size_t orig_all_argv_len_sum;
     struct redisCommand *orig_cmd;
-    int was_master = server.masterhost == NULL;
 
     if (!(c->flags & CLIENT_MULTI)) {
         addReplyError(c,"EXEC without MULTI");
@@ -108,19 +114,20 @@ void execCommand(client *c) {
     if (isWatchedKeyExpired(c)) {
         c->flags |= (CLIENT_DIRTY_CAS);
     }
-```
 
-Check if we need to abort the EXEC because:
+    /* Check if we need to abort the EXEC because:
+     * 1) Some WATCHed key was touched.
+     * 2) There was a previous error while queueing commands.
+     * A failed EXEC in the first case returns a multi bulk nil object
+     * (technically it is not an error but a special behavior), while
+     * in the second an EXECABORT error is returned. */
+    if (c->flags & (CLIENT_DIRTY_CAS | CLIENT_DIRTY_EXEC)) {
+        if (c->flags & CLIENT_DIRTY_EXEC) {
+            addReplyErrorObject(c, shared.execaborterr);
+        } else {
+            addReply(c, shared.nullarray[c->resp]);
+        }
 
-1. Some WATCHed key was touched.
-2. There was a previous error while queueing commands.
-
-A failed EXEC in the first case returns a multi bulk nil object (technically it is not an error but a special behavior), while in the second an EXECABORT error is returned.
-
-```c
-    if (c->flags & (CLIENT_DIRTY_CAS|CLIENT_DIRTY_EXEC)) {
-        addReply(c, c->flags & CLIENT_DIRTY_EXEC ? shared.execaborterr :
-                                                   shared.nullarray[c->resp]);
         discardTransaction(c);
         return;
     }
@@ -131,27 +138,44 @@ A failed EXEC in the first case returns a multi bulk nil object (technically it 
     c->flags |= CLIENT_DENY_BLOCKING;
 ```
 
-Exec all the queued commands.
-Unwatch ASAP otherwise we'll waste CPU cycles
+随后 unwatch 并逐条 `call()`。注意 ACL 检查传的是**入队命令本身**（不是 EXEC），且 AOF 加载期的跳过判断、per-key jobs 的排空都是 8.x 新增：
 
 ```c
-    unwatchAllKeys(c);
+    /* Exec all the queued commands */
+    unwatchAllKeys(c); /* Unwatch ASAP otherwise we'll waste CPU cycles */
 
     server.in_exec = 1;
 
     orig_argv = c->argv;
+    orig_argv_len = c->argv_len;
     orig_argc = c->argc;
     orig_cmd = c->cmd;
+
+    /* Multi-state commands aren't tracked through all_argv_len_sum, so we don't want anything done while executing them to affect that field.
+     * Otherwise, we get inconsistencies and all_argv_len_sum doesn't go back to exactly 0 when the client is finished */
+    orig_all_argv_len_sum = c->all_argv_len_sum;
+
+    c->all_argv_len_sum = c->mstate.argv_len_sums;
+
+    /* Skip ACL check for the AOF client while server loading. */
+    int skip_acl_check = server.loading && c->id == CLIENT_ID_AOF;
+
     addReplyArrayLen(c,c->mstate.count);
     for (j = 0; j < c->mstate.count; j++) {
-        c->argc = c->mstate.commands[j].argc;
-        c->argv = c->mstate.commands[j].argv;
-        c->cmd = c->mstate.commands[j].cmd;
+        c->argc = c->mstate.commands[j]->argc;
+        c->argv = c->mstate.commands[j]->argv;
+        c->argv_len = c->mstate.commands[j]->argv_len;
+        c->cmd = c->realcmd = c->mstate.commands[j]->cmd;
 
         /* ACL permissions are also checked at the time of execution in case
-         * they were changed after the commands were queued. */
+         * they were changed after the commands were queued. Note we pass the
+         * queued command itself, so that the key permissions are checked against
+         * its keys and not against the EXEC command we are currently running. */
         int acl_errpos;
-        int acl_retval = ACLCheckAllPerm(c,&acl_errpos);
+        int acl_retval = ACL_OK;
+        if (!skip_acl_check) {
+            acl_retval = ACLCheckAllPerm(c,c->mstate.commands[j],&acl_errpos);
+        }
         if (acl_retval != ACL_OK) {
             char *reason;
             switch (acl_retval) {
@@ -169,21 +193,34 @@ Unwatch ASAP otherwise we'll waste CPU cycles
                 reason = "no permission";
                 break;
             }
-            addACLLogEntry(c,acl_retval,acl_errpos,NULL);
+            addACLLogEntry(c,acl_retval,ACL_LOG_CTX_MULTI,acl_errpos,NULL,NULL);
             addReplyErrorFormat(c,
                 "-NOPERM ACLs rules changed between the moment the "
                 "transaction was accumulated and the EXEC call. "
                 "This command is no longer allowed for the "
                 "following reason: %s", reason);
         } else {
-            call(c,server.loading ? CMD_CALL_NONE : CMD_CALL_FULL);
+            c->mstate.executing_cmd = j;
+            if (c->id == CLIENT_ID_AOF)
+                call(c,CMD_CALL_NONE);
+            else
+                call(c,CMD_CALL_FULL);
+
             serverAssert((c->flags & CLIENT_BLOCKED) == 0);
+
+            /* Drain per-key jobs queued by this sub-command so modules observe
+             * per-key effects between MULTI/EXEC sub-commands. Done here rather
+             * than on afterCommand() so standalone commands pay nothing. Regular
+             * jobs drain at the end of the EXEC's execution unit. */
+            if (server.fire_keyed_jobs_between_subcommands)
+                firePerKeyJobsBetweenSubcommands();
         }
 
         /* Commands may alter argc/argv, restore mstate. */
-        c->mstate.commands[j].argc = c->argc;
-        c->mstate.commands[j].argv = c->argv;
-        c->mstate.commands[j].cmd = c->cmd;
+        c->mstate.commands[j]->argc = c->argc;
+        c->mstate.commands[j]->argv = c->argv;
+        c->mstate.commands[j]->argv_len = c->argv_len;
+        c->mstate.commands[j]->cmd = c->cmd;
     }
 
     // restore old DENY_BLOCKING value
@@ -191,26 +228,11 @@ Unwatch ASAP otherwise we'll waste CPU cycles
         c->flags &= ~CLIENT_DENY_BLOCKING;
 
     c->argv = orig_argv;
+    c->argv_len = orig_argv_len;
     c->argc = orig_argc;
-    c->cmd = orig_cmd;
+    c->cmd = c->realcmd = orig_cmd;
+    c->all_argv_len_sum = orig_all_argv_len_sum;
     discardTransaction(c);
-```
-
-Make sure the EXEC command will be propagated as well if MULTI was already propagated.
-
-If inside the MULTI/EXEC block this instance was suddenly switched from master to slave (using the SLAVEOF command), the initial MULTI was propagated into the replication backlog, but the rest was not.
-We need to make sure to at least terminate the backlog with the final EXEC.
-
-```c
-    if (server.propagate_in_transaction) {
-        int is_master = server.masterhost == NULL;
-        server.dirty++;
-        if (server.repl_backlog && was_master && !is_master) {
-            char *execcmd = "*1\r\n$4\r\nEXEC\r\n";
-            feedReplicationBacklog(execcmd,strlen(execcmd));
-        }
-        afterPropagateExec();
-    }
 
     server.in_exec = 0;
 }
@@ -231,18 +253,26 @@ WATCHing those keys, so that given a key that is going to be modified we can mar
 Also every client contains a list of WATCHed keys so that's possible to un-watch such keys when the client is freed or when UNWATCH is called.
 In the client->watched_keys list we need to use watchedKey structures as in order to identify a key in Redis we need both the key name and the DB.
 
+`watchedKey` 现在把 `listNode` 内嵌进结构（同时挂在 `client->watched_keys` 与 `db->watched_keys` 两条链上），靠结构体偏移从 node 反查 `watchedKey`，省掉 `listSearchKey`；`expired` 位记录「WATCH 时该 key 已逻辑过期」：
+
 ```c
 // multi.c
 typedef struct watchedKey {
+    listNode node;
     robj *key;
     redisDb *db;
+    client *client;
+    unsigned expired:1; /* Flag that we're watching an already expired key. */
 } watchedKey;
 
+/* Watch for the specified key */
 void watchForKey(client *c, robj *key) {
     list *clients = NULL;
     listIter li;
     listNode *ln;
     watchedKey *wk;
+
+    if (listLength(c->watched_keys) == 0) server.watching_clients++;
 
     /* Check if we are already watching for this key */
     listRewind(c->watched_keys,&li);
@@ -251,40 +281,43 @@ void watchForKey(client *c, robj *key) {
         if (wk->db == c->db && equalStringObjects(key,wk->key))
             return; /* Key already watched */
     }
-```
-
-This key is not already watched in this DB. Let's add it
-
-```c
+    /* This key is not already watched in this DB. Let's add it */
     clients = dictFetchValue(c->db->watched_keys,key);
     if (!clients) {
         clients = listCreate();
         dictAdd(c->db->watched_keys,key,clients);
         incrRefCount(key);
     }
-    listAddNodeTail(clients,c);
     /* Add the new key to the list of keys watched by this client */
     wk = zmalloc(sizeof(*wk));
     wk->key = key;
+    wk->client = c;
     wk->db = c->db;
+    wk->expired = keyIsExpired(c->db, key->ptr, NULL);
     incrRefCount(key);
-    listAddNodeTail(c->watched_keys,wk);
+    listAddNodeTail(c->watched_keys, wk);
+    watchedKeyLinkToClients(clients, wk);
 }
 ```
 
-### signalModifiedKey
+### keyModified
 
-Every time a key in the database is modified the function `signalModifiedKey()` is called.
+8.x 里 `signalModifiedKey()` 已被 `keyModified()` 取代（同时承担 LRM 时间戳更新与 WATCH / 客户端缓存失效通知）；`trackingInvalidateKey` 也多了第三个参数 `bcast`：
 
 ```c
 // db.c
-void signalModifiedKey(client *c, redisDb *db, robj *key) {
-    touchWatchedKey(db,key);
-    trackingInvalidateKey(c,key);
+void keyModified(client *c, redisDb *db, robj *key, robj *val, int signal) {
+    if (val) updateLRM(val);
+    if (signal) {
+        touchWatchedKey(db,key);
+        trackingInvalidateKey(c,key,1);
+    }
 }
 ```
 
 "Touch" a key, so that if this key is being WATCHed by some client the next EXEC will fail.
+
+`touchWatchedKey` 现在从内嵌 node 反查 `watchedKey` 进而拿到 client，并处理「WATCH 时已过期」的 key——若该 key 已真正被删除则视为逻辑无变化、清掉 expired 标记而非置脏；置脏后会立即 `unwatchAllKeys(c)` 以免后续重复打扰：
 
 ```c
 // multi.c
@@ -301,14 +334,59 @@ void touchWatchedKey(redisDb *db, robj *key) {
     /* Check if we are already watching for this key */
     listRewind(clients,&li);
     while((ln = listNext(&li))) {
-        client *c = listNodeValue(ln);
+        watchedKey *wk = redis_member2struct(watchedKey, node, ln);
+        client *c = wk->client;
+
+        if (wk->expired) {
+            /* The key was already expired when WATCH was called. */
+            if (db == wk->db &&
+                equalStringObjects(key, wk->key) &&
+                dbFind(db, key->ptr) == NULL)
+            {
+                /* Already expired key is deleted, so logically no change. Clear
+                 * the flag. Deleted keys are not flagged as expired. */
+                wk->expired = 0;
+                goto skip_client;
+            }
+            break;
+        }
 
         c->flags |= CLIENT_DIRTY_CAS;
+        /* As the client is marked as dirty, there is no point in getting here
+         * again in case that key (or others) are modified again (or keep the
+         * memory overhead till EXEC). */
+        unwatchAllKeys(c);
+
+    skip_client:
+        continue;
     }
 }
 ```
 
 ## RedisCommand
+
+事务队列里的每个元素都是 `pendingCommand`（8.10.2 里它取代了旧的 `multiCmd`），除了 `argv/argc/cmd`，还预存了 `keys_result`（命令的 key 规格解析结果）、`reploff`、`slot` 等，供 EXEC 逐条执行时直接复用——这也是 cluster 模式下事务要求所有 key 同槽的前提（key 声明见 [command.md](/docs/CS/DB/Redis/command.md)）：
+
+```c
+// server.h
+struct pendingCommand {
+    int argc;                 /* Num of arguments of current command. */
+    int argv_len;             /* Size of argv array (may be more than argc) */
+    robj **argv;              /* Arguments of current command. */
+    size_t argv_len_sum;      /* Sum of lengths of objects in argv list. */
+    unsigned long long input_bytes;
+    struct redisCommand *cmd;
+    getKeysResult keys_result;
+    long long reploff;        /* c->reploff should be set to this value when the command is processed */
+    int flags;
+    int slot;         /* The slot the command is executing against. Set to INVALID_CLUSTER_SLOT
+                       * if no slot is being used or if the command has a cross slot error */
+    uint8_t read_error;
+
+    struct pendingCommand *next;
+    struct pendingCommand *prev;
+};
+```
 
 ## Links
 
