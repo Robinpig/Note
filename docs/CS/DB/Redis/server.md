@@ -3,6 +3,12 @@
 > [!NOTE]
 > 版本基线 **Redis 8.10.2**；本页机制若与其他版本口径冲突，以 [Redis 版本基线](/docs/CS/DB/Redis/Redis.md?id=version-baseline) 为准。
 
+三个容易理解错的点：
+
+- **`server` 是一个全局 `struct redisServer`，不是一组散落的全局变量**：所有"配置"都是它的字段，但 8.10.2 里这些字段早就不叫 ziplist 了——`hash_max_listpack_entries` / `zset_max_listpack_entries` / `list_max_listpack_size` 才是真名，`hash-max-ziplist-*` 仅在 `config.c` 里作为兼容别名保留。
+- **`redisObject` 已不在 `server.h`**：8.10.2 把它迁到独立的 `object.h`，并新增 `iskvobj` / `metabits` 两个位域；`iskvobj` 置位时 key 与小 value 会内联进同一块内存（kvobj），"每个 key 独立配一个 robj + sds" 的旧模型不再准确。
+- **`client` 不再是 `redisClient`**，且同一个 `client` 结构同时承担三种角色：普通连接、副本的主连接（`server.master` 是一个特殊 client）、Lua 伪客户端。
+
 ## Server
 
 所有服务器配置、以及总体上所有共享状态，都定义在一个名为 `server` 的全局结构里，类型为 `struct redisServer`。
@@ -347,16 +353,57 @@ struct redisServer {
     int sort_bypattern;
     int sort_store;
     /* Zip structure config, see redis.conf for more information  */
-    size_t hash_max_ziplist_entries;
-    size_t hash_max_ziplist_value;
+    size_t hash_max_listpack_entries;
+    size_t hash_max_listpack_value;
+    /* Hash template config */
+    size_t hash_min_template_entries; /* Field-count threshold at which regular
+                                       * hashes are auto-converted to template
+                                       * encoding. Applies to the live command
+                                       * path (e.g. HSET), not RDB load (which has
+                                       * its own hash_rdb_load_* configs below).
+                                       * 0 disables auto-convert. */
+    size_t hash_max_template_entries; /* Upper field-count bound for that
+                                       * auto-convert: hashes with more fields than
+                                       * this are not converted. 0 disables the
+                                       * upper bound. */
+    size_t hash_rdb_load_min_template_entries; /* Like hash_min_template_entries
+                                       * but applied on the RDB-load path (which
+                                       * the AOF RDB preamble also uses). Only
+                                       * effective if the RDB does not already
+                                       * include templates; otherwise it is loaded
+                                       * as-is. 0 disables. */
+    size_t hash_rdb_load_max_template_entries; /* Upper field-count bound for the
+                                       * RDB-load path. 0 disables the bound. */
+    size_t hash_rdb_load_template_disassembly_threshold; /* Relevant only when
+                                       * RDB-load auto-convert is on (i.e.
+                                       * hash_rdb_load_min_template_entries > 0).
+                                       * That auto-convert turns plain hashes into
+                                       * templates as the RDB loads; afterwards a
+                                       * template still shared by fewer than this
+                                       * many keys ("few-key") is disassembled back
+                                       * to a plain hash, so rarely-shared
+                                       * templates don't waste memory. Also drives
+                                       * the throttle that stops creating new
+                                       * templates once most are few-key. RDB-load
+                                       * only, not RESTORE/DUMP. 0 disables. */
+    struct hashTemplateRegistry *htemplates;   /* Global template registry */
     size_t set_max_intset_entries;
-    size_t zset_max_ziplist_entries;
-    size_t zset_max_ziplist_value;
+    size_t set_max_listpack_entries;
+    size_t set_max_listpack_value;
+    size_t zset_max_listpack_entries;
+    size_t zset_max_listpack_value;
     size_t hll_sparse_max_bytes;
     size_t stream_node_max_bytes;
     long long stream_node_max_entries;
+    /* Stream IDMP parameters */
+    long long stream_idmp_duration;     /* Default IDMP duration in seconds. */
+    long long stream_idmp_maxsize;      /* Default IDMP max entries. */
+    /* Array parameters */
+    uint32_t array_slice_size;          /* Slice size for new arrays */
+    uint32_t array_sparse_kmax;         /* Max elements before sparse->dense */
+    uint32_t array_sparse_kmin;         /* Min elements before dense->sparse */
     /* List parameters */
-    int list_max_ziplist_size;
+    int list_max_listpack_size;
     int list_compress_depth;
     /* time cache */
     _Atomic time_t unixtime;    /* Unix time sampled every cron cycle. */
@@ -449,9 +496,45 @@ struct redisServer {
 
 aeEventLoop see ae
 
+### RedisObject and kvobj
 
+`redisObject` 在 8.10.2 已从 `server.h` 迁到独立的 `object.h`（`src/object.h`）。结构体本身只有几个通用位域加一个 `ptr`；注意新增的 `iskvobj` 与 `metabits`——它们只在 key-value 对象（`kvobj`）上有意义：
 
+```c
+struct redisObject {
+    unsigned type:4;
+    unsigned encoding:4;
+    unsigned refcount : OBJ_REFCOUNT_BITS;
+    unsigned iskvobj : 1;   /* 1 if this struct serves as a kvobj base */
+    
+    /* metabits and lru are Relevant only when iskvobj is set: */     
+    unsigned metabits :8;  /* Bitmap of metadata (+expiry) attached to this kvobj */
+    unsigned lru:LRU_BITS; /* LRU time (relative to global lru_clock) or
+                            * LFU data (least significant 8 bits frequency
+                            * and most significant 16 bits access time). */
+    void *ptr;
+};
+```
 
+`iskvobj` 置位时，`redisObject` 只是 kvobj 的"基类"，后面还跟着内联的 key、可选元数据块，以及小字符串的 value。`object.h` 头部注释给了内存布局的定义：
+
+```c
+ * kvobj (key-value object)
+ * ------------------------
+ * kvobj is a specific use of robj that additionally embeds the key (and optional
+ * metadata) alongside the value. It is identified by the iskvobj flag in robj.
+ * The distinction is mostly declarative for clarity and may be enforced later with
+ * explicit casting in places. Conceptually, robj and kvobj are in a relation 
+ * similar to that of a parent-child class hierarchy.
+ * 
+ * When iskvobj is set, it also contains:
+ *   - metabits: bitmap of additional metadata attached to the object.
+ *   - lru: LRU time (relative to global lru_clock) or LFU data (see robj above).
+ *   - embedded key: the key string is stored inline after the struct.
+ *   - embedded value: for small strings, the value is stored inline after the key.
+```
+
+也就是说"一个 key 对应一个独立 robj + 一个 sds key"的老模型只在 `iskvobj` 未置位时成立；走 kvobj 路径时 key 与 value 共用一次分配，这正是 8.x 单键内存下降的来源之一。编码枚举本身见 [redisDb](/docs/CS/DB/Redis/redisDb.md?id=redisobject) 的 redisObject 节。
 
 ## Client
 

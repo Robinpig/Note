@@ -3,6 +3,51 @@
 > [!NOTE]
 > 版本基线 **Redis 8.10.2**；本页机制若与其他版本口径冲突，以 [Redis 版本基线](/docs/CS/DB/Redis/Redis.md?id=version-baseline) 为准。
 
+三个容易理解错的点：
+
+- **`main()` 先播种随机数，再碰配置**：8.10.2 用 `time() ^ getpid() ^ tv.tv_usec` 三路异或播种，并同时初始化 `srandom` / `init_genrand64`，专门应对容器里 `time()` 与 `getpid()` 相同、多个实例生成相同 runid 与复制 ID 的问题。
+- **命令"读取"路径在 8.0 被重写过**：`readQueryFromClient` 现在用 `CLIENT_IO_READ_ENABLED` 标志与 `pending_read` 原子量配合 I/O 线程，还引入了可复用 query buffer；老笔记里的 `postponeClientRead` / `handleClientsWithPendingReadsUsingThreads` 在 8.10.2 已不存在，细节见 [io](/docs/CS/DB/Redis/io.md)。
+- **`initServer()` 不是"最后一步"**：它创建监听 socket、事件循环与共享对象后挂上 `beforeSleep` / `serverCron`，真正的命令执行要等 `aeMain()` 进入事件循环才发生；关闭走 `prepareForShutdown()`。
+
+### Bootstrap Chain
+
+启动链路按阶段可读成下面五段，源码集中在 `server.c` 的 `main()`：
+
+```dot
+digraph BootstrapChain {
+  rankdir=TB;
+  node [shape=box, style=rounded];
+
+  subgraph cluster_boot {
+    label="阶段 1-2 / 运行时与配置";
+    rt [label="main()\n播种随机数 / crc64_init\nsetproctitle / umask"];
+    cfg [label="initServerConfig()\n默认值 / 命令表 / hash seed"];
+  }
+
+  subgraph cluster_res {
+    label="阶段 3 / 资源初始化";
+    srv [label="initServer()\n监听 socket / 共享对象\naeCreateEventLoop / 事件处理器"];
+  }
+
+  subgraph cluster_load {
+    label="阶段 4 / 数据加载";
+    load [label="loadServerConfig()\nInitServerLast() / loadDataFromDisk()"];
+  }
+
+  subgraph cluster_run {
+    label="阶段 5 / 运行与关闭";
+    loop [label="aeMain()\naeProcessEvents / beforeSleep / serverCron"];
+    cmd [label="readQueryFromClient()\nprocessInputBuffer / processCommand / addReply"];
+    stop [label="prepareForShutdown()\nflush AOF / 关闭连接"];
+  }
+
+  rt -> cfg -> srv -> load -> loop;
+  loop -> cmd;
+  cmd -> loop;
+  loop -> stop;
+}
+```
+
 以下是启动 Redis 服务器最关键的几个步骤。
 
 * `initServerConfig()` 设置 `server` 结构的默认值。
@@ -14,25 +59,42 @@
 int main(int argc, char **argv) {
     struct timeval tv;
     int j;
+    char config_from_stdin = 0;
 
     /* We need to initialize our libraries, and the server configuration. */
-
-    setlocale(LC_COLLATE,"");
+#ifdef INIT_SETPROCTITLE_REPLACEMENT
+    spt_init(argc, argv);
+#endif
     tzset(); /* Populates 'timezone' global. */
     zmalloc_set_oom_handler(redisOutOfMemoryHandler);
-    srand(time(NULL)^getpid());
+
+    /* To achieve entropy, in case of containers, their time() and getpid() can
+     * be the same. But value of tv_usec is fast enough to make the difference */
     gettimeofday(&tv,NULL);
+    srand(time(NULL)^getpid()^tv.tv_usec);
+    srandom(time(NULL)^getpid()^tv.tv_usec);
+    init_genrand64(((long long) tv.tv_sec * 1000000 + tv.tv_usec) ^ getpid());
     crc64_init();
+
+    /* Store umask value. Because umask(2) only offers a set-and-get API we have
+     * to reset it and restore it back. We do this early to avoid a potential
+     * race condition with threads that could be creating files or directories.
+     */
+    umask(server.umask = umask(0777));
 
     uint8_t hashseed[16];
     getRandomBytes(hashseed,sizeof(hashseed));
     dictSetHashFunctionSeed(hashseed);
-    server.sentinel_mode = checkForSentinelMode(argc,argv);
+
+    char *exec_name = strrchr(argv[0], '/');
+    if (exec_name == NULL) exec_name = argv[0];
+    server.sentinel_mode = checkForSentinelMode(argc,argv, exec_name);
     initServerConfig();
     ACLInit(); /* The ACL subsystem must be initialized ASAP because the
                   basic networking code and client creation depends on it. */
     moduleInitModulesSystem();
-    tlsInit();
+    connTypeInitialize();
+    keyMetaInit();
 
     /* Store the executable path and arguments in a safe place in order
      * to be able to restart the server later. */
@@ -54,9 +116,9 @@ sentinel 必须现在就初始化：以 sentinel 模式解析配置文件时，�
     /* Check if we need to start in redis-check-rdb/aof mode. We just execute
      * the program main. However the program is part of the Redis executable
      * so that we can easily execute an RDB check on loading errors. */
-    if (strstr(argv[0],"redis-check-rdb") != NULL)
+    if (strstr(exec_name,"redis-check-rdb") != NULL)
         redis_check_rdb_main(argc,argv,NULL);
-    else if (strstr(argv[0],"redis-check-aof") != NULL)
+    else if (strstr(exec_name,"redis-check-aof") != NULL)
         redis_check_aof_main(argc,argv);
 
     if (argc >= 2) {
@@ -210,11 +272,16 @@ void daemonize(void) {
 2. initCommandTable array -> dict
 3. initConfigValues
 
+8.10.2 的完整实现如下。注意 `initConfigValues()` 已在函数开头调用，命令表通过 `populateCommandTable()` 在这里建立，而被高频命令缓存指针（如 `delCommand`）已改为直接字段、不再逐个 `lookupCommandByCString`：
+
 ```c
 void initServerConfig(void) {
     int j;
+    char *default_bindaddr[CONFIG_DEFAULT_BINDADDR_COUNT] = CONFIG_DEFAULT_BINDADDR;
 
+    initConfigValues();
     updateCachedTime(1);
+    server.cmd_time_snapshot = server.mstime;
     getRandomHexChars(server.runid,CONFIG_RUN_ID_SIZE);
     server.runid[CONFIG_RUN_ID_SIZE] = '\0';
     changeReplicationId();
@@ -223,25 +290,43 @@ void initServerConfig(void) {
                                       updated later after loading the config.
                                       This value may be used before the server
                                       is initialized. */
+    server.defrag_frag_cache.cronloops = -1; /* Mark the defrag fragmentation cache as stale */
     server.timezone = getTimeZone(); /* Initialized by tzset(). */
     server.configfile = NULL;
     server.executable = NULL;
     server.arch_bits = (sizeof(long) == 8) ? 64 : 32;
-    server.bindaddr_count = 0;
-    server.unixsocketperm = CONFIG_DEFAULT_UNIX_SOCKET_PERM;
-    server.ipfd_count = 0;
-    server.tlsfd_count = 0;
-    server.sofd = -1;
+#if DEBUG_ASSERT_KEYSPACE
+    server.dbg_assert_flags = DBG_ASSERT_KEYSIZES | DBG_ASSERT_ALLOC_SLOT;
+#else
+    server.dbg_assert_flags = 0;
+#endif
+    server.bindaddr_count = CONFIG_DEFAULT_BINDADDR_COUNT;
+    for (j = 0; j < CONFIG_DEFAULT_BINDADDR_COUNT; j++)
+        server.bindaddr[j] = zstrdup(default_bindaddr[j]);
+    memset(server.listeners, 0x00, sizeof(server.listeners));
     server.active_expire_enabled = 1;
-    server.client_max_querybuf_len = PROTO_MAX_QUERYBUF_LEN;
-    server.saveparams = NULL;
+    server.allow_access_expired = 0;
+    server.allow_access_trimmed = 0;
+    server.skip_checksum_validation = 0;
+    server.allow_keymeta_registration = 0;
     server.loading = 0;
-    server.logfile = zstrdup(CONFIG_DEFAULT_LOGFILE);
+    server.async_loading = 0;
+    server.loading_rdb_used_mem = 0;
     server.aof_state = AOF_OFF;
+    server.backup_state = BACKUP_STATE_IDLE;
+    server.backup_can_remove_aof_dir = 0;
+    server.backup_base_filename = NULL;
+    server.backup_incr_filename = NULL;
+    server.backup_manifest_filename = NULL;
+    server.backup_error = NULL;
+    server.backup_start_time = 0;
+    server.backup_end_time = 0;
     server.aof_rewrite_base_size = 0;
     server.aof_rewrite_scheduled = 0;
     server.aof_flush_sleep = 0;
-    server.aof_last_fsync = time(NULL);
+    server.aof_last_fsync = time(NULL) * 1000;
+    server.aof_cur_timestamp = 0;
+    atomicSet(server.aof_bio_fsync_status,C_OK);
     server.aof_rewrite_time_last = -1;
     server.aof_rewrite_time_start = -1;
     server.aof_lastbgrewrite_status = C_OK;
@@ -249,18 +334,31 @@ void initServerConfig(void) {
     server.aof_fd = -1;
     server.aof_selected_db = -1; /* Make sure the first time will not match */
     server.aof_flush_postponed_start = 0;
-    server.pidfile = NULL;
+    server.aof_last_incr_size = 0;
+    server.aof_last_incr_fsync_offset = 0;
     server.active_defrag_running = 0;
+    server.active_defrag_configuration_changed = 0;
     server.notify_keyspace_events = 0;
     server.blocked_clients = 0;
     memset(server.blocked_clients_by_type,0,
            sizeof(server.blocked_clients_by_type));
     server.shutdown_asap = 0;
-    server.cluster_configfile = zstrdup(CONFIG_DEFAULT_CLUSTER_CONFIG_FILE);
+    server.crashing = 0;
+    server.shutdown_flags = 0;
+    server.shutdown_mstime = 0;
     server.cluster_module_flags = CLUSTER_MODULE_FLAG_NONE;
-    server.migrate_cached_sockets = dictCreate(&migrateCacheDictType,NULL);
+    server.cluster_module_trim_disablers = 0;
+    server.migrate_cached_sockets = dictCreate(&migrateCacheDictType);
     server.next_client_id = 1; /* Client IDs, start from 1 .*/
-    server.loading_process_events_interval_bytes = (1024*1024*2);
+    server.page_size = sysconf(_SC_PAGESIZE);
+    server.pause_cron = 0;
+    server.dict_resizing = 1;
+
+    server.latency_tracking_info_percentiles_len = 3;
+    server.latency_tracking_info_percentiles = zmalloc(sizeof(double)*(server.latency_tracking_info_percentiles_len));
+    server.latency_tracking_info_percentiles[0] = 50.0;  /* p50 */
+    server.latency_tracking_info_percentiles[1] = 99.0;  /* p99 */
+    server.latency_tracking_info_percentiles[2] = 99.9;  /* p999 */
 
     server.lruclock = getLRUClock();
     resetServerSaveParams();
@@ -270,26 +368,37 @@ void initServerConfig(void) {
     appendServerSaveParams(60,10000); /* save after 1 minute and 10000 changes */
 
     /* Replication related */
-    server.masterauth = NULL;
     server.masterhost = NULL;
     server.masterport = 6379;
     server.master = NULL;
     server.cached_master = NULL;
     server.master_initial_offset = -1;
     server.repl_state = REPL_STATE_NONE;
+    server.repl_rdb_ch_state = REPL_RDB_CH_STATE_NONE;
+    server.repl_num_master_disconnection = 0;
+    server.repl_full_sync_buffer = (struct replDataBuf) {0};
     server.repl_transfer_tmpfile = NULL;
     server.repl_transfer_fd = -1;
     server.repl_transfer_s = NULL;
     server.repl_syncio_timeout = CONFIG_REPL_SYNCIO_TIMEOUT;
     server.repl_down_since = 0; /* Never connected, repl is down since EVER. */
+    server.repl_up_since = 0;
     server.master_repl_offset = 0;
+    server.repl_last_flush_offset = 0;
+    server.fsynced_reploff_pending = 0;
+    server.repl_stream_lastio = server.unixtime;
+    server.repl_total_sync_attempts = 0;
 
     /* Replication partial resync backlog */
     server.repl_backlog = NULL;
-    server.repl_backlog_histlen = 0;
-    server.repl_backlog_idx = 0;
-    server.repl_backlog_off = 0;
     server.repl_no_slaves_since = time(NULL);
+
+    /* Failover related */
+    server.failover_end_time = 0;
+    server.force_failover = 0;
+    server.target_replica_host = NULL;
+    server.target_replica_port = 0;
+    server.failover_state = NO_FAILOVER;
 
     /* Client output buffer limits */
     for (j = 0; j < CLIENT_TYPE_OBUF_COUNT; j++)
@@ -304,45 +413,16 @@ void initServerConfig(void) {
     R_PosInf = 1.0/R_Zero;
     R_NegInf = -1.0/R_Zero;
     R_Nan = R_Zero/R_Zero;
-```
 
-initCommandTable
-
-```c
-    server.commands = dictCreate(&commandTableDictType,NULL);
-    server.orig_commands = dictCreate(&commandTableDictType,NULL);
+    /* Command table -- we initialize it here as it is part of the
+     * initial configuration, since command names may be changed via
+     * redis.conf using the rename-command directive. */
+    server.commands = dictCreate(&commandTableDictType);
+    server.orig_commands = dictCreate(&commandTableDictType);
     populateCommandTable();
-    server.delCommand = lookupCommandByCString("del");
-    server.multiCommand = lookupCommandByCString("multi");
-    server.lpushCommand = lookupCommandByCString("lpush");
-    server.lpopCommand = lookupCommandByCString("lpop");
-    server.rpopCommand = lookupCommandByCString("rpop");
-    server.zpopminCommand = lookupCommandByCString("zpopmin");
-    server.zpopmaxCommand = lookupCommandByCString("zpopmax");
-    server.sremCommand = lookupCommandByCString("srem");
-    server.execCommand = lookupCommandByCString("exec");
-    server.expireCommand = lookupCommandByCString("expire");
-    server.pexpireCommand = lookupCommandByCString("pexpire");
-    server.xclaimCommand = lookupCommandByCString("xclaim");
-    server.xgroupCommand = lookupCommandByCString("xgroup");
-    server.rpoplpushCommand = lookupCommandByCString("rpoplpush");
-```
 
-```c
     /* Debugging */
-    server.assert_failed = "<no assertion failed>";
-    server.assert_file = "<no file>";
-    server.assert_line = 0;
-    server.bug_report_start = 0;
     server.watchdog_period = 0;
-
-    /* By default we want scripts to be always replicated by effects
-     * (single commands executed by the script), and not by sending the
-     * script to the slave / AOF. This is the new way starting from
-     * Redis 5. However it is possible to revert it via redis.conf. */
-    server.lua_always_replicate_commands = 1;
-
-    initConfigValues();
 }
 ```
 
@@ -441,6 +521,8 @@ void initServer(void) {
     signal(SIGHUP, SIG_IGN);
     signal(SIGPIPE, SIG_IGN);
     setupSignalHandlers();
+    ThreadsManager_init();
+    makeThreadKillable();
 
     if (server.syslog_enabled) {
         openlog(server.syslog_ident, LOG_PID | LOG_NDELAY | LOG_NOWAIT,
@@ -449,35 +531,75 @@ void initServer(void) {
 
     /* Initialization after setting defaults from the config system. */
     server.aof_state = server.aof_enabled ? AOF_ON : AOF_OFF;
+    server.fsynced_reploff = server.aof_enabled ? 0 : -1;
     server.hz = server.config_hz;
     server.pid = getpid();
+    server.in_fork_child = CHILD_TYPE_NONE;
+    server.rdb_pipe_read = -1;
+    server.rdb_child_exit_pipe = -1;
+    server.main_thread_id = pthread_self();
     server.current_client = NULL;
-    server.fixed_time_expire = 0;
+    server.errors = raxNew();
+    server.errors_enabled = 1;
+    server.execution_nesting = 0;
+    server.firing_keyed_post_notif_jobs = 0;
+    server.fire_keyed_jobs_between_subcommands = 0;
+    server.in_keyspace_notification = 0;
     server.clients = listCreate();
-    server.clients_index = raxNew();
+    server.clients_index = raxNewEx(0, NULL, sizeof(uint64_t));
     server.clients_to_close = listCreate();
     server.slaves = listCreate();
     server.monitors = listCreate();
     server.clients_pending_write = listCreate();
     server.clients_pending_read = listCreate();
-    server.clients_timeout_table = raxNew();
+    server.clients_with_pending_ref_reply = listCreate();
+    /* clients_timeout_table key = 8 bytes BE mstime + 8 bytes client ID
+     * (see CLIENT_ST_KEYLEN / encodeTimeoutKey in timeout.c). */
+    server.clients_timeout_table = raxNewEx(0, NULL, sizeof(uint64_t) * 2);
+    server.replication_allowed = 1;
     server.slaveseldb = -1; /* Force to emit the first SELECT command. */
     server.unblocked_clients = listCreate();
     server.ready_keys = listCreate();
+    server.tracking_pending_keys = listCreate();
+    server.pending_push_messages = listCreate();
     server.clients_waiting_acks = listCreate();
     server.get_ack_from_slaves = 0;
-    server.clients_paused = 0;
+    server.paused_actions = 0;
+    memset(server.client_pause_per_purpose, 0,
+           sizeof(server.client_pause_per_purpose));
+    server.postponed_clients = listCreate();
     server.events_processed_while_blocked = 0;
     server.system_memory_size = zmalloc_get_memory_size();
+    server.blocked_last_cron = 0;
+    server.blocking_op_nesting = 0;
+    server.thp_enabled = 0;
+    server.cluster_drop_packet_filter = -1;
+    server.reply_buffer_peak_reset_time = REPLY_BUFFER_DEFAULT_PEAK_RESET_TIME;
+    server.reply_buffer_resizing_enabled = 1;
+    server.reply_copy_avoidance_enabled = 1;
+    server.client_mem_usage_buckets = NULL;
+    /* Enable memory accounting only if key-memory-histograms or cluster-slot-stats-enabled
+     * includes 'mem' at startup. Memory tracking can be disabled at runtime
+     * but cannot be re-enabled, to avoid situation where we would need to
+     * catch up or iterate over all slots and kvobjs. */
+    server.memory_tracking_enabled = server.key_memory_histograms || clusterSlotStatsEnabled(CLUSTER_SLOT_STATS_MEM);
+    resetReplicationBuffer();
 
-    if ((server.tls_port || server.tls_replication || server.tls_cluster)
-                && tlsConfigure(&server.tls_ctx_config) == C_ERR) {
-        serverLog(LL_WARNING, "Failed to configure TLS. Check logs for more info.");
+    /* Force replication compression off if this build has no compression
+     * support. repl-compression is immutable, so this only needs to run once. */
+    setReplCompression(server.repl_compression);
+
+    /* Make sure the locale is set on startup based on the config file. */
+    if (setlocale(LC_COLLATE,server.locale_collate) == NULL) {
+        serverLog(LL_WARNING, "Failed to configure LOCALE for invalid locale name.");
         exit(1);
     }
 
+    hashTemplatesInit();
     createSharedObjects();
     adjustOpenFilesLimit();
+    const char *clk_msg = monotonicInit();
+    serverLog(LL_NOTICE, "monotonic clock: %s", clk_msg);
     server.el = aeCreateEventLoop(server.maxclients+CONFIG_FDSET_INCR);
     if (server.el == NULL) {
         serverLog(LL_WARNING,
@@ -487,41 +609,47 @@ void initServer(void) {
     }
     server.db = zmalloc(sizeof(redisDb)*server.dbnum);
 
-    /* Open the TCP listening socket for the user commands. */
-    if (server.port != 0 &&
-        listenToPort(server.port,server.ipfd,&server.ipfd_count) == C_ERR)
-        exit(1);
-    /* Open the listening Unix domain socket. */
-
-    /* Abort if there are no listening sockets at all. */
-    if (server.ipfd_count == 0 && server.tlsfd_count == 0 && server.sofd < 0) {
-        serverLog(LL_WARNING, "Configured to not listen anywhere, exiting.");
-        exit(1);
-    }
-
     /* Create the Redis databases, and initialize other internal state. */
+    int slot_count_bits = 0;
+    int flags = KVSTORE_ALLOCATE_DICTS_ON_DEMAND;
+    if (server.cluster_enabled) {
+        slot_count_bits = CLUSTER_SLOT_MASK_BITS;
+        flags |= KVSTORE_FREE_EMPTY_DICTS;
+    }
     for (j = 0; j < server.dbnum; j++) {
-        server.db[j].dict = dictCreate(&dbDictType,NULL);
-        server.db[j].expires = dictCreate(&keyptrDictType,NULL);
+        server.db[j].keys = kvstoreCreate(&kvstoreExType, &dbDictType, slot_count_bits, flags);
+        server.db[j].expires = kvstoreCreate(&kvstoreBaseType, &dbExpiresDictType, slot_count_bits, flags);
+        server.db[j].subexpires = estoreCreate(&subexpiresBucketsType, slot_count_bits);
         server.db[j].expires_cursor = 0;
-        server.db[j].blocking_keys = dictCreate(&keylistDictType,NULL);
-        server.db[j].ready_keys = dictCreate(&objectKeyPointerValueDictType,NULL);
-        server.db[j].watched_keys = dictCreate(&keylistDictType,NULL);
+        server.db[j].blocking_keys = dictCreate(&keylistDictType);
+        server.db[j].blocking_keys_unblock_on_nokey = dictCreate(&objectKeyPointerValueDictType);
+        server.db[j].stream_claim_pending_keys = dictCreate(&objectKeyPointerValueDictType);
+        server.db[j].stream_idmp_keys = dictCreate(&objectKeyNoValueDictType);
+        server.db[j].ready_keys = dictCreate(&objectKeyPointerValueDictType);
+        server.db[j].watched_keys = dictCreate(&keylistDictType);
         server.db[j].id = j;
         server.db[j].avg_ttl = 0;
-        server.db[j].defrag_later = listCreate();
-        listSetFreeMethod(server.db[j].defrag_later,(void (*)(void*))sdsfree);
     }
     evictionPoolAlloc(); /* Initialize the LRU keys pool. */
-    server.pubsub_channels = dictCreate(&keylistDictType,NULL);
-    server.pubsub_patterns = listCreate();
-    server.pubsub_patterns_dict = dictCreate(&keylistDictType,NULL);
-    listSetFreeMethod(server.pubsub_patterns,freePubsubPattern);
-    listSetMatchMethod(server.pubsub_patterns,listMatchPubsubPattern);
+    /* Note that server.pubsub_channels was chosen to be a kvstore (with only one dict, which
+     * seems odd) just to make the code cleaner by making it be the same type as server.pubsubshard_channels
+     * (which has to be kvstore), see pubsubtype.serverPubSubChannels */
+    server.pubsub_channels = kvstoreCreate(
+        &kvstoreBaseType, &objToDictDictType,
+        0, KVSTORE_ALLOCATE_DICTS_ON_DEMAND);
+    server.pubsub_patterns = dictCreate(&objToDictDictType);
+    server.pubsubshard_channels = kvstoreCreate(
+        &kvstoreBaseType, &objToDictDictType,
+        slot_count_bits, KVSTORE_ALLOCATE_DICTS_ON_DEMAND | KVSTORE_FREE_EMPTY_DICTS);
+    server.pubsub_clients = 0;
+    server.watching_clients = 0;
     server.cronloops = 0;
-    server.rdb_child_pid = -1;
-    server.aof_child_pid = -1;
-    server.module_child_pid = -1;
+    server.in_exec = 0;
+    server.busy_module_yield_flags = BUSY_MODULE_YIELD_NONE;
+    server.busy_module_yield_reply = NULL;
+    server.client_pause_in_transaction = 0;
+    server.child_pid = -1;
+    server.child_type = CHILD_TYPE_NONE;
     server.rdb_child_type = RDB_CHILD_TYPE_NONE;
     server.rdb_pipe_conns = NULL;
     server.rdb_pipe_numconns = 0;
@@ -531,32 +659,60 @@ void initServer(void) {
     server.rdb_bgsave_scheduled = 0;
     server.child_info_pipe[0] = -1;
     server.child_info_pipe[1] = -1;
-    server.child_info_data.magic = 0;
-    aofRewriteBufferReset();
+    server.child_info_nread = 0;
     server.aof_buf = sdsempty();
     server.lastsave = time(NULL); /* At startup we consider the DB saved. */
     server.lastbgsave_try = 0;    /* At startup we never tried to BGSAVE. */
     server.rdb_save_time_last = -1;
     server.rdb_save_time_start = -1;
+    server.rdb_last_load_keys_expired = 0;
+    server.rdb_last_load_keys_loaded = 0;
     server.dirty = 0;
     resetServerStats();
     /* A few stats we don't want to reset: server startup time, and peak mem. */
     server.stat_starttime = time(NULL);
     server.stat_peak_memory = 0;
+    server.stat_peak_memory_time = server.unixtime;
+    server.stat_current_cow_peak = 0;
+    server.stat_current_cow_bytes = 0;
+    server.stat_current_cow_updated = 0;
+    server.stat_current_save_keys_processed = 0;
+    server.stat_current_save_keys_total = 0;
     server.stat_rdb_cow_bytes = 0;
     server.stat_aof_cow_bytes = 0;
     server.stat_module_cow_bytes = 0;
+    server.stat_module_progress = 0;
     for (int j = 0; j < CLIENT_TYPE_COUNT; j++)
         server.stat_clients_type_memory[j] = 0;
+    server.stat_cluster_links_memory = 0;
     server.cron_malloc_stats.zmalloc_used = 0;
     server.cron_malloc_stats.process_rss = 0;
     server.cron_malloc_stats.allocator_allocated = 0;
     server.cron_malloc_stats.allocator_active = 0;
     server.cron_malloc_stats.allocator_resident = 0;
+    server.repl_current_sync_attempts = 0;
     server.lastbgsave_status = C_OK;
     server.aof_last_write_status = C_OK;
     server.aof_last_write_errno = 0;
     server.repl_good_slaves_count = 0;
+    server.last_sig_received = 0;
+    memset(server.io_threads_clients_num, 0, sizeof(server.io_threads_clients_num));
+    atomicSetWithSync(server.running, 0);
+    server.accum_call_count_since_ustime = 0;
+    server.monotonic_us_when_ustime = 0;
+
+    /* Initiate acl info struct */
+    server.acl_info.invalid_cmd_accesses = 0;
+    server.acl_info.invalid_key_accesses  = 0;
+    server.acl_info.user_auth_failures = 0;
+    server.acl_info.invalid_channel_accesses = 0;
+    server.acl_info.acl_access_denied_tls_cert = 0;
+
+    /* Initialize the shared pending command pool. */
+    server.cmd_pool.size = 0;
+    server.cmd_pool.capacity = PENDING_COMMAND_POOL_SIZE;
+    server.cmd_pool.pool = zmalloc(sizeof(pendingCommand*) * PENDING_COMMAND_POOL_SIZE);
+    server.cmd_pool.min_size = 0;
 
     /* Create the timer callback, this is our way to process many background
      * operations incrementally, like clients timeout, eviction of unaccessed
@@ -566,52 +722,18 @@ void initServer(void) {
         exit(1);
     }
 
-    /* Create an event handler for accepting new connections in TCP and Unix
-     * domain sockets. */
-    for (j = 0; j < server.ipfd_count; j++) {
-        if (aeCreateFileEvent(server.el, server.ipfd[j], AE_READABLE,
-            acceptTcpHandler,NULL) == AE_ERR)
-            {
-                serverPanic(
-                    "Unrecoverable error creating server.ipfd file event.");
-            }
-    }
-    for (j = 0; j < server.tlsfd_count; j++) {
-        if (aeCreateFileEvent(server.el, server.tlsfd[j], AE_READABLE,
-            acceptTLSHandler,NULL) == AE_ERR)
-            {
-                serverPanic(
-                    "Unrecoverable error creating server.tlsfd file event.");
-            }
-    }
-    if (server.sofd > 0 && aeCreateFileEvent(server.el,server.sofd,AE_READABLE,
-        acceptUnixHandler,NULL) == AE_ERR) serverPanic("Unrecoverable error creating server.sofd file event.");
-
-
     /* Register a readable event for the pipe used to awake the event loop
-     * when a blocked client in a module needs attention. */
-    if (aeCreateFileEvent(server.el, server.module_blocked_pipe[0], AE_READABLE,
-        moduleBlockedClientPipeReadable,NULL) == AE_ERR) {
+     * from module threads. */
+    if (aeCreateFileEvent(server.el, server.module_pipe[0], AE_READABLE,
+        modulePipeReadable,NULL) == AE_ERR) {
             serverPanic(
-                "Error registering the readable event for the module "
-                "blocked clients subsystem.");
+                "Error registering the readable event for the module pipe.");
     }
 
     /* Register before and after sleep handlers (note this needs to be done
      * before loading persistence since it is used by processEventsWhileBlocked. */
     aeSetBeforeSleepProc(server.el,beforeSleep);
     aeSetAfterSleepProc(server.el,afterSleep);
-
-    /* Open the AOF file if needed. */
-    if (server.aof_state == AOF_ON) {
-        server.aof_fd = open(server.aof_filename,
-                               O_WRONLY|O_APPEND|O_CREAT,0644);
-        if (server.aof_fd == -1) {
-            serverLog(LL_WARNING, "Can't open the append-only file: %s",
-                strerror(errno));
-            exit(1);
-        }
-    }
 
     /* 32 bit instances are limited to 4GB of address space, so if there is
      * no explicit limit in the user provided configuration we set a limit
@@ -623,13 +745,27 @@ void initServer(void) {
         server.maxmemory_policy = MAXMEMORY_NO_EVICTION;
     }
 
-    if (server.cluster_enabled) clusterInit();
-    replicationScriptCacheInit();
+    luaEnvInit();
     scriptingInit(1);
+    if (functionsInit() == C_ERR) {
+        serverPanic("Functions initialization failed, check the server logs.");
+        exit(1);
+    }
     slowlogInit();
     latencyMonitorInit();
+
+    /* Initialize ACL default password if it exists */
+    ACLUpdateDefaultUserPassword(server.requirepass);
+
+    applyWatchdogPeriod();
+
+    if (server.maxmemory_clients != 0)
+        initServerClientMemUsageBuckets();
+
+    prefetchCommandsBatchInit();
 }
 ```
+
 
 ### setupSignalHandlers
 
@@ -786,19 +922,19 @@ void createSharedObjects(void) {
 
 `aeCreateTimeEvent` 接受以下参数：
 
-- `eventLoop`：即 `redis.c` 里的 `server.el`
+- `eventLoop`：即 `server.c` 里的 `server.el`
 - `milliseconds`：从当前时间算起，定时器多少毫秒后到期。
 - `proc`：函数指针，保存定时器到期后要调用的函数地址。
 - `clientData`：通常是 `NULL`。
 - `finalizerProc`：指向「该时间事件从时间事件链表移除之前」要调用的函数。
 
-`initServer` 调用 `aeCreateTimeEvent`，把一个时间事件挂到 `server.el` 的 `timeEventHead` 字段上——该指针指向这条时间事件链表。`redis.c:initServer` 里的那次调用如下：
+`initServer` 调用 `aeCreateTimeEvent`，把一个时间事件挂到 `server.el` 的 `timeEventHead` 字段上——该指针指向这条时间事件链表。`server.c:initServer` 里的那次调用如下：
 
 ```
 aeCreateTimeEvent(server.el /*eventLoop*/, 1 /*milliseconds*/, serverCron /*proc*/, NULL /*clientData*/, NULL /*finalizerProc*/);
 ```
 
-`redis.c:serverCron` 做了很多维持 Redis 正常运转的后台工作。
+`server.c:serverCron` 做了很多维持 Redis 正常运转的后台工作。
 
 创建这个定时器回调，是我们增量处理大量后台操作的方式，比如客户端超时、淘汰已过期的 key 等。
 
@@ -1175,7 +1311,7 @@ void linkClient(client *c) {
 
 `aeCreateFileEvent` 的本质就是一次 `epoll_ctl` 系统调用：在 `anetTcpServer` 建出的*监听描述符*上注册对 `EPOLLIN` 的监听，并把它与 `aeCreateEventLoop` 创建的 `epoll` 描述符关联起来。
 
-下面说明 `aeCreateFileEvent` 被 `redis.c:initServer` 调用时具体做了什么。
+下面说明 `aeCreateFileEvent` 被 `server.c:initServer` 调用时具体做了什么。
 
 `initServer` 传给 `aeCreateFileEvent` 的参数如下：
 
@@ -1462,12 +1598,12 @@ void *IOThreadMain(void *myid) {
 1. `serverCron()` 按 `server.hz` 的频率周期性调用，负责那些必须时不时做一次的活，比如检查超时的客户端。
 2. `beforeSleep()` 在每次事件循环触发、Redis 处理完若干请求、正准备回到事件循环睡眠之前被调用。
 
-`redis.c:main` 调用 `ae.c:aeMain`，由它驱动前面阶段初始化好的事件循环。
+`server.c:main` 调用 `ae.c:aeMain`，由它驱动前面阶段初始化好的事件循环。
 
 `ae.c:aeMain` 在一个 while 循环里调用 `ae.c:aeProcessEvents`，处理待办的时间事件与文件事件。
 
 ```c
-// sever.c
+// server.c
 void aeMain(aeEventLoop *eventLoop) {
     eventLoop->stop = 0;
     while (!eventLoop->stop) {
@@ -1515,15 +1651,28 @@ struct redisServer {
 ```c
 void readQueryFromClient(connection *conn) {
     client *c = connGetPrivateData(conn);
-    int nread, readlen;
-    size_t qblen;
+    int nread, big_arg = 0;
+    size_t qblen, readlen;
 
-    /* Check if we want to read from the client later when exiting from
-     * the event loop. This is the case if threaded I/O is enabled. */
-    if (postponeClientRead(c)) return;
+    /* We have to read compressed data but compression for this client is
+     * currently disabled. This could happened f.e when client was just fetched
+     * to main thread. */
+    int pending_compression_read = c->compression_state &&
+                                   !(c->io_flags & CLIENT_IO_COMPRESSION_ENABLED);
 
-    /* Update total number of reads on server */
-    server.stat_total_reads_processed++;
+    if (!(c->io_flags & CLIENT_IO_READ_ENABLED) || pending_compression_read) {
+        atomicSetWithSync(c->pending_read, 1);
+        return;
+    } else if (server.io_threads_num > 1) {
+        atomicSetWithSync(c->pending_read, 0);
+    }
+
+    c->read_error = 0;
+
+    c->stat_total_read_events++;
+
+    /* Update the number of reads of io threads on server */
+    atomicIncr(IOThreads[c->running_tid].io_reads_processed, 1);
 
     readlen = PROTO_IOBUF_LEN;
     /* If this is a multi bulk request, and we are processing a bulk reply
@@ -1535,170 +1684,143 @@ void readQueryFromClient(connection *conn) {
     if (c->reqtype == PROTO_REQ_MULTIBULK && c->multibulklen && c->bulklen != -1
         && c->bulklen >= PROTO_MBULK_BIG_ARG)
     {
-        ssize_t remaining = (size_t)(c->bulklen+2)-sdslen(c->querybuf);
+        /* For big argv, the client always uses its private query buffer.
+         * Using the reusable query buffer would eventually expand it beyond 32k,
+         * causing the client to take ownership of the reusable query buffer. */
+        if (!c->querybuf) c->querybuf = sdsempty();
+
+        ssize_t remaining = (size_t)(c->bulklen+2)-(sdslen(c->querybuf)-c->qb_pos);
+        big_arg = 1;
 
         /* Note that the 'remaining' variable may be zero in some edge case,
          * for example once we resume a blocked client after CLIENT PAUSE. */
-        if (remaining > 0 && remaining < readlen) readlen = remaining;
+        if (remaining > 0) readlen = remaining;
+
+        /* Master client needs expand the readlen when meet BIG_ARG(see #9100),
+         * but doesn't need align to the next arg, we can read more data. */
+        if (c->flags & CLIENT_MASTER && readlen < PROTO_IOBUF_LEN)
+            readlen = PROTO_IOBUF_LEN;
+    } else if (c->querybuf == NULL) {
+        if (unlikely(thread_reusable_qb_used)) {
+            /* The reusable query buffer is already used by another client,
+             * switch to using the client's private query buffer. This only
+             * occurs when commands are executed nested via processEventsWhileBlocked(). */
+            c->querybuf = sdsnewlen(NULL, PROTO_IOBUF_LEN);
+            sdsclear(c->querybuf);
+        } else {
+            /* Create the reusable query buffer if it doesn't exist. */
+            if (!thread_reusable_qb) {
+                thread_reusable_qb = sdsnewlen(NULL, PROTO_IOBUF_LEN);
+                sdsclear(thread_reusable_qb);
+            }
+
+            /* Assign the reusable query buffer to the client and mark it as in use. */
+            serverAssert(sdslen(thread_reusable_qb) == 0);
+            c->querybuf = thread_reusable_qb;
+            c->io_flags |= CLIENT_IO_REUSABLE_QUERYBUFFER;
+            thread_reusable_qb_used = 1;
+        }
     }
 
     qblen = sdslen(c->querybuf);
-    if (c->querybuf_peak < qblen) c->querybuf_peak = qblen;
-    c->querybuf = sdsMakeRoomFor(c->querybuf, readlen);
-    nread = connRead(c->conn, c->querybuf+qblen, readlen);
+    if (!(c->flags & CLIENT_MASTER) && // master client's querybuf can grow greedy.
+        (big_arg || sdsalloc(c->querybuf) < PROTO_IOBUF_LEN)) {
+        /* When reading a BIG_ARG we won't be reading more than that one arg
+         * into the query buffer, so we don't need to pre-allocate more than we
+         * need, so using the non-greedy growing. For an initial allocation of
+         * the query buffer, we also don't wanna use the greedy growth, in order
+         * to avoid collision with the RESIZE_THRESHOLD mechanism. */
+        c->querybuf = sdsMakeRoomForNonGreedy(c->querybuf, readlen);
+        /* We later set the peak to the used portion of the buffer, but here we over
+         * allocated because we know what we need, make sure it'll not be shrunk before used. */
+        if (c->querybuf_peak < qblen + readlen) c->querybuf_peak = qblen + readlen;
+    } else {
+        c->querybuf = sdsMakeRoomFor(c->querybuf, readlen);
+
+        /* Read as much as possible from the socket to save read(2) system calls. */
+        readlen = sdsavail(c->querybuf);
+    }
+    /* Compression is applied at the client level (see client_comp.c): when
+     * decompression is active `nread` is the number of decompressed bytes placed
+     * in the query buffer while `network_read` is the number of bytes actually
+     * read from the socket. Without compression they are equal. */
+    int network_read = 0;
+    nread = clientConnRead(c, c->querybuf+qblen, readlen, &network_read);
     if (nread == -1) {
         if (connGetState(conn) == CONN_STATE_CONNECTED) {
-            return;
+            goto done;
         } else {
-            serverLog(LL_VERBOSE, "Reading from client: %s",connGetLastError(c->conn));
+            c->read_error = CLIENT_READ_CONN_DISCONNECTED;
             freeClientAsync(c);
-            return;
+            goto done;
         }
     } else if (nread == 0) {
+        c->read_error = CLIENT_READ_CONN_CLOSED;
         freeClientAsync(c);
-        return;
-    } else if (c->flags & CLIENT_MASTER) {
-        /* Append the query buffer to the pending (not applied) buffer
-         * of the master. We'll use this buffer later in order to have a
-         * copy of the string applied by the last command executed. */
-        c->pending_querybuf = sdscatlen(c->pending_querybuf,
-                                        c->querybuf+qblen,nread);
+        goto done;
     }
 
     sdsIncrLen(c->querybuf,nread);
-    c->lastinteraction = server.unixtime;
-    if (c->flags & CLIENT_MASTER) c->read_reploff += nread;
-    server.stat_net_input_bytes += nread;
-    if (sdslen(c->querybuf) > server.client_max_querybuf_len) {
-        sds ci = catClientInfoString(sdsempty(),c), bytes = sdsempty();
+    qblen = sdslen(c->querybuf);
+    if (c->querybuf_peak < qblen) c->querybuf_peak = qblen;
 
-        bytes = sdscatrepr(bytes,c->querybuf,64);
-        serverLog(LL_WARNING,"Closing client that reached max query buffer length: %s (qbuf initial bytes: %s)", ci, bytes);
-        sdsfree(ci);
-        sdsfree(bytes);
+    if (!(c->flags & CLIENT_MASTER) || c->running_tid == IOTHREAD_MAIN_THREAD_ID)
+        c->lastinteraction = server.unixtime;
+    else
+        /* Avoid contention with genRedisInfoString as it can access master
+         * client's data. If this is a master running in IO thread the value of
+         * c->lastinteraction will be updated during processClientsFromIOThread */
+        c->io_lastinteraction = server.unixtime;
+
+    if (c->flags & CLIENT_MASTER) {
+        if (c->running_tid == IOTHREAD_MAIN_THREAD_ID) {
+            c->read_reploff += nread;
+        } else {
+            /* Same comment as for c->io_lastinteraction */
+            c->io_read_reploff += nread;
+        }
+        atomicIncr(server.stat_net_repl_input_bytes, network_read);
+    } else {
+        atomicIncr(server.stat_net_input_bytes, network_read);
+    }
+    c->net_input_bytes += network_read;
+
+    if (!(c->flags & CLIENT_MASTER) &&
+        /* The commands cached in the MULTI/EXEC queue have not been executed yet,
+         * so they are also considered a part of the query buffer in a broader sense.
+         *
+         * For unauthenticated clients, the query buffer cannot exceed 1MB at most. */
+        (c->mstate.argv_len_sums + sdslen(c->querybuf) > server.client_max_querybuf_len ||
+         (c->mstate.argv_len_sums + sdslen(c->querybuf) > 1024*1024 && authRequired(c))))
+    {
+        c->read_error = CLIENT_READ_REACHED_MAX_QUERYBUF;
         freeClientAsync(c);
-        return;
+        atomicIncr(server.stat_client_qbuf_limit_disconnections, 1);
+        goto done;
     }
 
     /* There is more data in the client input buffer, continue parsing it
-     * in case to check if there is a full command to execute. */
-     processInputBuffer(c);
-}
-```
+     * and check if there is a full command to execute. */
+    if (processInputBuffer(c) == C_ERR)
+         c = NULL;
 
-主线程首次调用会执行 postponeClientRead 检查 将 clients 放入 clients_pending_read 列表
-
-
-```c
-int postponeClientRead(client *c) {
-    if (server.io_threads_active &&
-        server.io_threads_do_reads &&
-        !ProcessingEventsWhileBlocked &&
-        !(c->flags & (CLIENT_MASTER|CLIENT_SLAVE|CLIENT_BLOCKED)) &&
-        io_threads_op == IO_THREADS_OP_IDLE)
-    {
-        listAddNodeHead(server.clients_pending_read,c);
-        c->pending_read_list_node = listFirst(server.clients_pending_read);
-        return 1;
-    } else {
-        return 0;
-    }
-}
-```
-
-#### handleClientsWithPendingReadsUsingThreads
-
-主线程在执行 [beforeSleep](/docs/CS/DB/Redis/ae.md?id=beforesleep) 函数时会调用 handleClientsWithPendingReadsUsingThreads 将 clients 通过 RoundRobin 方式分配给 I/O 线程绑定队列  i o_thread_list, I/O 线程从队列中获取任务执行 socket 读取和解析
-之后主线程也会执行一部分的命令读取与解析 而命令的执行需要等待所有I/O线程完成解析后才开始
-
-如果未开启I/O多线程模型 则需要主线程独立完成流程
-
-这个函数用 fan-out → fan-in 的模式做到线程安全：
-Fan out：主线程把活分发给各 io-thread，io-thread 会阻塞，直到主线程调用 `setIOPendingCount()` 把一个大于 0 的值设进去。
-Fan in：主线程等待，直到 `getIOPendingCount()` 返回 0。
-
-之后它就能安全地做收尾处理，并回到普通的同步工作方式。
-
-```c
-int handleClientsWithPendingReadsUsingThreads(void) {
-  	// 是否开启I/O多线程
-    if (!server.io_threads_active || !server.io_threads_do_reads) return 0;
-    int processed = listLength(server.clients_pending_read);
-    if (processed == 0) return 0;
-
-    /* Distribute the clients across N different lists. */
-    listIter li;
-    listNode *ln;
-    listRewind(server.clients_pending_read,&li);
-    int item_id = 0;
-    while((ln = listNext(&li))) {
-        client *c = listNodeValue(ln);
-        int target_id = item_id % server.io_threads_num;
-        listAddNodeTail(io_threads_list[target_id],c);
-        item_id++;
-    }
-
-    /* Give the start condition to the waiting threads, by setting the
-     * start condition atomic var. */
-    io_threads_op = IO_THREADS_OP_READ;
-    for (int j = 1; j < server.io_threads_num; j++) {
-        int count = listLength(io_threads_list[j]);
-        setIOPendingCount(j, count);
-    }
-
-    /* Also use the main thread to process a slice of clients. */
-    listRewind(io_threads_list[0],&li);
-    while((ln = listNext(&li))) {
-        client *c = listNodeValue(ln);
-        readQueryFromClient(c->conn);
-    }
-    listEmpty(io_threads_list[0]);
-
-    /* Wait for all the other threads to end their work. */
-    while(1) {
-        unsigned long pending = 0;
-        for (int j = 1; j < server.io_threads_num; j++)
-            pending += getIOPendingCount(j);
-        if (pending == 0) break;
-    }
-
-    io_threads_op = IO_THREADS_OP_IDLE;
-
-    /* Run the list of clients again to process the new buffers. */
-    while(listLength(server.clients_pending_read)) {
-        ln = listFirst(server.clients_pending_read);
-        client *c = listNodeValue(ln);
-        listDelNode(server.clients_pending_read,ln);
-        c->pending_read_list_node = NULL;
-
-        serverAssert(!(c->flags & CLIENT_BLOCKED));
-
-        if (beforeNextClient(c) == C_ERR) {
-            continue;
+done:
+    if (c && isClientReadErrorFatal(c)) {
+        if (c->running_tid == IOTHREAD_MAIN_THREAD_ID) {
+            handleClientReadError(c);
         }
-
-        /* Once io-threads are idle we can update the client in the mem usage */
-        updateClientMemUsage(c);
-
-        if (processPendingCommandAndInputBuffer(c) == C_ERR) {
-            continue;
-        }
-
-        /* We may have pending replies if a thread readQueryFromClient() produced
-         * replies and did not put the client in pending write queue (it can't).
-         */
-        if (!(c->flags & CLIENT_PENDING_WRITE) && clientHasPendingReplies(c))
-            putClientInPendingWriteQueue(c);
     }
 
-    /* Update processed count on server */
-    server.stat_io_reads_processed += processed;
-
-    return processed;
+    if (c && (c->io_flags & CLIENT_IO_REUSABLE_QUERYBUFFER)) {
+        serverAssert(c->qb_pos == 0); /* Ensure the client's query buffer is trimmed in processInputBuffer */
+        resetReusableQueryBuf(c);
+    }
+    beforeNextClient(c);
 }
 ```
 
-
+> [!WARNING]
+> 旧笔记在这一段贴了 `postponeClientRead()` 与 `handleClientsWithPendingReadsUsingThreads()` 的源码，但这两个函数在 8.10.2 的 `src/networking.c` 中**都已不存在**——8.0 重写 I/O 线程实现后，读取就绪性改由 `CLIENT_IO_READ_ENABLED` / `c->pending_read` 原子量控制，query buffer 也可在线程间复用。上面贴出的 `readQueryFromClient` 才是 8.10.2 的真实现。I/O 线程与 bio 的完整辨析见 [io](/docs/CS/DB/Redis/io.md)。
 
 #### processPendingCommandAndInputBuffer
 

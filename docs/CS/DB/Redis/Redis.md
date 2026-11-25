@@ -4,7 +4,7 @@
 > 本页及`Redis/` 子树的所有默认值、命令可用性均以 **Redis 8.10.2（2026-09-17）** 为基线。
 > 读到与下表冲突的旧口径表述时，一律以本基线为准。
 
-**当前版本**：8.10.2，发布于 2026-09-17（`src/version.h:1` → `REDIS_VERSION "8.10.2"`）。
+**当前版本**：8.10.2，发布于 2026-09-17（`src/version.h` → `REDIS_VERSION "8.10.2"`）。
 
 **支持状态**（来源：官方仓库 `unstable` 分支 `SECURITY.md`，注意 tag 内的副本是旧矩阵，不要用）：
 
@@ -48,28 +48,28 @@ Redis 官方**未公布**「3 年 / 5 年」这类年限承诺，唯一口径是
 
 | 配置项 | 默认值 | 出处 |
 | :-- | :-- | :-- |
-| `maxmemory-policy` | `noeviction` | `config.c:3491` |
-| `maxmemory-samples` | `5`（范围 1–**64**） | `config.c:3522` |
-| `appendonly` | `0` / no（**AOF 默认关闭**） | `config.c:3435` |
-| `appendfsync` | `everysec` | `config.c:3492` |
-| `save` | `3600 1` / `300 100` / `60 10000` | 编译进二进制，见 `server.c:2489-2491`，非配置默认值 |
-| `timeout` | `0`（永不超时） | `config.c:3524` |
-| `maxclients` | `10000` | `config.c:3553` |
-| `io-threads` | `1`（**单线程**，范围 1–128，`IMMUTABLE_CONFIG` 运行时不可改） | `config.c:3507` |
-| `cluster-node-timeout` | `15000` ms | `config.c:3574` |
-| `lazyfree-lazy-expire` / `-eviction` / `-server-del` / `-user-del` / `-user-flush` | 全部 `0` / no | `config.c:3410-3414` |
-| `slowlog-log-slower-than` | `10000`（**单位微秒**） | `config.c:3579` |
-| `slowlog-max-len` | `128` | `config.c:3568` |
+| `maxmemory-policy` | `noeviction` | `config.c` |
+| `maxmemory-samples` | `5`（范围 1–**64**） | `config.c` |
+| `appendonly` | `0` / no（**AOF 默认关闭**） | `config.c` |
+| `appendfsync` | `everysec` | `config.c` |
+| `save` | `3600 1` / `300 100` / `60 10000` | 编译进二进制，见 `server.c`，非配置默认值 |
+| `timeout` | `0`（永不超时） | `config.c` |
+| `maxclients` | `10000` | `config.c` |
+| `io-threads` | `1`（**单线程**，范围 1–128，`IMMUTABLE_CONFIG` 运行时不可改） | `config.c` |
+| `cluster-node-timeout` | `15000` ms | `config.c` |
+| `lazyfree-lazy-expire` / `-eviction` / `-server-del` / `-user-del` / `-user-flush` | 全部 `0` / no | `config.c` |
+| `slowlog-log-slower-than` | `10000`（**单位微秒**） | `config.c` |
+| `slowlog-max-len` | `128` | `config.c` |
 
-**淘汰策略共 10 种，不是 8 种**（`config.c:39-51` 枚举表 + `redis.conf` + 官方 docs 三处一致）：
+**淘汰策略共 10 种，不是 8 种**（`config.c` 枚举表 + `redis.conf` + 官方 docs 三处一致）：
 `noeviction`、`allkeys-lru`、`allkeys-lrm`、`allkeys-lfu`、`allkeys-random`、`volatile-lru`、`volatile-lrm`、`volatile-lfu`、`volatile-random`、`volatile-ttl`。
 
 - `lru` 与 `lrm` 的区别在于**时间戳更新时机**：LRU 在**读和写**时都更新，LRM **只在写**时更新（`src/db.c` 注释原文：`LRM policy should NOT update timestamp on reads`）。8.6.0 起才引入 LRM；≤ 8.4 与 Valkey 都只有 8 种。
 - `volatile-xxx` 在没有 key 带过期时间时**行为等同 `noeviction`**（官方 docs 明述）。
 
-**Cluster 全覆盖是全有全无，不是「覆盖一半即挂」**：`src/cluster.h:22-23` 定义 `CLUSTER_SLOT_MASK_BITS 14` / `CLUSTER_SLOTS (1<<14)` = 16384；`src/cluster_legacy.c:5308-5318` 遍历全部 16384 个 slot，**任意一个**未被健康 master 覆盖即置 `CLUSTER_FAIL`——不存在中间态。该行为可由 `cluster-require-full-coverage no`（默认 `1`，`config.c:3420`）关闭。
+**Cluster 全覆盖是全有全无，不是「覆盖一半即挂」**：`src/cluster.h` 定义 `CLUSTER_SLOT_MASK_BITS 14` / `CLUSTER_SLOTS (1<<14)` = 16384；`src/cluster_legacy.c` 遍历全部 16384 个 slot，**任意一个**未被健康 master 覆盖即置 `CLUSTER_FAIL`——不存在中间态。该行为可由 `cluster-require-full-coverage no`（默认 `1`，`config.c`）关闭。
 
-**后台线程数与 `BIO_NUM_OPS` 不是一回事**（本页与 `Concurrency.md` 曾长期混淆）：8.10.2 `src/bio.h:16-33` 有两组枚举——
+**后台线程数与 `BIO_NUM_OPS` 不是一回事**（本页与 `Concurrency.md` 曾长期混淆）：8.10.2 `src/bio.h` 有两组枚举——
 `bio_worker_t` 的 `BIO_WORKER_NUM = 3`（**线程数**），`bio_job_type_t` 的 `BIO_NUM_OPS = 7`（**任务类型数**，含 `BIO_CLOSE_AOF` 与三个 `BIO_COMP_RQ_*`）。
 「后台线程 3 个」是对的，但括号里写`BIO_NUM_OPS` 是错的。
 
@@ -192,62 +192,162 @@ Redis-benchmark 是官方自带的 Redis 性能测试工具，可以有效的测
 
 ## Architecture
 
-Redis 整体架构如下图:
+Redis 把「网络接入 / 事件驱动 / 命令执行 / 数据对象 / 持久化 / 高可用 / 观测」压进**一个单进程**：主线程跑事件循环、串行执行命令，因此绝大多数数据结构操作无需加锁；耗时任务外移——RDB 快照与 AOF rewrite 交给 **fork 出的子进程**，close/fsync/lazyfree 交给 **3 个 bio 后台线程**，水平扩展交给 Cluster。这种「单线程执行 + 多进程/多线程做脏活」的形状，是理解 Redis 全部性能与延迟问题的框架。
 
-<div style="text-align: center;">
+> 版本基线：Redis 8.10.2（commit 498ecd0d，2026-09-17）。以下片段均取自该 tag。
 
-![Fig.1. Architecture](./img/Architecture.png)
+```dot
+digraph RedisArch {
+  rankdir=TB;
+  node [shape=box, style=rounded];
 
-</div>
+  subgraph cluster_access {
+    label="接入层 / Access";
+    client [label="redis-cli / RESP client\nJedis / Lettuce / Redisson"];
+    conn [label="networking.c\nreadQueryFromClient\nprocessInputBuffer"];
+  }
 
-<p style="text-align: center;">
-Fig.1. Architecture
-</p>
+  subgraph cluster_exec {
+    label="执行层 / Single-threaded Core";
+    ae [label="ae.c / aeMain\nepoll + beforeSleep"];
+    cmd [label="commands.def 自动生成\ncall() → proc()"];
+    cron [label="serverCron\n时间事件 hz=10"];
+  }
 
-主要模块:
+  subgraph cluster_data {
+    label="数据层 / Object & Encoding";
+    robj [label="redisObject / kvobj\nobject.h"];
+    enc [label="SDS / listpack / quicklist\ndict / skiplist / rax"];
+  }
 
-- 应用层: client
-- 网络层: 基于I/O多路复用封装了一个简单的基于事件驱动的网络通信库 [ae](/docs/CS/DB/Redis/ae.md)
-  它封装了底层的 select、epoll、avport 以及 kqueue 这些I/O多路复用函数，为上层提供了相同的接口
-- 命令执行层 负责执行客户端的各种命令
-- 内存层: 提供各种数据结构保存数据
-- 持久化层: 提供 RDB 和 AOF 持久化策略
-- 高可用层: 提供 Replication 、Sentinel 和 Cluster 实现高可用
-- 统计和监控: 提供一些监控工具和性能分析工具, 例如内存监控、基准测试、内存碎片、Bigkey统计、慢指令查询
+  subgraph cluster_durability {
+    label="持久化 / Durability";
+    rdb [label="RDB 快照\nrdb.c / fork 子进程"];
+    aof [label="AOF 日志\naof.c / bio fsync"];
+  }
 
+  subgraph cluster_ha {
+    label="高可用与扩展 / HA & Scale";
+    repl [label="Replication PSYNC\nreplication.c"];
+    ha [label="Sentinel / Cluster\nsentinel.c / cluster.c"];
+  }
 
+  subgraph cluster_bg {
+    label="后台 / Background";
+    bio [label="bio.c\n3 worker threads"];
+    lazy [label="lazyfree.c\nUNLINK / FLUSH ASYNC"];
+  }
 
-Redis将启动的这些服务抽象成一个全局的结构体 [redisServer](/docs/CS/DB/Redis/server.md?id=server)
-它包含了存储结构 [redisDb](/docs/CS/DB/Redis/redisDb.md)、命令列表、网络监听、客户端缓存等信息
+  client -> conn -> ae;
+  ae -> cmd;
+  ae -> cron;
+  cmd -> robj -> enc;
+  cmd -> rdb; cmd -> aof;
+  rdb -> bio; aof -> bio;
+  cmd -> lazy -> bio;
+  ae -> repl -> ha;
+}
+```
 
+### The Bootstrap Chain
 
+`main()` 的第一个动作不是业务逻辑，而是初始化运行时与配置：`zmalloc_set_oom_handler`、播种随机数（`getpid()` 加微秒数，专门应对容器内 `time()`/`getpid()` 相同）、`crc64_init()`，随后才 `initServerConfig()` / `initServer()` 并最终进入事件循环：
 
-[Redis启动流程](/docs/CS/DB/Redis/start.md)
+```c
+    /* We need to initialize our libraries, and the server configuration. */
+#ifdef INIT_SETPROCTITLE_REPLACEMENT
+    spt_init(argc, argv);
+#endif
+    tzset(); /* Populates 'timezone' global. */
+    zmalloc_set_oom_handler(redisOutOfMemoryHandler);
 
-[Redis命令执行流程](/docs/CS/DB/Redis/start.md)
+    /* To achieve entropy, in case of containers, their time() and getpid() can
+     * be the same. But value of tv_usec is fast enough to make the difference */
+    gettimeofday(&tv,NULL);
+    srand(time(NULL)^getpid()^tv.tv_usec);
+    srandom(time(NULL)^getpid()^tv.tv_usec);
+    init_genrand64(((long long) tv.tv_sec * 1000000 + tv.tv_usec) ^ getpid());
+    crc64_init();
+```
 
-图源 [redis 异步网络通信流程 - 单线程](https://www.processon.com/view/5eab75227d9c0869dab46472)
+完整链路见 [start](/docs/CS/DB/Redis/start.md)：`initServerConfig`（装载默认值与命令表）→ `initServer`（创建 `redisServer`、监听端口、注册事件处理器）→ `aeMain`（事件循环）→ `serverCron`（时间事件）。
 
-![](https://wenfh2020.com/images/2020/2020-05-04-01-19-51.png)
+### The Event Loop
+
+`aeMain` 本身极简——只是个不停止的 `while` 循环，反复调用 `aeProcessEvents`，并带上 `AE_CALL_BEFORE_SLEEP` / `AE_CALL_AFTER_SLEEP` 两个钩子位：
+
+```c
+void aeMain(aeEventLoop *eventLoop) {
+    eventLoop->stop = 0;
+    while (!eventLoop->stop) {
+        aeProcessEvents(eventLoop, AE_ALL_EVENTS|
+                                   AE_CALL_BEFORE_SLEEP|
+                                   AE_CALL_AFTER_SLEEP);
+    }
+}
+```
+
+`aeProcessEvents` 是真正的心脏，顺序固定为 **beforeSleep → `aeApiPoll` 阻塞等待 → afterSleep → 文件事件 → 时间事件**。`beforeSleep` 在阻塞前执行（过期键清理、AOF buffer 落盘、把回复刷给客户端），因此 Redis 能在「无请求时」做维护，这是单线程还能保持低延迟的关键：
+
+```c
+        if (eventLoop->beforesleep != NULL && (flags & AE_CALL_BEFORE_SLEEP))
+            eventLoop->beforesleep(eventLoop);
+
+        /* ... 计算最近时间事件还有多久到期，得到 tvp ... */
+        numevents = aeApiPoll(eventLoop, tvp);
+
+        /* After sleep callback. */
+        if (eventLoop->aftersleep != NULL && flags & AE_CALL_AFTER_SLEEP)
+            eventLoop->aftersleep(eventLoop);
+```
+
+`aeApiPoll` 是 I/O 多路复用的抽象层，底层按平台选 `epoll` / `kqueue` / `select` / `evport`（见 [ae](/docs/CS/DB/Redis/ae.md)）。
+
+### Object Model: robj and kvobj
+
+所有值都装在 `redisObject` 里：`type` 是逻辑类型，`encoding` 是内存表示，二者解耦使得同一种类型可随数据量切换编码。8.10.2 已把它从 `server.h` 迁到独立的 `object.h`，并新增两个位域 `iskvobj` / `metabits`——`kvobj` 把**键、可选元数据、小值内联进同一块内存**，降低每键的指针追逐与分配开销：
+
+```c
+struct redisObject {
+    unsigned type:4;
+    unsigned encoding:4;
+    unsigned refcount : OBJ_REFCOUNT_BITS;
+    unsigned iskvobj : 1;   /* 1 if this struct serves as a kvobj base */
+
+    /* metabits and lru are Relevant only when iskvobj is set: */
+    unsigned metabits :8;  /* Bitmap of metadata (+expiry) attached to this kvobj */
+    unsigned lru:LRU_BITS; /* LRU time (relative to global lru_clock) or
+                            * LFU data (least significant 8 bits frequency
+                            * and most significant 16 bits access time). */
+    void *ptr;
+};
+```
+
+编码枚举在 8.x 已扩到 16 种，`ZIPLIST` / `LINKEDLIST` / `ZIPMAP` 标注为 *No longer used*；新增 `OBJ_ENCODING_LISTPACK_EX`（带元数据）、`OBJ_ENCODING_SLICED_ARRAY`、以及 8.10 为 compact hash 引入的 `OBJ_ENCODING_TMPL_LP` / `TMPL_ARRAY`：
+
+```c
+#define OBJ_ENCODING_ZIPLIST 5 /* No longer used: old list/hash/zset encoding. */
+#define OBJ_ENCODING_INTSET 6  /* Encoded as intset */
+#define OBJ_ENCODING_SKIPLIST 7  /* Encoded as skiplist */
+#define OBJ_ENCODING_QUICKLIST 9 /* Encoded as linked list of listpacks */
+#define OBJ_ENCODING_LISTPACK 11 /* Encoded as a listpack */
+#define OBJ_ENCODING_LISTPACK_EX 12 /* Encoded as listpack, extended with metadata */
+#define OBJ_ENCODING_TMPL_LP 14 /* Hash with shared template, values in listpack */
+#define OBJ_ENCODING_TMPL_ARRAY 15 /* Hash with shared template, values in sds array */
+```
+
+各类型的编码选择与转换细节见 [struct 总纲](/docs/CS/DB/Redis/struct/struct.md) 与 [redisObject](/docs/CS/DB/Redis/redisDb.md?id=redisobject)。
 
 ### Why Redis so fast
 
-完全基于内存实现 持久化机制都是使用子进程处理 不影响
+成因可归为四条，均可落到上面的架构图：
 
-高效的数据结构
+- **纯内存 + 高效编码**：数据在内存里以 SDS / listpack / quicklist / dict / skiplist 等紧凑结构存放，按实际类型与规模切换编码（见 [struct](/docs/CS/DB/Redis/struct/struct.md)）。
+- **单线程执行**：命令在主线程串行执行，省掉锁竞争与上下文切换；全局哈希表的 rehash 用**渐进式**分摊到多次请求，避免一次性搬迁阻塞（见 [redisDb](/docs/CS/DB/Redis/redisDb.md)）。
+- **脏活外移**：RDB/AOF rewrite 走子进程，close/fsync/lazyfree 走 [bio 线程](/docs/CS/DB/Redis/io.md)，网络读写在 6.0+ 可交给 I/O 线程，主线程始终只做命令计算。
+- **横向扩展**：[Replication](/docs/CS/DB/Redis/Replication.md) + [Sentinel](/docs/CS/DB/Redis/sentinel.md) 提供读写分离与故障转移，[Cluster](/docs/CS/DB/Redis/cluster.md) 用 16384 槽做分片。
 
-整个 Redis 就是一个全局哈希表，他的时间复杂度是 $O(1)$ ，而且为了防止哈希冲突导致链表过长，Redis 会执行 rehash 操作，扩充哈希桶数量，减少哈希冲突
-并且防止一次性 重新映射数据过大导致线程阻塞，采用渐进式 rehash。巧妙的将一次性拷贝分摊到多次请求过程后总，避免阻塞。
-
-同时根据实际存储的数据类型选择不同编码
-
-[Redis 并发模型](/docs/CS/DB/Redis/Concurrency.md)
-
-主从复制 哨兵集群 Cluster分片集群
-
-负载均衡
-
-- [db](/docs/CS/DB/Redis/redisDb.md)
+并发模型的完整辨析见 [Concurrency](/docs/CS/DB/Redis/Concurrency.md)。
 
 ## Persistence
 
@@ -460,26 +560,15 @@ monitor get request cmds of current time
 
 maxmemory-policy
 
-- noeviction default refuse write(exclude del) request
-- volatile-lru
-- volatile-ttl
-- volatile-random
-- alleys-lru
-- alleys-random
-- volatile-lfu
-- allkeys-lfu
+8.10.2 共 **10 种**（含 8.6 新增的 `*-lrm`），以本页 `## Version Baseline` 的清单为准，此处不再罗列以免与基线漂移。要点：
+
+- 默认 `noeviction`：写入被拒（`DEL` 等除外）。
+- `volatile-*` 只淘汰带过期时间的 key；当没有任何 key 设了 TTL 时，行为等同 `noeviction`。
+- `lru` 读写都更新时间戳，`lrm` 只在写时更新（见 [memory](/docs/CS/DB/Redis/memory.md)）。
 
 LRU
 
-keys contain a 24bits of timestamp
-
-random get keys and del the oldest one util the memory is enough
-
-unlink use a async thread to del big value
-
-flushdb and flushall can add params to be async
-
-LFU
+`redisObject.lru` 占 24 位，存相对全局 `server.lruclock` 的时间戳（会回绕，但不影响相对新旧判断）；淘汰时随机取样 `maxmemory-samples` 个 key，删其中最旧的，直到内存够用。`UNLINK` 与 `FLUSHDB/FLUSHALL ASYNC` 把释放交给 bio 后台线程。LFU 时同一 24 位拆成低 8 位频次 + 高 16 位访问时间。详见 [memory](/docs/CS/DB/Redis/memory.md)。
 
 ## TLS
 
@@ -697,7 +786,7 @@ XML 和 JSON 格式的数据占用的内存空间比较大。为了避免数据�
 
 第一种情况是，**如果 Redis 中设置了 maxmemory，而且启用了 LRU 策略（allkeys-lru 或 volatile-lru 策略），那么，整数对象共享池就无法使用了**。这是因为，LRU 策略需要统计每个键值对的使用时间，如果不同的键值对都共享使用一个整数对象，LRU 策略就无法进行统计了。
 
-第二种情况是，如果集合类型数据采用 ziplist 编码，而集合元素是整数，这个时候，也不能使用共享池。因为 ziplist 使用了紧凑型内存结构，判断整数对象的共享情况效率低。
+第二种情况是，如果集合类型数据采用紧凑编码（listpack / intset），而集合元素是整数，这个时候，也不能使用共享池。因为紧凑编码把元素连续塞在一块内存里，元素并非独立的 `redisObject`，无法指向共享池对象。8.x 里 hash/zset/list 的小对象编码已从 ziplist 全面换成 listpack（`OBJ_ENCODING_LISTPACK`），ziplist 枚举项已标注 *No longer used*。
 
 **同的业务数据放到不同的 Redis 实例中**。这样一来，既可以避免单实例的内存使用量过大，也可以避免不同业务的操作相互干扰
 

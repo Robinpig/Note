@@ -1,4 +1,8 @@
+# Redis Stream: Source Deep Dive
+
 ## Introduction
+
+> 版本基线：Redis 8.10.2（commit 498ecd0d）。本篇只讲 Stream 的**结构实现**（rax 索引 + listpack 打包、消费组与 PEL）；命令用法与语义（XADD/XREAD/XACK 的消费者视角、与 Kafka 的选型、延迟队列等）见 [MQ 专篇](/docs/CS/DB/Redis/MQ.md)，两篇划界避免重复。
 
 The Stream is a new data type introduced with Redis 5.0, which models a log data structure in a more abstract way.
 However the essence of a log is still intact: like a log file, often implemented as a file open in append-only mode, Redis Streams are primarily an append-only data structure.
@@ -321,4 +325,6 @@ ZSet 缺点：
 
 ## References
 
-1. [Rax, an ANSI C radix tree implementation](https://github.com/antirez/rax)
+- <https://github.com/redis/redis/blob/8.10.2/src/t_stream.c>
+- <https://github.com/redis/redis/blob/8.10.2/src/stream.h>
+- [Rax, an ANSI C radix tree implementation](https://github.com/antirez/rax)

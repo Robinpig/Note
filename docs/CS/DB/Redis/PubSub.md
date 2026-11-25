@@ -1,5 +1,7 @@
 ## Introduction
 
+> 版本基线：Redis 8.10.2（commit 498ecd0d）。本文只讲 Pub/Sub 的使用语义；Streams 的数据结构实现见 [Stream](/docs/CS/DB/Redis/struct/Stream.md)，把 Redis 当队列的模式对照见 [MQ](/docs/CS/DB/Redis/MQ.md)。
+
 [SUBSCRIBE](https://redis.io/commands/subscribe)、[UNSUBSCRIBE](https://redis.io/commands/unsubscribe) 与 [PUBLISH](https://redis.io/commands/publish) 实现了 [发布/订阅（Publish/Subscribe）](http://en.wikipedia.org/wiki/Publish/subscribe) 消息范式：发送者（publisher）并不针对特定接收者（subscriber）发送消息，而是按频道（channel）分类发布；订阅者只接收自己感兴趣的频道消息，双方彼此解耦，从而得到更好的可扩展性与更动态的网络拓扑。
 
 > [!NOTE]

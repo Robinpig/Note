@@ -952,7 +952,7 @@ Redis 与 Couchbase 则通过异步写盘提供弱持久性。
 
 ### Redis
 
-[Redis](/docs/CS/DB/Redis/Redis.md) 是开源（BSD 许可）的内存数据结构存储，同时用作数据库、缓存与消息代理；其派生项目 [Valkey](/docs/CS/DB/Valkey.md) 在 Redis 7.2 分叉后由 Linux 基金会接管，延续同一条社区路线（演进细节见下节 Key-Value / In-Memory Alternatives）。
+[Redis](/docs/CS/DB/Redis/Redis.md) 是内存数据结构存储，同时用作数据库、缓存与消息代理；其现行版本（8.10.2）采用 **RSALv2 / SSPLv1 / AGPLv3 三选一**许可，**7.2.x 之前才是 BSD-3-Clause**（7.4 起转双许可）——这次许可变更正是社区在 7.2.4 分叉出 [Valkey](/docs/CS/DB/Valkey.md) 的直接原因，后者由 Linux 基金会接管并全程保持 BSD-3-Clause（版本与许可时间线见 [Redis 版本基线](/docs/CS/DB/Redis/Redis.md)，演进细节见下节 Key-Value / In-Memory Alternatives）。
 
 ### LevelDB
 

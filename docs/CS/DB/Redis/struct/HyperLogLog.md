@@ -1,4 +1,8 @@
+# Redis HyperLogLog: Source Deep Dive
+
 ## Introduction
+
+> 版本基线：Redis 8.10.2（commit 498ecd0d）。以下 `hllhdr` 结构与函数片段均取自该 tag，路径为 `src/` 相对路径。
 
 A HyperLogLog is a probabilistic data structure used in order to count unique things (technically this is referred to estimating the cardinality of a set). 
 Usually counting unique items requires using an amount of memory proportional to the number of items you want to count, 
@@ -76,6 +80,43 @@ The "Cardin." field is a 64 bit integer stored in little endian format with the 
 When the most significant bit in the most significant byte of the cached cardinality is set,
 it means that the data structure was modified and we can't reuse the cached value that must be recomputed.
 
+### hllPatLen：元素 → 寄存器 index + 前导零计数
+
+`PFADD` 的核心是 `hllPatLen`：用 MurmurHash64A 对元素哈希，低 P 位作寄存器 index，剩余位找第一个 1 的位置（count）；再交给 `hllDenseSet` 取 max 更新对应寄存器（取较大值，因此只增不减）。
+
+```c
+int hllPatLen(unsigned char *ele, size_t elesize, long *regp) {
+    uint64_t hash, index;
+    int count;
+
+    /* Count the number of zeroes starting from bit HLL_REGISTERS
+     * (that is a power of two corresponding to the first bit we don't use
+     * as index). The max run can be 64-P+1 = Q+1 bits. */
+    hash = MurmurHash64A(ele,elesize,0xadc83b19ULL);
+    index = hash & HLL_P_MASK; /* Register index. */
+    hash >>= HLL_P; /* Remove bits used to address the register. */
+    hash |= ((uint64_t)1<<HLL_Q); /* Make sure the loop terminates
+                                     and count will be <= Q+1. */
+
+    count = __builtin_ctzll(hash) + 1;
+    *regp = (int) index;
+    return count;
+}
+
+/* Low level function to set the dense HLL register at 'index' to the
+ * specified value if the current value is smaller than 'count'. */
+int hllDenseSet(uint8_t *registers, long index, uint8_t count) {
+    uint8_t oldcount;
+
+    HLL_DENSE_GET_REGISTER(oldcount,registers,index);
+    if (count > oldcount) {
+        HLL_DENSE_SET_REGISTER(registers,index,count);
+        return 1;
+    } else {
+        return 0;
+    }
+```
+
 
 
 
@@ -116,5 +157,7 @@ begin with HYLL
 - [Redis Struct](/docs/CS/DB/Redis/struct/struct.md)
 
 ## References
-1. [HyperLogLog: the analysis of a near-optimal cardinality estimation algorithm](http://algo.inria.fr/flajolet/Publications/FlFuGaMe07.pdf)
-2. [New cardinality estimation algorithms for HyperLogLog sketches](https://arxiv.org/pdf/1702.01284.pdf)
+
+- <https://github.com/redis/redis/blob/8.10.2/src/hyperloglog.c>
+- [HyperLogLog: the analysis of a near-optimal cardinality estimation algorithm](http://algo.inria.fr/flajolet/Publications/FlFuGaMe07.pdf)
+- [New cardinality estimation algorithms for HyperLogLog sketches](https://arxiv.org/pdf/1702.01284.pdf)

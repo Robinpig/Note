@@ -96,7 +96,7 @@ void killThreads(void) {
 后台线程**固定 3 个**，通过「每类型一个队列」的生产者-消费者模式工作—— 主线程生产任务，后台线程消费。
 
 > [!WARNING]
-> 「3 个」对应的常量是 `BIO_WORKER_NUM`，**不是 `BIO_NUM_OPS`**。这两个都是极易记错的宏，8.10.2 `src/bio.h:16-33` 里它们含义完全不同：
+> 「3 个」对应的常量是 `BIO_WORKER_NUM`，**不是 `BIO_NUM_OPS`**。这两个都是极易记错的宏，8.10.2 `src/bio.h` 里它们含义完全不同：
 >
 > ```c
 > typedef enum bio_worker_t {        // 线程（worker）类型
@@ -119,7 +119,7 @@ void killThreads(void) {
 > } bio_job_type_t;
 > ```
 >
-> **线程数与任务类型数不是一回事**：3 个 worker 线程通过 `bio_job_to_worker[]` 映射表承接 7 种 job 类型（`src/bio.c:59-67`），其中 `BIO_COMP_RQ_*` 三个「完成请求」类型不独立占线程，而是投递到对应 worker 队列、处理完回写 `bio_comp_list`，再经管道唤醒主线程回调——用于 `FLUSHALL` 这类单命令提交多个 job、需要确认都完成的场景。
+> **线程数与任务类型数不是一回事**：3 个 worker 线程通过 `bio_job_to_worker[]` 映射表承接 7 种 job 类型（`src/bio.c`），其中 `BIO_COMP_RQ_*` 三个「完成请求」类型不独立占线程，而是投递到对应 worker 队列、处理完回写 `bio_comp_list`，再经管道唤醒主线程回调——用于 `FLUSHALL` 这类单命令提交多个 job、需要确认都完成的场景。
 
 它主要执行三种类型操作：
 
@@ -127,7 +127,7 @@ void killThreads(void) {
 2. aof 文件刷盘。aof 持久化方式，主线程定时将新增内容追加到 aof 文件，只将数据写入内核缓存，并没有将其刷入磁盘，这种阻塞耗时的脏活累活需要后台线程去做。
 3. 释放体量大的数据。key-value 数据结构，主线程将 key 和 value 解除关系后，如果 value 很小的话，主线程实时释放，否则需要后台线程惰性释放
 
-线程与队列的分配同样按 worker 而非 job 展开（`src/bio.c:69-73`）：
+线程与队列的分配同样按 worker 而非 job 展开（`src/bio.c`）：
 
 ```c
 static pthread_t bio_threads[BIO_WORKER_NUM];

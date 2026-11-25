@@ -1,189 +1,398 @@
+# MVCC: The Multiversion State Machine
+
 ## Introduction
 
-etcd的使用场景是一种“读多写少”的场景，etcd里  的一个key，其实并不会发生频繁的变更，但是一旦发生变更，etcd就需要通知监控这个key的所有客户端
+etcd 的 MVCC 状态机由两半拼成：内存里的 `treeIndex`（B 树，保存用户 key → revision 的映射）与磁盘上的 bbolt（保存 revision → `KeyValue`）。一次读先在内存索引里把 key 翻成 revision，再回 bbolt 取增量；一次写生成全局递增的 `(Main, Sub)` revision，把 `KeyValue` 写进 bbolt 的 `key` bucket，同时更新内存索引。配额与压缩围绕这套增量结构设计，apply 细节见 [request](/docs/CS/Framework/etcd/request.md)。
 
-etcd本质上是内存数据库，所有的数据都是加载到了内存中，当然，它跟redis一样，数据都是持久化了的，只是在启动的时候，将文件数据重新全部加载到内存中
+> 版本基线：etcd 3.7.4（commit 2e8a5c99，Go 1.26）。以下片段均取自该 tag。
 
-etcd v2 是一个内存数据库，整个数据库拥有一个`Stop-the-World`的大锁，通过锁机制来解决并发带来的数据竞争。
+四个从源码核验出来的反直觉点：
 
-但是存在**并发性能问题**：
+- **`store` 不再直接暴露 ReadTx / BatchTx / Buffer 三件套**：3.7.4 的 `store` 嵌入 `ReadView` / `WriteView` 两个接口，写事务用 `LockInsideApply()`，后台提交走 `LockOutsideApply()`，读事务则分 `ReadTx` 与 `ConcurrentReadTx` 两种模式。
+- **`treeIndex` 是泛型 B 树**：字段是 `tree *btree.BTree[*keyIndex]`；`keyIndex` 用一组 `generations` 记录「创建 → 删除 → 再创建」的多段历史，删除不是抹掉数据，而是打 tombstone 并开启新 generation。
+- **revision 是二元组且有明确字节编码**：`(Main, Sub)` 被编码成 8 字节大端 Main + `_` + 8 字节大端 Sub，tombstone 再追加一个 `'t'` 标记字节；同一 Main 下的不同 Sub 属于同一个原子事务。
+- **读不总是打到 bbolt**：`baseReadTx.UnsafeRange` 先查内存 `buf`，命中即返回；`ConcurrentReadTx` 会复制一份 buffer 快照，让只读负载与正在阻塞的写并发。
 
-- 1）锁的粒度不好控制，每次都会锁整个数据库
-- 2）写锁和读锁相互阻塞。
-- 3）前面的事务会阻塞后面的事务，对并发性能影响很大。
+## Why MVCC Replaced v2
 
-同时在高并发环境下还存在另一个严重的问题：
-
-- **watch 机制可靠性问题**：etcd 中的 watch 机制会依赖旧数据，v2 版本基于滑动窗口实现的 watch 机制，只能保留最近的 1000 条历史事件版本，当 etcd server 写请求较多、网络波动时等场景，很容易出现事件丢失问题，进而又触发 client 数据全量拉取，产生大量 expensive request，甚至导致 etcd 雪崩。
-
-
-
-etcd v2并未实时地将数据写入磁盘，持久化是靠快照来实现的，具体实现就是  将整个内存中的数据复制一份出来，然后序列化成JSON，写入磁盘  中，成为一个快照
-
-
-
-
-
-
-
-etcd v3 为什么要选择 MVCC
-
-
-
-多版本并发控制 (Multiversion concurrency control) 模块是为了解决etcd v2 不支持保存 key 的历史版本、不支持多 key 事务等问题而产生的
-它核心由内存树形索引模块 (treeIndex) 和嵌入式的 KV 持久化存储库 boltdb 组成
-
-treeIndex模块是基于Google开源的内存版btree库实现的 treeIndex模块只会保存用户的key和相关版本号信息，用户key的value数据存储在boltdb里面，相比ZooKeeper和etcd v2全内存存储，etcd v3对内存要求更低
-
-
-
-
-
-boltdb的key是全局递增的版本号(revision)，value是用户key、value等字段组合成的结构体，然后通过treeIndex模块来保存用户key和版本号的映射关系。
-
-读事务流程从treeIndex中获取key的版本号
-
-在获取到版本号信息后，就可从boltdb模块中获取用户的key-value数据了。不过并不是所有请求都一定要从boltdb获取数据 etcd出于数据一致性、性能等考虑，在访问boltdb前，首先会从一个内存读事务buffer中，二分查找你要访问key是否在buffer里面，若命中则直接返回
-
-若buffer未命中，此时就真正需要向boltdb模块查询数据 
-boltdb里每个bucket类似对应MySQL一个表，用户的key数据存放的bucket名字的是key，etcd MVCC元数据存放的bucket是meta。
-
-因boltdb使用B+ tree来组织用户的key-value数据，获取bucket key对象后，通过boltdb的游标Cursor可快速在B+ tree找到key hello对应的value数据，返回给client
-
-
-
-
-
-重建内存索引btree的时候，遍历boltdb，从版本号0到最大版本号不断遍历，从value里面解析出对应的key、revision等信息，重建btree
-
-
-
-当etcd收到一个请求Get Key时，请求被层层传递到了mvcc层后，它首先需要从内存索引btree中查找key对应的版本号，随后从boltdb里面根据版本号查出对应的value, 然后返回给client
-
-
-
-当你执行 put 命令后，请求经过 gRPC KV Server、Raft 模块流转，对应的日志条目被提交后，Apply 模块开始执行此日志内容
-
-
-
-**MVCC 模块**将请求请划分成两个类别，分别是读事务（ReadTxn）和写事务（WriteTxn）。读事务负责处理 range 请求，写事务负责 put/delete 操作。读写事务基于 treeIndex、Backend/boltdb 提供的能力，实现对 key-value 的增删改查功能。
-
-**treeIndex 模块**基于内存版 B-tree 实现了 key 索引管理，它保存了用户 key 与版本号（revision）的映射关系等信息。
-
-**Backend 模块**负责 etcd 的 key-value 持久化存储，主要由 ReadTx、BatchTx、Buffer 组成，ReadTx 定义了抽象的读事务接口，BatchTx 在 ReadTx 之上定义了抽象的写事务接口，Buffer 是数据缓存区
-
-
-
-**treeIndex 模块正是为了解决这个问题**，支持保存 key 的历史版本，提供稳定的 Watch 机制和事务隔离等能力。
-
-etcd 在每次修改 key 时会生成一个全局递增的版本号（revision）。
-
-- 然后通过数据结构 B-tree 保存用户 key 与版本号之间的关系；
-- 再以版本号作为 boltdb key，以用户的 key-value 等信息作为 boltdb value，保存到 boltdb
-
-
-
-
+etcd v2 是整库大锁的内存数据库，读锁与写锁互相阻塞；watch 依赖滑动窗口，容量固定 1000，写多或网络抖动时事件丢失，client 只能全量拉取，进而产生 expensive request 甚至雪崩。3.7.4 仍保留 v2 的实现代码，`EventHistory` 就是那个环形窗口：
 
 ```go
-type ResponseHeader struct {
-	// cluster_id is the ID of the cluster which sent the response.
-	ClusterId uint64 `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
-	// member_id is the ID of the member which sent the response.
-	MemberId uint64 `protobuf:"varint,2,opt,name=member_id,json=memberId,proto3" json:"member_id,omitempty"`
-	// revision is the key-value store revision when the request was applied.
-	// For watch progress responses, the header.revision indicates progress. All future events
-	// recieved in this stream are guaranteed to have a higher revision number than the
-	// header.revision number.
-	Revision int64 `protobuf:"varint,3,opt,name=revision,proto3" json:"revision,omitempty"`
-	// raft_term is the raft term when the request was applied.
-	RaftTerm             uint64   `protobuf:"varint,4,opt,name=raft_term,json=raftTerm,proto3" json:"raft_term,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+type EventHistory struct {
+	Queue      eventQueue
+	StartIndex uint64
+	LastIndex  uint64
+	rwl        sync.RWMutex
 }
 ```
 
-ResponseHeader.Revision代表该请求成功执行之后etcd的revision
+窗口容量由 `newWatchHub(1000)` 固定；`addEvent` 把新事件插进队列后更新 `StartIndex` / `LastIndex`，超出容量即淘汰最旧事件。v3 把历史版本落到 bbolt，watch 从「最近 1000 条」变成「从指定 revision 到当前 revision 的全部增量」，可靠性不再受窗口大小限制，见 [watch](/docs/CS/Framework/etcd/watch.md)。
 
+## Revision and Bucket Key
 
-
-键值对数据结构的定义具体如下
+`Revision` 是 `(Main, Sub)` 二元组；`BucketKey` 在它之上加一个 `tombstone` 标志。bbolt 的 key 就是编码后的 `BucketKey`：
 
 ```go
+type Revision struct {
+	// Main is the main revision of a set of changes that happen atomically.
+	Main int64
+	// Sub is the sub revision of a change in a set of changes that happen
+	// atomically. Each change has different increasing sub revision in that
+	// set.
+	Sub int64
+}
 
-type KeyValue struct {
-	// key is the key in bytes. An empty key is not allowed.
-	Key []byte `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	// create_revision is the revision of last creation on this key.
-	CreateRevision int64 `protobuf:"varint,2,opt,name=create_revision,json=createRevision,proto3" json:"create_revision,omitempty"`
-	// mod_revision is the revision of last modification on this key.
-	ModRevision int64 `protobuf:"varint,3,opt,name=mod_revision,json=modRevision,proto3" json:"mod_revision,omitempty"`
-	// version is the version of the key. A deletion resets
-	// the version to zero and any modification of the key
-	// increases its version.
-	Version int64 `protobuf:"varint,4,opt,name=version,proto3" json:"version,omitempty"`
-	// value is the value held by the key, in bytes.
-	Value []byte `protobuf:"bytes,5,opt,name=value,proto3" json:"value,omitempty"`
-	// lease is the ID of the lease that attached to key.
-	// When the attached lease expires, the key will be deleted.
-	// If lease is 0, then no lease is attached to the key.
-	Lease                int64    `protobuf:"varint,6,opt,name=lease,proto3" json:"lease,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+func (a Revision) GreaterThan(b Revision) bool {
+	if a.Main > b.Main {
+		return true
+	}
+	if a.Main < b.Main {
+		return false
+	}
+	return a.Sub > b.Sub
+}
+
+// BucketKey indicates modification of the key-value space.
+// The set of changes that share same main revision changes the key-value space atomically.
+type BucketKey struct {
+	Revision
+	tombstone bool
+}
+
+func BucketKeyToBytes(rev BucketKey, bytes []byte) []byte {
+	binary.BigEndian.PutUint64(bytes, uint64(rev.Main))
+	bytes[8] = '_'
+	binary.BigEndian.PutUint64(bytes[9:], uint64(rev.Sub))
+	if rev.tombstone {
+		switch len(bytes) {
+		case revBytesLen:
+			bytes = append(bytes, markTombstone)
+		case markedRevBytesLen:
+			bytes[markBytePosition] = markTombstone
+		}
+	}
+	return bytes
 }
 ```
 
-KeyValue.CreateRevision代表etcd的某个key最后一次创建时etcd的  revison，KeyValue.ModRevision则代表etcd的某个key最后一次更新  时etcd的revison。verison特指etcd键空间某个key从创建开始被修改  的次数，即KeyValue.Version
+`ResponseHeader.Revision` 是请求 apply 后的当前 revision；`KeyValue.CreateRevision` / `ModRevision` / `Version` 分别记录最近创建、最近修改与修改次数，删除会把 `Version` 归零。
 
+## treeIndex and keyIndex
 
+`index` 接口把「key → revision」的查询能力定死，`treeIndex` 是它在内存里的实现：
 
-etcd将物理数据存储为一棵持久B+树中的键值对。为了高效，每  个revision的存储状态都只包含相对于之前revision的增量。一个  revision可能对应于树中的多个key
+```go
+type index interface {
+	Get(key []byte, atRev int64) (rev, created Revision, ver int64, err error)
+	Range(key, end []byte, atRev int64, limit int, withTotalCount bool) (keys [][]byte, modifies, creates []Revision, versions []int64, totalCount int)
+	Revisions(key, end []byte, atRev int64, limit int, withTotalCount bool) ([]Revision, int)
+	CountRevisions(key, end []byte, atRev int64) int
+	Put(key []byte, rev Revision)
+	Tombstone(key []byte, rev Revision) error
+	Compact(rev int64) map[Revision]struct{}
+	Keep(rev int64) map[Revision]struct{}
+	Equal(b index) bool
 
+	Insert(ki *keyIndex)
+	KeyIndex(ki *keyIndex) *keyIndex
+}
 
+type treeIndex struct {
+	sync.RWMutex
+	tree *btree.BTree[*keyIndex]
+	lg   *zap.Logger
+}
 
-B+树中键值对的key即revision，revision是一个2元组（main，  sub），其中main是该revision的主版本号，sub是同一revision的副版本  号，其用于区分同一个revision的不同key。B+树中键值对的value包含  了相对于之前revision的修改，即相对于之前revision的一个增量。  
+func (ti *treeIndex) Put(key []byte, rev Revision) {
+	keyi := &keyIndex{key: key}
 
-B+树按key的字典字节序进行排序。这样，etcd v3对revision增量的  范围查询（range query，即从某个revision到另一个revision）会很快  ——因为我们已经记录了从一个特定revision到其他revision的修改量。  etcd v3的压缩操作会删除过时的键值对
+	ti.Lock()
+	defer ti.Unlock()
+	okeyi, ok := ti.tree.Get(keyi)
+	if !ok {
+		keyi.put(ti.lg, rev.Main, rev.Sub)
+		ti.tree.ReplaceOrInsert(keyi)
+		return
+	}
+	okeyi.put(ti.lg, rev.Main, rev.Sub)
+}
+```
 
-etcd v3还在内存中维护了一个基于B树的二级索引来加快对key的  范围查询。该B树索引的key是向用户暴露的etcd v3存储的key，而该B  树索引的value则是一个指向上文讨论的持久化B+树的增量的指针。  etcd v3的压缩操作会删除指向B树索引的无效指针
+`keyIndex` 的历史不是一条扁平数组，而是按「generation」分段：tombstone 结束当前 generation 并开一个空的新 generation，compact 会从最老的 generation 开始裁掉过期版本。
 
+```go
+// For example: put(1.0);put(2.0);tombstone(3.0);put(4.0);tombstone(5.0) on key "foo"
+// generate a keyIndex:
+// key:     "foo"
+// modified: 5
+// generations:
+//
+//	{empty}
+//	{4.0, 5.0(t)}
+//	{1.0, 2.0, 3.0(t)}
+type keyIndex struct {
+	key         []byte
+	modified    Revision // the main rev of the last modification
+	generations []generation
+}
 
+// put puts a revision to the keyIndex.
+func (ki *keyIndex) put(lg *zap.Logger, main int64, sub int64) {
+	rev := Revision{Main: main, Sub: sub}
 
-etcd v2的每个key只保留一个value，所以数据库并不大，可以直  接放在内存中。但是etcd v3实现了MVCC以后，每个key的value都需要  保存多个历史版本，这就极大地增加了存储的数据量，因此内存中就  会存储不下这么多数据。对此，一个自然的解决方案就是将数据存储  在磁盘里。etcd v3当前使用BoltDB将数据存储在磁盘中
+	if !rev.GreaterThan(ki.modified) {
+		lg.Panic(
+			"'put' with an unexpected smaller revision",
+			zap.Int64("given-revision-main", rev.Main),
+			zap.Int64("given-revision-sub", rev.Sub),
+			zap.Int64("modified-revision-main", ki.modified.Main),
+			zap.Int64("modified-revision-sub", ki.modified.Sub),
+		)
+	}
+	if len(ki.generations) == 0 {
+		ki.generations = append(ki.generations, generation{})
+	}
+	g := &ki.generations[len(ki.generations)-1]
+	if len(g.revs) == 0 { // create a new key
+		keysGauge.Inc()
+		g.created = rev
+	}
+	g.revs = append(g.revs, rev)
+	g.ver++
+	ki.modified = rev
+}
+```
 
+## Store, ReadView and WriteView
 
+`store` 把读、写视图作为匿名字段嵌进来，并用 `revMu` 保护 `currentRev` 与 `compactMainRev`：
 
+```go
+type store struct {
+	ReadView
+	WriteView
 
+	cfg StoreConfig
 
-## put
+	// mu read locks for txns and write locks for non-txn store changes.
+	mu sync.RWMutex
 
-一个 put 命令流程如下：
+	b       backend.Backend
+	kvindex index
 
-首先是流程一client端发起gRPC调用到etcd节点，和读请求不一样的是，写请求需要经过db配额（Quota）模块
+	le lease.Lessor
 
-1. 首先它需要从 treeIndex 模块中查询 key 的 keyIndex 索引信息
-2. 其次 etcd 会根据当前的全局版本号（空集群启动时默认为 1）自增，生成 put hello 操作对应的版本号 revision{2,0}，这就是 boltdb 的 key
+	// revMuLock protects currentRev and compactMainRev.
+	// Locked at end of write txn and released after write txn unlock lock.
+	// Locked before locking read txn and released after locking.
+	revMu sync.RWMutex
+	// currentRev is the revision of the last completed transaction.
+	currentRev int64
+	// compactMainRev is the main revision of the last compaction.
+	compactMainRev int64
 
-当etcd server收到put/txn等写请求的时候，会首先检查下当前etcd db大小加上你请求的key-value大小之和是否超过了配额（quota-backend-bytes）。
-如果超过了配额，它会产生一个告警（Alarm）请求，告警类型是NO SPACE，并通过Raft日志同步给其它节点，告知db无空间了，并将告警持久化存储到db中。
-最终，无论是API层gRPC模块还是负责将Raft侧已提交的日志条目应用到状态机的Apply模块，都拒绝写入，集群只读
+	fifoSched schedule.Scheduler
+	// ... 省略 stopc / lg / hashes 字段 ...
+}
+```
 
-为什么当你把配额（quota-backend-bytes）调大后，集群依然拒绝写入呢?
+`ReadView` / `WriteView` 只是把 `KV` 接口拆成两半，便于 `watchableStore` 替换实现（写事务末尾才能发 watch 事件）：
 
-原因就是我们前面提到的NO SPACE告警。Apply模块在执行每个命令的时候，都会去检查当前是否存在NO SPACE告警，如果有则拒绝写入。所以还需要你额外发送一个取消告警（etcdctl alarm disarm）的命令，以消除所有告警
+```go
+type readView struct{ kv KV }
 
-其次你需要检查etcd的压缩（compact）配置是否开启、配置是否合理。etcd保存了一个key所有变更历史版本，如果没有一个机制去回收旧的版本，那么内存和db大小就会一直膨胀，在etcd里面，压缩模块负责回收旧版本的工作。
-压缩模块支持按多种方式回收旧版本，比如保留最近一段时间内的历史版本。不过你要注意，它仅仅是将旧版本占用的空间打个空闲（Free）标记，后续新的数据写入的时候可复用这块空间，而无需申请新的空间
-如果你需要回收空间，减少db大小，得使用碎片整理（defrag）， 它会遍历旧的db文件数据，写入到一个新的db文件。但是它对服务性能有较大影响，不建议你在生产集群频繁使用
+func (rv *readView) FirstRev() int64 {
+	return rv.kv.FirstRev()
+}
 
-最后你需要注意配额（quota-backend-bytes）的行为，默认’0’就是使用etcd默认的2GB大小，你需要根据你的业务场景适当调优。如果你填的是个小于0的数，就会禁用配额功能，这可能会让你的db大小处于失控，导致性能下降，不建议你禁用配额
+func (rv *readView) Rev() int64 {
+	return rv.kv.Rev()
+}
 
+func (rv *readView) Range(ctx context.Context, key, end []byte, ro RangeOptions) (r *RangeResult, err error) {
+	return rv.kv.Range(ctx, key, end, ro)
+}
 
+type writeView struct{ kv KV }
 
-通过流程二的配额检查后，请求就从API层转发到了流程三的KVServer模块的put方法，我们知道etcd是基于Raft算法实现节点间数据复制的，因此它需要将put写请求内容打包成一个提案消息，提交给Raft模块。不过KVServer模块在提交提案前，还有如下的一系列检查和限速
+func (wv *writeView) DeleteRange(key, end []byte) (n, rev int64) {
+	return wv.kv.DeleteRange(key, end)
+}
 
+func (wv *writeView) Put(key, value []byte, lease lease.LeaseID) (rev int64) {
+	return wv.kv.Put(key, value, lease)
+}
+```
+
+## Read Path: Buffer Before Bolt
+
+`store.Read` 在 `ConcurrentReadTxMode` 下取一个带 buffer 快照的读事务，否则复用 backend 的共享 `readTx`：
+
+```go
+func (s *store) Read(mode ReadTxMode, trace *traceutil.Trace) TxnRead {
+	s.mu.RLock()
+	s.revMu.RLock()
+	// For read-only workloads, we use shared buffer by copying transaction read buffer
+	// for higher concurrency with ongoing blocking writes.
+	// For write/write-read transactions, we use the shared buffer
+	// rather than duplicating transaction read buffer to avoid transaction overhead.
+	var tx backend.ReadTx
+	if mode == ConcurrentReadTxMode {
+		tx = s.b.ConcurrentReadTx()
+	} else {
+		tx = s.b.ReadTx()
+	}
+
+	tx.RLock() // RLock is no-op. concurrentReadTx does not need to be locked after it is created.
+	firstRev, rev := s.compactMainRev, s.currentRev
+	s.revMu.RUnlock()
+	return newMetricsTxnRead(&storeTxnRead{storeTxnCommon{s, tx, firstRev, rev, trace}, tx})
+}
+```
+
+一次 `Range` 先用内存索引把 key 翻成 revision 列表，再交给 backend 的 `UnsafeRange` 取 value；后者先查 `buf`，不足部分才用 bbolt cursor 补：
+
+```go
+func (baseReadTx *baseReadTx) UnsafeRange(bucketType Bucket, key, endKey []byte, limit int64) ([][]byte, [][]byte) {
+	if endKey == nil {
+		// forbid duplicates for single keys
+		limit = 1
+	}
+	if limit <= 0 {
+		limit = math.MaxInt64
+	}
+	if limit > 1 && !bucketType.IsSafeRangeBucket() {
+		panic("do not use unsafeRange on non-keys bucket")
+	}
+	keys, vals := baseReadTx.buf.Range(bucketType, key, endKey, limit)
+	if int64(len(keys)) == limit {
+		return keys, vals
+	}
+	// find/cache bucket
+	bn := bucketType.ID()
+	baseReadTx.txMu.RLock()
+	bucket, ok := baseReadTx.buckets[bn]
+	baseReadTx.txMu.RUnlock()
+	lockHeld := false
+	if !ok {
+		baseReadTx.txMu.Lock()
+		lockHeld = true
+		bucket = baseReadTx.tx.Bucket(bucketType.Name())
+		baseReadTx.buckets[bn] = bucket
+	}
+
+	// ignore missing bucket since may have been created in this batch
+	if bucket == nil {
+		if lockHeld {
+			baseReadTx.txMu.Unlock()
+		}
+		return keys, vals
+	}
+	if !lockHeld {
+		baseReadTx.txMu.Lock()
+	}
+	c := bucket.Cursor()
+	baseReadTx.txMu.Unlock()
+
+	k2, v2 := unsafeRange(c, key, endKey, limit-int64(len(keys)))
+	return append(k2, keys...), append(v2, vals...)
+}
+```
+
+`concurrentReadTx` 的 `RLock` 是空操作，`RUnlock` 只做 `txWg.Done()`——它靠复制 buffer 而不是持锁来避免阻塞写：
+
+```go
+type concurrentReadTx struct {
+	baseReadTx
+}
+
+func (rt *concurrentReadTx) Lock()   {}
+func (rt *concurrentReadTx) Unlock() {}
+
+// RLock is no-op. concurrentReadTx does not need to be locked after it is created.
+func (rt *concurrentReadTx) RLock() {}
+
+// RUnlock signals the end of concurrentReadTx.
+func (rt *concurrentReadTx) RUnlock() { rt.txWg.Done() }
+```
+
+## Write Path: Put
+
+写事务的 `Put` 只记录 change 并返回 `beginRev + 1`；真正落库在内部的 `put`：先从索引拿旧 lease，用 `(rev, len(changes))` 生成 Sub，序列化 `KeyValue` 后 `UnsafeSeqPut` 到 `schema.Key` bucket，再更新 `treeIndex`。
+
+```go
+func (tw *storeTxnWrite) Put(key, value []byte, lease lease.LeaseID) int64 {
+	tw.put(key, value, lease)
+	return tw.beginRev + 1
+}
+
+func (tw *storeTxnWrite) put(key, value []byte, leaseID lease.LeaseID) {
+	rev := tw.beginRev + 1
+	c := rev
+	oldLease := lease.NoLease
+
+	// if the key exists before, use its previous created and
+	// get its previous leaseID
+	_, created, ver, err := tw.s.kvindex.Get(key, rev)
+	if err == nil {
+		c = created.Main
+		oldLease = tw.s.le.GetLease(lease.LeaseItem{Key: string(key)})
+		tw.trace.Step("get key's previous created_revision and leaseID")
+	}
+	ibytes := NewRevBytes()
+	idxRev := Revision{Main: rev, Sub: int64(len(tw.changes))}
+	ibytes = RevToBytes(idxRev, ibytes)
+
+	ver = ver + 1
+	kv := &mvccpb.KeyValue{
+		Key:            key,
+		Value:          value,
+		CreateRevision: c,
+		ModRevision:    rev,
+		Version:        ver,
+		Lease:          int64(leaseID),
+	}
+
+	d, err := proto.Marshal(kv)
+	if err != nil {
+		tw.storeTxnCommon.s.lg.Fatal(
+			"failed to marshal mvccpb.KeyValue",
+			zap.Error(err),
+		)
+	}
+
+	tw.trace.Step("marshal mvccpb.KeyValue")
+	tw.tx.UnsafeSeqPut(schema.Key, ibytes, d)
+	tw.s.kvindex.Put(key, idxRev)
+	tw.changes = append(tw.changes, kv)
+	tw.trace.Step("store kv pair into bolt db")
+
+	if oldLease == leaseID {
+		tw.trace.Step("attach lease to kv pair")
+		return
+	}
+	// ... 省略旧 lease Detach 与新 lease Attach ...
+	tw.trace.Step("attach lease to kv pair")
+}
+```
+
+`End()` 只在真有 change 时推进 `currentRev`，并在 `revMu` 保护下解锁 batchTx——这样新读事务不会在写回完成前打开：
+
+```go
+func (tw *storeTxnWrite) End() {
+	// only update index if the txn modifies the mvcc state.
+	if len(tw.changes) != 0 {
+		// hold revMu lock to prevent new read txns from opening until writeback.
+		tw.s.revMu.Lock()
+		tw.s.currentRev++
+	}
+	tw.tx.Unlock()
+	if len(tw.changes) != 0 {
+		tw.s.revMu.Unlock()
+	}
+	tw.s.mu.RUnlock()
+}
+```
 
 <div style="text-align: center;">
 
@@ -193,31 +402,39 @@ etcd v2的每个key只保留一个value，所以数据库并不大，可以直  
 
 <p style="text-align: center;">Fig.1. put</p>
 
+## Quota, Alarm and Compaction
 
+bbolt 只有一个 `key` bucket 承载所有用户数据，etcd 不做分片。配额常量定义了软默认与建议上限：
 
-最后通过一系列检查之后，会生成一个唯一的ID，将此请求关联到一个对应的消息通知channel，然后向Raft模块发起（Propose）一个提案（Proposal）
+```go
+const (
+	// DefaultQuotaBytes is the number of bytes the backend Size may
+	// consume before exceeding the space quota.
+	DefaultQuotaBytes = int64(2 * 1024 * 1024 * 1024) // 2GB
+	// MaxQuotaBytes is the maximum number of bytes suggested for a backend
+	// quota. A larger quota may lead to degraded performance.
+	MaxQuotaBytes = int64(8 * 1024 * 1024 * 1024) // 8GB
+)
+```
 
-向Raft模块发起提案后，KVServer模块会等待此put请求，等待写入结果通过消息通知channel返回或者超时。etcd默认超时时间是7秒（5秒磁盘IO延时+2*1秒竞选超时时间），如果一个请求超时未返回结果，则可能会出现你熟悉的etcdserver: request timed out错误
+超限不是单纯拒绝请求：接入层 `qa.check` 会发一条 `NOSPACE` alarm，经 Raft 同步并持久化；apply 路径每条命令都会检查告警并拒绝写入。因此**调大 `quota-backend-bytes` 不会立即恢复写入**，必须 `etcdctl alarm disarm`，详见 [troubleshooting](/docs/CS/Framework/etcd/troubleshooting.md)。
 
-Raft模块收到提案后，如果当前节点是Follower，它会转发给Leader，只有Leader才能处理写请求。Leader收到提案后，通过Raft模块输出待转发给Follower节点的消息和待持久化的日志条目，日志条目则封装了提案内容
-
-etcdserver从Raft模块获取到以上消息和日志条目后，作为Leader，它会将put提案消息广播给集群各个节点，同时需要把集群Leader任期号、投票信息、已提交索引、提案内容持久化到一个WAL（Write Ahead Log）日志文件中，用于保证集群的一致性、可恢复性
-
-
-
-
-
-
+compact 负责回收历史版本：它把过期 revision 从 `treeIndex` 与 bbolt 中裁掉，但只是把空间标记为 Free 供后续复用，**不会缩小 db 文件**；要真正回收磁盘得跑 defrag，它会重写整个 db，对服务影响较大，不建议在生产频繁执行。配额设为 `0` 走 2GB 默认，设为负数则禁用配额，可能让 db 失控。
 
 ## Links
 
-- [etcd](/docs/CS/Framework/etcd/etcd.md)
-- [troubleshooting（NOSPACE 告警与 compact/defrag 处置）](/docs/CS/Framework/etcd/troubleshooting.md)
-- [concurrency（STM 的 readSet 依赖 revision）](/docs/CS/Framework/etcd/concurrency.md)
-- [read（线性读如何等 apply 到指定 revision）](/docs/CS/Framework/etcd/read.md)
-
-
+- [etcd（总览与架构）](/docs/CS/Framework/etcd/etcd.md)
+- [treeIndex（内存索引与 generation）](/docs/CS/Framework/etcd/treeIndex.md)
+- [boltdb（底层存储结构）](/docs/CS/Framework/etcd/boltdb.md)
+- [compact（历史版本回收）](/docs/CS/Framework/etcd/compact.md)
+- [lease（Put 时的 Attach / Detach）](/docs/CS/Framework/etcd/lease.md)
+- [concurrency（STM 的 revision 依赖）](/docs/CS/Framework/etcd/concurrency.md)
 
 ## References
 
-1. [etcd教程(六)---etcd多版本并发控制 - (lixueduan.com)](https://www.lixueduan.com/posts/etcd/06-why-mvcc/)
+1. [etcd v3.7.4 源码（server/storage/mvcc/revision.go）](https://github.com/etcd-io/etcd/blob/v3.7.4/server/storage/mvcc/revision.go)
+2. [etcd v3.7.4 源码（server/storage/mvcc/index.go）](https://github.com/etcd-io/etcd/blob/v3.7.4/server/storage/mvcc/index.go)
+3. [etcd v3.7.4 源码（server/storage/mvcc/kvstore.go）](https://github.com/etcd-io/etcd/blob/v3.7.4/server/storage/mvcc/kvstore.go)
+4. [etcd v3.7.4 源码（server/storage/mvcc/kvstore_txn.go）](https://github.com/etcd-io/etcd/blob/v3.7.4/server/storage/mvcc/kvstore_txn.go)
+5. [etcd v3.7.4 源码（server/storage/backend/read_tx.go）](https://github.com/etcd-io/etcd/blob/v3.7.4/server/storage/backend/read_tx.go)
+6. [etcd v3.7.4 源码（server/storage/quota.go）](https://github.com/etcd-io/etcd/blob/v3.7.4/server/storage/quota.go)

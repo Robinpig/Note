@@ -3,7 +3,7 @@
 redis-benchmark 是官方自带的性能测试工具，随 Redis 源码一起编译（`src/redis-benchmark.c`）。
 
 > [!NOTE]
-> 版本基线 Redis 8.10.2。默认值取自 `src/redis-benchmark.c:1724-1757`，，网上多数资料不写这些，直接列几个容易踩的：
+> 版本基线 Redis 8.10.2。默认值取自 `src/redis-benchmark.c`，网上多数资料不写这些，直接列几个容易踩的：
 
 | 选项 | 默认值 | 说明 |
 | :-- | :-- | :-- |
@@ -20,7 +20,7 @@ redis-benchmark 是官方自带的性能测试工具，随 Redis 源码一起编
 
 另有两个压测相关的旗标容易漏：`--enable-tracking`（测客户端缓存，见父页Client side caching 段）与 `--cluster`（集群模式；此模式下 `--threads` 为 0 时会自动取节点数，`:1811-1812`）。
 
-### pipeline
+## Pipeline
 
 pipeline 深度是吞吐提升最明显的单一选项——它把 RTT 摊薄到多个命令上：
 

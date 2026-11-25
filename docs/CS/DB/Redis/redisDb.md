@@ -130,18 +130,27 @@ The following is the full `robj` structure, which defines a *Redis object*(16byt
 - `refcount` : 4bytes
 - `ptr` : 8bytes
 
+> [!WARNING]
+> 8.10.2 已把 `redisObject` 从 `server.h` 迁到独立的 `object.h`，并把 `refcount` 改为 23 位位域、新增 `iskvobj` / `metabits`。旧的 "16 字节、int refcount" 描述只对 7.x 成立。
+
 ```c
-// server.h
-typedef struct redisObject {
+// object.h
+struct redisObject {
     unsigned type:4;
     unsigned encoding:4;
+    unsigned refcount : OBJ_REFCOUNT_BITS;
+    unsigned iskvobj : 1;   /* 1 if this struct serves as a kvobj base */
+    
+    /* metabits and lru are Relevant only when iskvobj is set: */     
+    unsigned metabits :8;  /* Bitmap of metadata (+expiry) attached to this kvobj */
     unsigned lru:LRU_BITS; /* LRU time (relative to global lru_clock) or
                             * LFU data (least significant 8 bits frequency
                             * and most significant 16 bits access time). */
-    int refcount;
-    void *ptr; // pointer of value
-} robj;
+    void *ptr;
+};
 ```
+
+`iskvobj` 置位时它就是 [kvobj](/docs/CS/DB/Redis/server.md?id=redisobject-and-kvobj) 的基类：key 与小块 value 内联在同一 allocation 里。`lru` 这 24 位在 LRU/LRM 下存相对 `server.lruclock` 的时间戳，在 LFU 下拆成低 8 位频次 + 高 16 位访问时间。
 
 - Basically this structure can represent all the basic Redis data types like strings, lists, sets, sorted sets and so forth.
 - The interesting thing is that it has a `type` field, so that it is possible to know what type a given object has, and a `refcount`, so that the same object can be referenced in multiple places without allocating it multiple times.
@@ -161,6 +170,75 @@ Inside `object.c` there are all the functions that operate with Redis objects at
 
 - 8bits logistic counter log
 - 16bits last decrement time minutes
+
+### Object Encoding
+
+`encoding` 字段占 4 位，8.10.2 已扩到 **16 种**（0–15）。`ZIPLIST` / `ZIPMAP` / `LINKEDLIST` 标注为 *No longer used*；新增 `LISTPACK_EX`（带元数据）、`SLICED_ARRAY`，以及 8.10 为 compact hash 引入的 `TMPL_LP` / `TMPL_ARRAY`：
+
+```c
+// object.h
+/* Object encodings (see header comment below for details). */
+#define OBJ_ENCODING_RAW 0     /* Raw representation */
+#define OBJ_ENCODING_INT 1     /* Encoded as integer */
+#define OBJ_ENCODING_HT 2      /* Encoded as hash table */
+#define OBJ_ENCODING_ZIPMAP 3  /* No longer used: old hash encoding. */
+#define OBJ_ENCODING_LINKEDLIST 4 /* No longer used: old list encoding. */
+#define OBJ_ENCODING_ZIPLIST 5 /* No longer used: old list/hash/zset encoding. */
+#define OBJ_ENCODING_INTSET 6  /* Encoded as intset */
+#define OBJ_ENCODING_SKIPLIST 7  /* Encoded as skiplist */
+#define OBJ_ENCODING_EMBSTR 8  /* Embedded sds string encoding */
+#define OBJ_ENCODING_QUICKLIST 9 /* Encoded as linked list of listpacks */
+#define OBJ_ENCODING_STREAM 10 /* Encoded as a radix tree of listpacks */
+#define OBJ_ENCODING_LISTPACK 11 /* Encoded as a listpack */
+#define OBJ_ENCODING_LISTPACK_EX 12 /* Encoded as listpack, extended with metadata */
+#define OBJ_ENCODING_SLICED_ARRAY 13 /* Encoded as sliced array */
+#define OBJ_ENCODING_TMPL_LP 14 /* Hash with shared template, values in listpack */
+#define OBJ_ENCODING_TMPL_ARRAY 15 /* Hash with shared template, values in sds array */
+```
+
+逻辑类型与内存表示之间的决策关系（按类型与规模切换，小对象优先紧凑编码）：
+
+```dot
+digraph ObjectEncoding {
+  rankdir=TB;
+  node [shape=box, style=rounded];
+
+  subgraph cluster_types {
+    label="逻辑类型 / type";
+    str [label="OBJ_STRING"];
+    list [label="OBJ_LIST"];
+    hash [label="OBJ_HASH"];
+    set [label="OBJ_SET"];
+    zset [label="OBJ_ZSET"];
+  }
+
+  subgraph cluster_enc {
+    label="内存表示 / encoding";
+    raw [label="RAW / INT / EMBSTR"];
+    lp [label="LISTPACK / LISTPACK_EX"];
+    quick [label="QUICKLIST\nlist of listpacks"];
+    skiplist [label="SKIPLIST\n大 zset"];
+    ht [label="HT"];
+    ins [label="INTSET"];
+    tmpl [label="TMPL_LP / TMPL_ARRAY\n8.10 compact hash"];
+    arr [label="SLICED_ARRAY"];
+    legacy [label="ZIPLIST / ZIPMAP / LINKEDLIST\nNo longer used"];
+  }
+
+  str -> raw;
+  str -> lp;
+  list -> quick;
+  hash -> lp;
+  hash -> ht;
+  hash -> tmpl;
+  set -> ht;
+  set -> ins;
+  zset -> skiplist;
+  zset -> lp;
+}
+```
+
+各聚合类型的具体编码切换阈值见 [struct 总纲](/docs/CS/DB/Redis/struct/struct.md) 与各类型分册。
 
 ### refCount
 

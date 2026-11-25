@@ -1,207 +1,178 @@
+# Redis Skiplist: Source Deep Dive
+
 ## Introduction
 
-跳表结点的结构定义
+跳表（skiplist）是 Sorted Set 在 SKIPLIST 编码下的有序索引结构：按 `score` 排序，`score` 相同再按成员 `ele`（sds）字典序。它和 dict 一起构成 `zset`——dict 负责 O(1) 查成员，跳表负责范围查询与 rank。
 
-- ele is a [sds](/docs/CS/DB/Redis/struct/SDS.md)
-- order by score, then ele
-- *backward 便于倒序查找
-- level[] 跳表层级
-    - *forward
-    - span
+> 版本基线：Redis 8.10.2（commit 498ecd0d）。以下片段均取自该 tag，路径为 `src/` 相对路径。
+
+三个最容易被旧资料误导的点：
+
+- **`ele` 不再是独立字段**：8.10.2 把 sds **嵌入到节点分配里**（`node + level[] + embedded sds` 单块内存），`zskiplistNode` 结构体里已没有 `sds ele` 成员，靠 `zslGetNodeElement(node)` 按偏移取。
+- **`level[0].span` 被复用**：普通节点在 level 0 的 `span` 不存跨度，而是存 `zskiplistNodeInfo`（内嵌 sds 的偏移 + 层数）；真正的 level-0 跨度在需要时由结构体推导。这是 8.x 为省内存做的紧凑化。
+- **`zskiplist` 多了 `alloc_size`**：跟踪整条跳表的分配字节数；`zslCreate`/`zslFree` 用 `zmalloc_usable` 系列记账。
+
+## Structure: zskiplistNode / zskiplist
+
+8.10.2 的节点结构：`score` + `backward` + 柔性数组 `level[]`，sds 嵌在 `level[]` 之后。注意 `zskiplistNodeInfo` 的说明注释原文。
 
 ```c
-// server.h
+/* Node info placed in level[0].span since it's unused at level 0 (static assert verified) */
+typedef struct zskiplistNodeInfo {
+    uint16_t sdsoffset;  /* Offset from node start to sds data (after sds header) */
+    uint8_t levels;      /* Number of levels in this node (1-32) */
+    uint8_t reserved;
+} zskiplistNodeInfo;
+
 typedef struct zskiplistNode {
-    sds ele;
     double score;
     struct zskiplistNode *backward;
     struct zskiplistLevel {
         struct zskiplistNode *forward;
+        /* Span is the number of elements between this node and the next node at this level.
+         * At level 0, span is repurposed to store zskiplistNodeInfo for regular nodes, */
         unsigned long span;
     } level[];
+    /* sds ele is embedded after level[] array (assist zslGetNodeElement(node) to access it) */
 } zskiplistNode;
 ```
 
-因为跳表中的结点都是按序排列的，所以，对于跳表中的某个结点，我们可以把从头结点到该结点的查询路径上，各个结点在所查询层次上的*forward指针跨度，做一个累加。这个累加值就可以用来计算该结点在整个跳表中的顺序，另外这个结构特点还可以用来实现 Sorted Set 的 rank 操作，比如 ZRANK、ZREVRANK 等
-
-
-
-在跳表的结构中，定义了跳表的头结点和尾结点、跳表的长度，以及跳表的最大层数
+跳表本身多了 `alloc_size`：
 
 ```c
 typedef struct zskiplist {
     struct zskiplistNode *header, *tail;
     unsigned long length;
     int level;
+    size_t alloc_size;
 } zskiplist;
 ```
 
-
-
-
-
-### create
-
-create header node with ZSKIPLIST_MAXLEVEL(32) zskiplistLevel
+`zset`（SKIPLIST 编码对象）仍是 dict + 跳表两成员：
 
 ```c
-// t_zset.c
+typedef struct zset {
+    dict *dict;
+    zskiplist *zsl;
+} zset;
+```
+
+## Create: zslCreate / zslCreateHeaderNode
+
+8.10.2 把表头创建抽成 `zslCreateHeaderNode`，用 `ZSL_OFFSET_NO_ELE` 哨兵表示「无内嵌 sds」，并对 `alloc_size` 记账；普通节点 `zslCreateNode` 把 sds 用 `sdsnewplacement` 嵌进同一块分配。
+
+```c
+/* Create a skiplist header node with ZSKIPLIST_MAXLEVEL levels */
+static zskiplistNode *zslCreateHeaderNode(zskiplist *zsl) {
+    size_t usable;
+    zskiplistNode *zn = zmalloc_usable(sizeof(*zn) + ZSKIPLIST_MAXLEVEL * sizeof(struct zskiplistLevel), &usable);
+
+    /* Initialize all fields */
+    zn->score = 0;
+    zn->backward = NULL;
+
+    /* Initialize all level pointers and spans */
+    for (int j = 0; j < ZSKIPLIST_MAXLEVEL; j++) {
+        zn->level[j].forward = NULL;
+        zn->level[j].span = 0;  /* Will be overwritten for level[0] below */
+    }
+
+    /* Use ZSL_OFFSET_NO_ELE as sentinel to indicate no embedded sds (header node) */
+    zslSetNodeInfo(zn, ZSKIPLIST_MAXLEVEL, ZSL_OFFSET_NO_ELE);
+
+    /* Track allocation size */
+    zsl->alloc_size += usable;
+
+    return zn;
+}
+
 /* Create a new skiplist. */
 zskiplist *zslCreate(void) {
-    int j;
     zskiplist *zsl;
+    size_t zsl_size;
 
-    zsl = zmalloc(sizeof(*zsl));
+    zsl = zmalloc_usable(sizeof(*zsl), &zsl_size);
     zsl->level = 1;
     zsl->length = 0;
-    zsl->header = zslCreateNode(ZSKIPLIST_MAXLEVEL,0,NULL);
-    for (j = 0; j < ZSKIPLIST_MAXLEVEL; j++) {
-        zsl->header->level[j].forward = NULL;
-        zsl->header->level[j].span = 0;
-    }
+    zsl->alloc_size = zsl_size;
+    zsl->header = zslCreateHeaderNode(zsl);
     zsl->header->backward = NULL;
     zsl->tail = NULL;
     return zsl;
 }
-
-
-/* Create a skiplist node with the specified number of levels.
- * The SDS string 'ele' is referenced by the node after the call. */
-zskiplistNode *zslCreateNode(int level, double score, sds ele) {
-    zskiplistNode *zn =
-        zmalloc(sizeof(*zn)+level*sizeof(struct zskiplistLevel));
-    zn->score = score;
-    zn->ele = ele;
-    return zn;
-}
 ```
 
-### insert
+## Insert: zslInsert
 
-1. find position
-2. set level
-3. Insert node
-4. Update backward
+插入被拆成两步：`zslCreateNode` 分配节点并生成随机层数，`zslInsertNode` 负责找位置、改 forward/backward/span。`zslInsert` 只做编排：
 
 ```c
-/* Insert a new node in the skiplist. Assumes the element does not already
- * exist (up to the caller to enforce that). The skiplist takes ownership
- * of the passed SDS string 'ele'. */
 zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
-    zskiplistNode *update[ZSKIPLIST_MAXLEVEL], *x;
-    unsigned long rank[ZSKIPLIST_MAXLEVEL];
-    int i, level;
+    int level;
 
     serverAssert(!isnan(score));
-    x = zsl->header;
-    for (i = zsl->level-1; i >= 0; i--) {
-        /* store rank that is crossed to reach the insert position */
-        rank[i] = i == (zsl->level-1) ? 0 : rank[i+1];
-        while (x->level[i].forward &&
-                (x->level[i].forward->score < score ||
-                    (x->level[i].forward->score == score &&
-                    sdscmp(x->level[i].forward->ele,ele) < 0)))
-        {
-            rank[i] += x->level[i].span;
-            x = x->level[i].forward;
-        }
-        update[i] = x;
-    }
+
     /* we assume the element is not already inside, since we allow duplicated
      * scores, reinserting the same element should never happen since the
      * caller of zslInsert() should test in the hash table if the element is
      * already inside or not. */
     level = zslRandomLevel();
-    if (level > zsl->level) {
-        for (i = zsl->level; i < level; i++) {
-            rank[i] = 0;
-            update[i] = zsl->header;
-            update[i]->level[i].span = zsl->length;
-        }
-        zsl->level = level;
-    }
-    x = zslCreateNode(level,score,ele);
-    for (i = 0; i < level; i++) {
-        x->level[i].forward = update[i]->level[i].forward;
-        update[i]->level[i].forward = x;
-
-        /* update span covered by update[i] as x is inserted here */
-        x->level[i].span = update[i]->level[i].span - (rank[0] - rank[i]);
-        update[i]->level[i].span = (rank[0] - rank[i]) + 1;
-    }
-
-    /* increment span for untouched levels */
-    for (i = level; i < zsl->level; i++) {
-        update[i]->level[i].span++;
-    }
-
-    x->backward = (update[0] == zsl->header) ? NULL : update[0];
-    if (x->level[0].forward)
-        x->level[0].forward->backward = x;
-    else
-        zsl->tail = x;
-    zsl->length++;
-    return x;
+    zskiplistNode *node = zslCreateNode(zsl, level, score, ele);
+    zslInsertNode(zsl, node);
+    return node;
 }
 ```
 
-#### randomLevel
-
-Redis 采用随机生成每个结点的层数的方法 相邻两层链表上的结点数并不需要维持在严格的 2:1 关系。这样一来，当新插入一个结点时，只需要修改前后结点的指针，而其他结点的层数就不需要随之改变了，这就降低了插入操作的复杂度
-
-The return value of this function is between 1 and ZSKIPLIST_MAXLEVEL(both inclusive), with a powerlaw-alike distribution where higher levels are less likely to be returned.
-
-每增加一层的概率小于25%
+`zslInsertNode` 内部用 `update[]` 记录每层待改前驱、`rank[]` 累加跨度，用于 rank 计算：
 
 ```c
-#define ZSKIPLIST_P 0.25      /* Skiplist P = 1/4 */
-#define ZSKIPLIST_MAXLEVEL 32 /* Should be enough for 2^64 elements */
+    zskiplistNode *update[ZSKIPLIST_MAXLEVEL];  /* Nodes that will point to the new node at each level */
+    unsigned long rank[ZSKIPLIST_MAXLEVEL];     /* Rank (0-based) at each level during traversal */
+    zskiplistNode *x;
+    int i, level;
+    double score = node->score;
+    sds ele = zslGetNodeElement(node);
+    level = zslGetNodeInfo(node)->levels;
+    serverAssert(!isnan(score));
+```
 
-int zslRandomLevel(void) {
+## Random Level
+
+随机层数：返回值 1..`ZSKIPLIST_MAXLEVEL`，呈幂律分布，越高层概率越低。8.10.2 用 `static const int threshold = ZSKIPLIST_P*RAND_MAX` 预计算阈值（旧版本用 `random()&0xFFFF`）。
+
+```c
+/* Returns a random level for the new skiplist node we are going to create.
+ * The return value of this function is between 1 and ZSKIPLIST_MAXLEVEL
+ * (both inclusive), with a powerlaw-alike distribution where higher
+ * levels are less likely to be returned. */
+static int zslRandomLevel(void) {
+    static const int threshold = ZSKIPLIST_P*RAND_MAX;
     int level = 1;
-    while ((random()&0xFFFF) < (ZSKIPLIST_P * 0xFFFF))
+    while (random() < threshold)
         level += 1;
     return (level<ZSKIPLIST_MAXLEVEL) ? level : ZSKIPLIST_MAXLEVEL;
 }
 ```
 
-p = ZSKIPLIST_P, E = except level
-
-- E = 1 : 1 - p
-- E = 2 : p(1 - p)
-- E = 3 : p^2(1-p)
-- ...
+`ZSKIPLIST_P = 0.25`，期望层数 $E = 1/(1-p) ≈ 1.33$：
 
 ```tex
-E = 1 \times (1-p) + 2\times p(1-p)+... \hspace{1cm}
-\\=(1-p)\sum_{i=1}^{+\infty}{ip^{i-1}} 
-\\
-= 1/(1-p)
+E = 1/(1-p)
 ```
 
-### delete
+## Delete / Update: zslUnlinkNode / zslDelete / zslUpdateScore
 
-1. find node to update
-2. update span and forward
-
-当查询一个结点时，跳表会先从头结点的最高层开始，查找下一个结点。而由于跳表结点同时保存了元素和权重，所以跳表在比较结点时，相应地有**两个判断条件**：
-
-1. 当查找到的结点保存的元素权重，比要查找的权重小时，跳表就会继续访问该层上的下一个结点。
-2. 当查找到的结点保存的元素权重，等于要查找的权重时，跳表会再检查该结点保存的 SDS 类型数据，是否比要查找的 SDS 数据小。如果结点数据小于要查找的数据时，跳表仍然会继续访问该层上的下一个结点。
-
-但是，当上述两个条件都不满足时，跳表就会用到当前查找到的结点的 level 数组了。跳表会使用当前结点 level 数组里的下一层指针，然后沿着下一层指针继续查找，这就相当于跳到了下一层接着查找
+删除拆成「断链」与「释放」：`zslUnlinkNode` 改 span/forward/backward 并可能降低跳表高度，`zslDelete` 定位节点后断链再 `zslFreeNode`。8.10.2 用 `zslIncrNodeSpanAtLevel`/`zslDecrNodeSpanAtLevel` 操作跨度（不再直接读写 `span` 字段，因为 level 0 的 span 被复用了）。
 
 ```c
-/* Internal function used by zslDelete, zslDeleteRangeByScore and
- * zslDeleteRangeByRank. */
-void zslDeleteNode(zskiplist *zsl, zskiplistNode *x, zskiplistNode **update) {
+static void zslUnlinkNode(zskiplist *zsl, zskiplistNode *x, zskiplistNode **update) {
     int i;
     for (i = 0; i < zsl->level; i++) {
         if (update[i]->level[i].forward == x) {
-            update[i]->level[i].span += x->level[i].span - 1;
+            zslIncrNodeSpanAtLevel(update[i], i, zslGetNodeSpanAtLevel(x, i) - 1);
             update[i]->level[i].forward = x->level[i].forward;
         } else {
-            update[i]->level[i].span -= 1;
+            zslDecrNodeSpanAtLevel(update[i], i, 1);
         }
     }
     if (x->level[0].forward) {
@@ -209,75 +180,29 @@ void zslDeleteNode(zskiplist *zsl, zskiplistNode *x, zskiplistNode **update) {
     } else {
         zsl->tail = x->backward;
     }
-    while(zsl->level > 1 && zsl->header->level[zsl->level-1].forward == NULL)
+    while(zsl->level > 1 && zsl->header->level[zsl->level-1].forward == NULL) {
+        zsl->header->level[zsl->level-1].span = 0;
         zsl->level--;
+    }
     zsl->length--;
 }
-
-/* Delete an element with matching score/element from the skiplist.
- * The function returns 1 if the node was found and deleted, otherwise
- * 0 is returned.
- *
- * If 'node' is NULL the deleted node is freed by zslFreeNode(), otherwise
- * it is not freed (but just unlinked) and *node is set to the node pointer,
- * so that it is possible for the caller to reuse the node (including the
- * referenced SDS string at node->ele). */
-int zslDelete(zskiplist *zsl, double score, sds ele, zskiplistNode **node) {
-    zskiplistNode *update[ZSKIPLIST_MAXLEVEL], *x;
-    int i;
-
-    x = zsl->header;
-    for (i = zsl->level-1; i >= 0; i--) {
-        while (x->level[i].forward &&
-                (x->level[i].forward->score < score ||
-                    (x->level[i].forward->score == score &&
-                     sdscmp(x->level[i].forward->ele,ele) < 0)))
-        {
-            x = x->level[i].forward;
-        }
-        update[i] = x;
-    }
-    /* We may have multiple elements with the same score, what we need
-     * is to find the element with both the right score and object. */
-    x = x->level[0].forward;
-    if (x && score == x->score && sdscmp(x->ele,ele) == 0) {
-        zslDeleteNode(zsl, x, update);
-        if (!node)
-            zslFreeNode(x);
-        else
-            *node = x;
-        return 1;
-    }
-    return 0; /* not found */
-}
 ```
 
-#### zslFreeNode
+`zslUpdateScore(zskiplist *zsl, zskiplistNode *node, double newscore)` 直接传节点指针：若新 score 不改变位置则原地更新（快路径），否则断链重插；**节点指针始终不变**，所以 dict 无需更新（这正是上一版 zsetAdd 里删掉 `dictGetVal(de) = &znode->score` 的原因）。
 
-```c
-/* Free the specified skiplist node. The referenced SDS string representation
- * of the element is freed too, unless node->ele is set to NULL before calling
- * this function. */
-void zslFreeNode(zskiplistNode *node) {
-    sdsfree(node->ele);
-    zfree(node);
-}
+## Summary
 
-/* Free a whole skiplist. */
-void zslFree(zskiplist *zsl) {
-    zskiplistNode *node = zsl->header->level[0].forward, *next;
-
-    zfree(zsl->header);
-    while(node) {
-        next = node->level[0].forward;
-        zslFreeNode(node);
-        node = next;
-    }
-    zfree(zsl);
-}
-```
-
+- 跳表按 score + 成员字典序排序，配合 dict 构成 SKIPLIST 编码的 zset。
+- 8.10.2 把 sds 内嵌进节点、复用 level[0].span 存节点信息、新增 alloc_size 记账——旧版结构片段已失效。
+- 插入/删除/改分分别由 `zslInsert`、`zslDelete`、`zslUpdateScore` 完成，rank 靠各层 span 累加。
 
 ## Links
 
-- [Sorted sets](/docs/CS/DB/Redis/struct/zset.md) 
+- [Sorted sets](/docs/CS/DB/Redis/struct/zset.md)
+- [SDS](/docs/CS/DB/Redis/struct/SDS.md)
+- [Redis Struct 总纲](/docs/CS/DB/Redis/struct/struct.md)
+
+## References
+
+- <https://github.com/redis/redis/blob/8.10.2/src/t_zset.c>
+- <https://github.com/redis/redis/blob/8.10.2/src/server.h>
