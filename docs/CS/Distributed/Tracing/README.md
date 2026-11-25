@@ -18,12 +18,12 @@
 - [Jaeger](/docs/CS/Distributed/Tracing/Jaeger.md) — CNCF 分布式追踪后端，兼容 OpenTelemetry。
 - [Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md) — 起源于 Twitter 的轻量追踪系统，Dapper 思路的早期实现；架构 / 数据模型 / 传输(B3) / 存储 / 查询已拆为子分册。
 - [SkyWalking](/docs/CS/Distributed/Tracing/SkyWalking.md) — 国产 APM 平台，覆盖追踪/拓扑/告警；数据模型 / 传输(sw8) / OAP 后端与存储 / 查询与 UI 拆为子分册，架构并入枢纽页，并附实现机理分册（两级采样、拓扑推导、BanyanDB 存储模型）。
-- [Tempo](/docs/CS/Distributed/Tracing/Tempo.md) — Grafana 的追踪后端，Parquet 块 + 对象存储，TraceQL。
+- [Tempo](/docs/CS/Distributed/Tracing/Tempo.md) — v3.1.1 源码基线，覆盖 Kafka 写入、vParquet5、块生命周期与 TraceQL 查询。
 
 ### 指标与日志
 
-- [Prometheus](/docs/CS/Distributed/Tracing/Prometheus/Prometheus.md) — 指标（Metrics）支柱的事实标准；[部署实践](/docs/CS/Distributed/Tracing/Prometheus/Deploy.md)单独成篇。
-- [Loki](/docs/CS/Distributed/Tracing/Loki.md) — 只索引标签的日志聚合系统，LogQL。
+- [Prometheus](/docs/CS/Distributed/Tracing/Prometheus/Prometheus.md) — 指标（Metrics）支柱的事实标准；原理与机制以 **v3.16.0** 源码为基线，[部署实践](/docs/CS/Distributed/Tracing/Prometheus/Deploy.md)单独成篇。
+- [Loki](/docs/CS/Distributed/Tracing/Loki.md) — 日志聚合系统，LogQL；以 **v3.7.10** 源码为基线，[写入](/docs/CS/Distributed/Tracing/Loki/Write_Path.md)、[存储与 TSDB](/docs/CS/Distributed/Tracing/Loki/Storage.md)、[查询](/docs/CS/Distributed/Tracing/Loki/Query_Path.md)、[一致性与生命周期](/docs/CS/Distributed/Tracing/Loki/Consistency.md)拆为源码级分册。
 
 ### 采集层
 

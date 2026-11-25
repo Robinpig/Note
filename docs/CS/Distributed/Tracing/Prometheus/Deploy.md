@@ -109,7 +109,7 @@ version: '3.8'
 
 services:
   prometheus:
-    image: prom/prometheus:v3.15.1
+    image: prom/prometheus:v3.16.0
     container_name: prometheus
     restart: always
     network_mode: host

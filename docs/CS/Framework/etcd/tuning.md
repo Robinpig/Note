@@ -1,9 +1,9 @@
 ## Introduction
 
-[etcd.md](/docs/CS/Framework/etcd/etcd.md) 的 `Tuning` 段讲了**心跳/选举/磁盘/网络/CPU** 的调优原理（为什么 heartbeat≈RTT、election≥5×heartbeat、磁盘延迟如何引发丢心跳）。本文换一个角度：列出**可直接改的运维 flag 与默认值**，并给每项的适用场景与风险。所有默认值取自 `server/embed/config.go` 与 `server/etcdserver` 常量（v3.5.34 源码），不凭文档记忆。
+[etcd](/docs/CS/Framework/etcd/etcd.md) 是版本与分层导航枢纽。本文列出**可直接改的运维 flag 与默认值**，并给每项的适用场景与风险。默认值以 **v3.7.2** 的 `server/embed/config.go` 与 `server/etcdserver/server.go` 为准；涉及版本变化时单独标注。
 
 > [!NOTE]
-> 调优的优先级：先保证磁盘 I/O 与网络（etcd.md Tuning 段），再动下面这些 flag。绝大多数 3/5/7 节点集群用默认就能跑好；flag 主要解决"单 key 大值 / 高频写 / 跨数据中心高 RTT / 磁盘慢"这几类问题。
+> 调优的优先级：先保证磁盘 I/O 与网络，再动下面这些 flag。绝大多数 3/5/7 节点集群用默认就能跑好；flag 主要解决"单 key 大值 / 高频写 / 跨数据中心高 RTT / 磁盘慢"这几类问题。
 
 ## Transactions and Request Scale
 
@@ -16,12 +16,12 @@
 
 | flag | 默认 | 作用 |
 | :--- | :--- | :--- |
-| `--snapshot-count` | **100000** (`etcdserver.DefaultSnapshotCount`) | 每累积多少条 Raft entry 做一次快照，压缩 raft log |
+| `--snapshot-count` | **10000** (`etcdserver.DefaultSnapshotCount`) | 每累积多少条 Raft entry 做一次快照，压缩 raft log |
 | `--max-snapshots` | **5** (`DefaultMaxSnapshots`) | 保留的快照文件数 |
 | `--max-wals` | **5** (`DefaultMaxWALs`) | 保留的 WAL 文件数 |
 
 > [!NOTE]
-> `--snapshot-count=100000` 是 **Raft 层**日志压缩频率，与 MVCC 历史无关。etcd.md Tuning 段提到的"每 10,000 次变更做快照"是 **V2 后端**旧值；V3 当前默认是 100000。想回收 MVCC 历史空间要靠 [compact](/docs/CS/Framework/etcd/compact.md) 的 compact + defrag，而不是调这个 flag。`--max-snapshots` / `--max-wals` 调小省磁盘、调大便于故障回滚与调试。
+> `--snapshot-count=10000` 是 **Raft 层**日志压缩频率，与 MVCC 历史无关。3.6 起默认值从 100000 降到 10000，v3.7.2 保持 10000；这不是 V2 后端快照逻辑。想回收 MVCC 历史空间要靠 [compact](/docs/CS/Framework/etcd/compact.md) 的 compact + defrag，而不是调这个 flag。`--max-snapshots` / `--max-wals` 调小省磁盘、调大便于故障回滚与调试。
 
 ## Backend (boltdb) Batching
 
@@ -39,110 +39,63 @@ etcd 把多个写操作在内存里攒成一批再提交给 boltdb，以摊薄 f
 
 | flag | 默认 | 作用 |
 | :--- | :--- | :--- |
-| `--quota-backend-bytes` | **2 GiB**（上限 8 GiB） | boltdb 后端配额；超限触发 `NOSPACE` alarm |
+| `--quota-backend-bytes` | **2 GiB**（8 GiB 为建议上限） | boltdb 后端配额；超限触发 `NOSPACE` alarm |
 | `--auto-compaction-mode` | 默认**不开启** | `periodic`（如 `1h`）或 `revision`（如 `1000`） |
 | `--auto-compaction-retention` | 同上，需同时设 | 配合 mode 的保留窗口 |
 
 配额超限会进入 NOSPACE（见 [troubleshooting](/docs/CS/Framework/etcd/troubleshooting.md)）。**默认不开启 auto-compaction**——长期写入的集群必须显式开，否则 MVCC 历史无限增长、db 文件只增不减（需 defrag 才回收，见 [boltdb](/docs/CS/Framework/etcd/boltdb.md) 的 freelist 段）。`revision` 模式按版本数保留、`periodic` 模式按时间保留。
 
-## Election Timing (Echoes etcd.md Tuning)
+## Election Timing
 
 | flag | 默认 | 约束 |
 | :--- | :--- | :--- |
 | `--heartbeat-interval` | **100** ms (`TickMs`) | 必须 > 0 |
 | `--election-timeout` | **1000** ms (`ElectionMs`) | 必须 ≥ 5× heartbeat-interval，上限 50000 ms |
 
-跨数据中心、RTT 大时按 `heartbeat ≈ RTT`、`election ≈ 10×RTT` 上调；所有成员必须一致，否则集群不稳。这组在 etcd.md Tuning 段有原理展开，这里只列 flag 与校验边界（`config.go` 的 `Verify()` 会强制这些比例）。
+跨数据中心、RTT 大时按 `heartbeat ≈ RTT`、`election ≈ 10×RTT` 上调；所有成员必须一致，否则集群不稳。这里只列 flag 与校验边界（`config.go` 的 `Verify()` 会强制这些比例）。
 
 ## Equivalent Fields in Embedded Scenarios
 
 用 [embed](/docs/CS/Framework/etcd/embed.md) 嵌入 etcd 时，上述 flag 一一对应 `embed.Config` 字段（如 `cfg.MaxTxnOps`、`cfg.SnapshotCount`、`cfg.QuotaBackendBytes`、`cfg.TickMs`、`cfg.ElectionMs`），默认值完全一致。
 
-## 调优原理（心跳 / 选举 / 磁盘 / 网络 / CPU）
+## Tuning Principles
 
-下面是从 etcd.md 合并过来的原理层内容：flag 级默认值与适用场景见本页上方的各表。
+调优的目标不是把某个 flag 调到最大，而是让 **Raft 复制、WAL/backend 落盘、apply 与客户端超时** 处在同一个延迟预算内。
 
-flag 级默认值见本页上方的「Transactions and Request Scale / Raft Log and Snapshot / Election Timing」等节。
+### Election Timing
 
-The default settings in etcd should work well for installations on a local network where the average network latency is low. However, when using etcd across multiple data centers or over networks with high latency, the heartbeat interval and election timeout settings may need tuning.
-The network isn’t the only source of latency. Each request and response may be impacted by slow disks on both the leader and follower. Each of these timeouts represents the total time from request to successful response from the other machine.
+`heartbeat-interval` 决定 leader 多频繁发送心跳，`election-timeout` 决定 follower 多久没收到心跳后发起选举。硬约束是 `ElectionMs >= 5 × TickMs` 且不超过 50000ms；工程经验通常取 heartbeat 接近成员间 RTT、election 约为 10×RTT，以吸收调度与网络抖动。所有成员应使用一致的值：心跳过密浪费 CPU 与网络，选举过慢则故障切换更久，心跳过慢或选举过近又会造成无谓换主。
 
-The underlying distributed consensus protocol relies on two separate time parameters to ensure that nodes can handoff leadership if one stalls or goes offline. The first parameter is called the Heartbeat Interval. This is the frequency with which the leader will notify followers that it is still the leader. For best practices, the parameter should be set around round-trip time between members. By default, etcd uses a 100ms heartbeat interval.
+### Disk Latency
 
-The second parameter is the Election Timeout. This timeout is how long a follower node will go without hearing a heartbeat before attempting to become leader itself. By default, etcd uses a 1000ms election timeout.
+etcd 的延迟对磁盘非常敏感。Raft `Ready` 中的 WAL 保存、backend batch commit、snapshot 写入与 compaction 都可能产生 `fsync`；同盘上的其他进程会与这些操作争抢 I/O，放大 P99 延迟并导致心跳超时。优先使用低延迟磁盘、隔离 WAL 与 backend、监控 `etcd_disk_wal_fsync_duration_seconds` 和 `etcd_disk_backend_commit_duration_seconds`，再考虑调整 batch 参数。
 
-Adjusting these values is a trade off. The value of heartbeat interval is recommended to be around the maximum of average round-trip time (RTT) between members, normally around 0.5-1.5x the round-trip time. If heartbeat interval is too low, etcd will send unnecessary messages that increase the usage of CPU and network resources. On the other side, a too high heartbeat interval leads to high election timeout. Higher election timeout takes longer time to detect a leader failure. The easiest way to measure round-trip time (RTT) is to use PING utility.
+`--backend-batch-interval` / `--backend-batch-limit` 控制 backend 的聚合程度：调大提高吞吐但增加单次提交前的等待，调小降低批内等待但增加提交次数。它们不改变 Raft 的共识顺序，也不能消除慢盘造成的选举抖动。
 
-The election timeout should be set based on the heartbeat interval and average round-trip time between members. Election timeouts must be at least 10 times the round-trip time so it can account for variance in the network.
-The upper limit of election timeout is 50000ms (50s), which should only be used when deploying a globally-distributed etcd cluster.
+### Network and Apply
 
-The heartbeat interval and election timeout value should be the same for all members in one cluster. Setting different values for etcd members may disrupt cluster stability.
+跨数据中心或高 RTT 环境应同时调整选举参数并监控 peer 流量。客户端 gRPC 与 rafthttp peer 共用主机网络时，大量客户端请求可能挤压 MsgApp/MsgAppResp，follower 追日志变慢，最终表现为请求超时或 leader 变更。必要时在操作系统层为 peer 端口优先分配带宽，但不要只靠调大 client timeout 掩盖网络问题。
 
-etcd appends all key changes to a log file. This log grows forever and is a complete linear history of every change made to the keys. A complete history works well for lightly used clusters but clusters that are heavily used would carry around a large log.
-To avoid having a huge log etcd makes periodic snapshots. These snapshots provide a way for etcd to compact the log by saving the current state of the system and removing old logs.
+CPU 调优的重点是减少序列化、锁竞争与 apply 排队，而不是简单增加节点。etcd 的写路径最终仍要按 Raft 顺序 apply；更多投票成员会增加复制消息与 quorum 等待，只在确实需要更高容错能力时才扩容。
 
-Creating snapshots with the V2 backend can be expensive, so snapshots are only created after a given number of changes to etcd. By default, snapshots will be made after every 10,000 changes.
+### Cluster Size and Availability
 
-disk
+3、5、7 个投票成员分别容忍 1、2、3 个成员故障。偶数节点不会比少一个节点的奇数集群提供更高容错，却增加一台机器与复制开销。生产上通常从 3 或 5 开始，逐台变更并确认健康。
 
-An etcd cluster is very sensitive to disk latencies. Since etcd must persist proposals to its log, disk activity from other processes may cause long fsync latencies. The upshot is etcd may miss heartbeats, causing request timeouts and temporary leader loss. An etcd server can sometimes stably run alongside these processes when given a high disk priority.
+Raft 保证同一 term 最多一个 leader，且写提案必须获得多数派；但这不等于网络分区两端都能继续服务。失去 quorum 的一侧不能提交线性一致写，isolated leader 也不能完成需要 ReadIndex 的线性一致读。监控 quorum 与 leader 变化，比追求“永不换主”更重要。
 
-On Linux, etcd’s disk priority can be configured with ionice:
+### Snapshot and History
 
-```
-# best effort, highest priority
-$ sudo ionice -c2 -n0 -p `pgrep etcd`
-```
-
-Network
-
-If the etcd leader serves a large number of concurrent client requests, it may delay processing follower peer requests due to network congestion. This manifests as send buffer error messages on the follower nodes:
-
-```
-dropped MsgProp to 247ae21ff9436b2d since streamMsg’s sending buffer is full
-dropped MsgAppResp to 247ae21ff9436b2d since streamMsg‘s sending buffer is full
-
-```
-
-These errors may be resolved by prioritizing etcd’s peer traffic over its client traffic. On Linux, peer traffic can be prioritized by using the traffic control mechanism:
-
-```
-tc qdisc add dev eth0 root handle 1: prio bands 3
-tc filter add dev eth0 parent 1: protocol ip prio 1 u32 match ip sport 2380 0xffff flowid 1:1
-tc filter add dev eth0 parent 1: protocol ip prio 1 u32 match ip dport 2380 0xffff flowid 1:1
-tc filter add dev eth0 parent 1: protocol ip prio 2 u32 match ip sport 2379 0xffff flowid 1:1
-tc filter add dev eth0 parent 1: protocol ip prio 2 u32 match ip dport 2379 0xffff flowid 1:1
-```
-
-CPU
-
-As etcd is very sensitive to latency, performance can further be optimized on Linux systems by setting the CPU governor to performance or conservative mode.
-
-On Linux, the CPU governor can be configured to performance mode:
-
-```
-echo performance | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
-```
-
-偶数节点虽然多了一台机器，但是容错能力是一样的 多一台机器增加不了性能，反而会拉低写入速度
-
-etcd 集群是一个 Raft Group，没有 shared。所以它的极限有两部分，一是单机的容量限制，内存和磁盘；二是网络开销，每次 Raft 操作需要所有节点参与
-每一次写操作需要集群中大多数节点将日志落盘成功后，Leader 节点才能修改内部状态机，并将结果返回给客户端 节点越多性能越低，所以扩展很多 etcd 节点是没有意义的，一般是 3、5、7， 7 个也足够了
-
-The majority side becomes the available cluster and the minority side is unavailable; there is no “split-brain” in etcd.
+`--snapshot-count` 控制 Raft 日志快照频率，不控制 MVCC 历史保留。长期写入的集群还应配置 auto-compaction，并在需要回收 bbolt 空闲页时执行 defrag；三者分别解决日志增长、历史版本增长和文件空闲页问题，不能互相替代。
 
 ## Links
 
-- [etcd（Tuning 段：心跳/选举/磁盘/网络/CPU 原理）](/docs/CS/Framework/etcd/etcd.md)
-- [embed（Config 字段与默认值）](/docs/CS/Framework/etcd/embed.md)
-- [cluster（数据目录、配额、备份恢复）](/docs/CS/Framework/etcd/cluster.md)
-- [boltdb（backend 批处理落地的存储引擎）](/docs/CS/Framework/etcd/boltdb.md)
-- [compact（MVCC 历史压缩，区别于 snapshot-count）](/docs/CS/Framework/etcd/compact.md)
-- [troubleshooting（NOSPACE / slow apply）](/docs/CS/Framework/etcd/troubleshooting.md)
-- [monitoring（commit 延迟等告警指标）](/docs/CS/Framework/etcd/monitoring.md)
+- [Core_Mechanisms（apply、WAL 与 backend 的延迟边界）](/docs/CS/Framework/etcd/Core_Mechanisms.md)
+- [raft（心跳、选举与日志复制）](/docs/CS/Framework/etcd/raft.md)
+- [cluster（成员变更与 quorum）](/docs/CS/Framework/etcd/cluster.md)
 
 ## References
 
-1. [etcd source - server/embed/config.go（MaxTxnOps / MaxRequestBytes / TickMs / ElectionMs / 默认值常量）](https://github.com/etcd-io/etcd/blob/v3.5.34/server/embed/config.go)
-2. [etcd source - server/etcdserver（DefaultSnapshotCount=100000 / DefaultMaxSnapshots / DefaultMaxWALs）](https://github.com/etcd-io/etcd/blob/v3.5.34/server/etcdserver)
-3. [etcd Documentation - Tuning（heartbeat / election / disk / network / CPU）](https://etcd.io/docs/v3.5/op-guide/configuration/)
+1. [etcd v3.7.2 source - server/embed/config.go](https://github.com/etcd-io/etcd/blob/v3.7.2/server/embed/config.go)
+2. [etcd v3.7.2 source - server/etcdserver/server.go](https://github.com/etcd-io/etcd/blob/v3.7.2/server/etcdserver/server.go)
+3. [etcd Documentation - Configuration](https://etcd.io/docs/v3.7/op-guide/configuration/)

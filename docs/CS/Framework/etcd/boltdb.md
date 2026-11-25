@@ -2,12 +2,12 @@
 
 boltdb 指的是 etcd 数据目录下的 `member/snap/db` 文件——etcd 的 key-value、lease、meta、member、cluster、auth 等**所有**数据都存在这一个文件里。它不是 etcd 自己实现的，而是用 bbolt（etcd 贡献回社区的 Bolt 分支）。
 
-etcd 启动时通过 **mmap** 把 db 文件映射到内存，之后的读操作直接从内存走；写操作则通过文件操作 + `fdatasync` 落盘持久化。
+etcd 启动时通过 **mmap** 映射 db 文件，bbolt 在读写事务中访问 page；MVCC 读还会先检查 backend read buffer。写操作先进入 backend 的批量事务缓冲，提交时由 bbolt 写入并按配置执行 `fdatasync`，并不是每个 Put 返回前都单独提交一次磁盘事务。
 
 boltdb 的核心是 **B+ tree**：所有 key-value 都组织成一棵 B+ tree，写入、查找、范围扫描全部在树上完成。理解 etcd 的存储，第一步是理解这个文件的字节级布局。
 
 > [!NOTE]
-> 本篇的 key 编码、bucket 清单、tombstone 标记等结论均来自 etcd **v3.4.9** 源码（`mvcc/revision.go`、`mvcc/kvstore.go`、`mvcc/kvstore_txn.go`、`mvcc/key_index.go`），代码片段保持原样。这些结构在 3.5/3.6 未发生实质变化。
+> 本篇保留的 key 编码、bucket、tombstone 与 keyIndex 代码片段来自 etcd **v3.4.9**，作为历史实现标本；布局结论已用 **v3.7.2** 源码复核。3.7.2 将 `revision` 导出为 `Revision`、增加 `BucketKey`，并在 `keyIndex.compact` 与 `keep` 之间区分 tombstone 策略，差异见文末。
 
 ## Page Structure
 
@@ -112,7 +112,7 @@ func bytesToRev(bytes []byte) revision {
 ```
 
 > [!TIP]
-> **为什么要把 revision 放在 key 里？** 因为 B+ tree 按 key 有序排列，把单调递增的 revision 编码进 key，天然保证磁盘上"同一 key 的所有版本按版本号物理相邻"。范围查询 `[start, end)` 就退化成一次 B+ tree 的顺序扫描——这正是 `--prefix` 查询能高效工作的底层原因。用户 key 放在 value 里，反而让 key 保持定长（17 或 18 字节），B+ tree 的节点更紧凑。
+> **为什么把 revision 放在 key 里？** B+ tree 按字节序排列，单调递增的 revision 使 `[startRev, endRev)` 历史扫描和 watch 回放成为顺序扫描，这对 compaction 与落后 watcher 的追赶很重要。用户 key 位于 value 内，所以**同一 key 的历史版本并不会因此物理相邻**；任意用户前缀查询仍由内存 treeIndex 先定位 revision，再点查 backend。`--prefix` 高效的直接原因是 treeIndex 的有序 B-tree 与区间匹配，而不是磁盘 revision 排序。
 
 ### Tombstone Marker
 
@@ -207,7 +207,8 @@ func (tw *storeTxnWrite) put(key, value []byte, leaseID lease.LeaseID) {
 
 - `CreateRevision` 只在 key **首次创建**时取当前 rev，后续更新沿用旧值；`Version` 每次 put 递增。
 - `sub: int64(len(tw.changes))` —— 用已变更条数当 sub，这就是同一次 Txn 内多个 key 共享 main 的实现方式。
-- 写 boltdb 与更新内存索引 `kvindex` 在同一函数内完成，保证两者一致。
+- 写 backend 缓冲与更新内存索引 `kvindex` 在同一函数内完成；二者在事务 `End` 的可见性边界前保持一致。
+- put 序列化的是**完整** `mvccpb.KeyValue`，不是相对上一 revision 的增量；delete 的 value 只包含 key，并通过 18 字节 tombstone revision 标识。
 - lease 的 `Detach`/`Attach` 也在此处理：换了 lease 要先摘旧挂新。
 
 读路径（`rangeKeys`）则是"先查内存索引拿 revision 列表，再逐个点查 bbolt"：
@@ -345,6 +346,36 @@ func (ki *keyIndex) compact(lg *zap.Logger, atRev int64, available map[revision]
 }
 ```
 
+## v3.7.2 Differences
+
+v3.4.9 的片段有助于理解布局，但直接照搬类型与压缩行为会得到过时结论：
+
+| 主题 | v3.4.9 | v3.7.2 |
+| :--- | :--- | :--- |
+| revision 类型 | 未导出的 `revision{main, sub}` | 导出的 `Revision{Main, Sub}`，并提供 `RevToBytes` / `BytesToRev` |
+| backend key 类型 | 普通 revision 与 tombstone 两套编码函数 | `BucketKey` 统一封装 `Revision` 与 tombstone 标记 |
+| `keyIndex.modified` | `revision` | `Revision` |
+| `keyIndex.compact` | 对单个 tombstone 做额外删除并跳过 generation | 只调用 `doCompact` 并裁剪 generation / revs |
+| tombstone 保留策略 | 混在 `compact` 中 | `keep` 为物理删除计算 keep set 时跳过特定 tombstone；`compact` 保持原行为以兼容既有 hash |
+
+```go
+// server/storage/mvcc/key_index.go:212-235（v3.7.2）
+func (ki *keyIndex) compact(lg *zap.Logger, atRev int64, available map[Revision]struct{}) {
+    if ki.isEmpty() {
+        lg.Panic("'compact' got an unexpected empty keyIndex")
+    }
+    genIdx, revIndex := ki.doCompact(atRev, available)
+
+    g := &ki.generations[genIdx]
+    if !g.isEmpty() {
+        if revIndex != -1 {
+            g.revs = g.revs[revIndex:]
+        }
+    }
+    ki.generations = ki.generations[genIdx:]
+}
+```
+
 ## freelist
 
 `freelist` 是 boltdb 的**空闲页管理器**——记录哪些 page 当前是空闲可复用的，位于 db 文件开头的 meta page 之后。
@@ -354,16 +385,14 @@ func (ki *keyIndex) compact(lg *zap.Logger, atRev int64, available map[revision]
 MVCC 与 [compact](/docs/CS/Framework/etcd/compact.md) 只能删除 key-value 条目，删除后这些 page 变成空闲，被**记录进 freelist 等待复用**，但**磁盘文件大小保持不变**。这就是为什么"compact 之后 db 文件还是很大"——被删掉的空间只进了 freelist，没有还给文件系统。
 
 > [!NOTE]
-> freelist 存在 O(N) 的问题：一个频繁删除大 value 的 key 会把大量 page 释放进 freelist。官方在 etcd.md 的 [quota 章节](/docs/CS/Framework/etcd/etcd.md) 分析过这一机制——`freelist` 的扫描成本随空闲页数线性增长，碎片过多时 compaction 本身会变慢。
+> freelist 存在 O(N) 的问题：一个频繁删除大 value 的 key 会把大量 page 释放进 freelist。空闲页越多，扫描与维护成本越高，可能放大 compaction / commit 延迟。NOSPACE 的触发顺序、compact 与 defrag 的处置见 [troubleshooting](/docs/CS/Framework/etcd/troubleshooting.md)。
 
-唯一的回收方式是 **defrag**：重建一个紧凑的 db 文件并原子替换，把空闲页彻底丢弃。`etcdctl defrag` 正是干这个。它是**阻塞操作**（期间该节点不响应请求），所以生产上要逐台执行。完整的处置流程见 [troubleshooting.md](/docs/CS/Framework/etcd/troubleshooting.md) 的 NOSPACE 章节。
+唯一的回收方式是 **defrag**：重建一个紧凑的 db 文件并原子替换，把空闲页彻底丢弃。`etcdctl defrag` 正是干这个。它是**阻塞操作**（期间该节点不响应请求），所以生产上要逐台执行。完整的处置流程见 [troubleshooting](/docs/CS/Framework/etcd/troubleshooting.md) 的 NOSPACE 章节。
 
 ## Links
 
-- [treeIndex（内存键索引）](/docs/CS/Framework/etcd/treeIndex.md)
+- [Core_Mechanisms（backend 提交与恢复边界）](/docs/CS/Framework/etcd/Core_Mechanisms.md)
 - [MVCC（多版本并发控制）](/docs/CS/Framework/etcd/MVCC.md)
-- [compact（历史版本压缩）](/docs/CS/Framework/etcd/compact.md)
-- [troubleshooting（NOSPACE 处置与 defrag）](/docs/CS/Framework/etcd/troubleshooting.md)
 - [cluster（磁盘数据布局）](/docs/CS/Framework/etcd/cluster.md)
 - [tuning（--backend-batch-interval / --backend-batch-limit）](/docs/CS/Framework/etcd/tuning.md)
 
@@ -374,5 +403,9 @@ MVCC 与 [compact](/docs/CS/Framework/etcd/compact.md) 只能删除 key-value �
 3. [etcd mvcc/kvstore_txn.go (v3.4.9)](https://github.com/etcd-io/etcd/blob/v3.4.9/mvcc/kvstore_txn.go)
 4. [etcd mvcc/key_index.go (v3.4.9)](https://github.com/etcd-io/etcd/blob/v3.4.9/mvcc/key_index.go)
 5. [bbolt (Bolt 的派生分支)](https://github.com/etcd-io/bbolt)
-6. [etcd Documentation - Maintenance](https://etcd.io/docs/v3.5/op-guide/maintenance/)
+6. [etcd Documentation - Maintenance](https://etcd.io/docs/v3.7/op-guide/maintenance/)
 7. [etcd 3.5.9 源代码分析](https://www.cnblogs.com/janeysj/p/17401891.html)
+8. [etcd v3.7.2 - Revision and backend key encoding](https://github.com/etcd-io/etcd/blob/v3.7.2/server/storage/mvcc/revision.go)
+9. [etcd v3.7.2 - Backend read transaction](https://github.com/etcd-io/etcd/blob/v3.7.2/server/storage/backend/read_tx.go)
+10. [etcd v3.7.2 - Backend batch transaction](https://github.com/etcd-io/etcd/blob/v3.7.2/server/storage/backend/batch_tx.go)
+11. [etcd v3.7.2 - MVCC key index](https://github.com/etcd-io/etcd/blob/v3.7.2/server/storage/mvcc/key_index.go)

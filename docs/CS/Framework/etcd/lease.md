@@ -2,7 +2,7 @@
 
 Lease 顾名思义，client 和 etcd server 之间存在一个约定，内容是 etcd server 保证在约定的有效期内（TTL），不会删除你关联到此 Lease 上的 key-value。
 
-etcd 在启动的时候，创建 Lessor 模块的时候，它会启动两个常驻 goroutine，一个是 RevokeExpiredLease 任务，定时检查是否有过期 Lease，发起撤销过期的 Lease 操作。一个是 CheckpointScheduledLease，定时触发更新 Lease 的剩余到期时间的操作。
+etcd 创建 Lessor 时会启动一个常驻 `runLoop` goroutine。它每 500ms 依次执行 `revokeExpiredLeases()` 与 `checkpointScheduledLeases()`：前者检查并投递过期 Lease，后者按 checkpoint 队列更新剩余 TTL。两者不是两个独立 goroutine。
 
 客户端能感知的四个 API 作用如下：
 
@@ -12,14 +12,13 @@ etcd 在启动的时候，创建 Lessor 模块的时候，它会启动两个常�
 - LeaseKeepAlive 表示为 Lease 续期。
 
 > [!WARNING]
-> **归类更正**：上面后两个 API **不在 `Lessor` 接口里**。`Lessor` 接口（`server/lease/lessor.go`）只暴露 `Lookup`（查内存里的 `*Lease`）与 `Renew`（返回剩余 TTL）这类**进程内**操作；`LeaseTimeToLive` / `LeaseLeases` / `LeaseKeepAlive` / `LeaseGrant` / `LeaseRevoke` 都是 **`EtcdServer` 层**的方法（`server/etcdserver/v3_server.go`），gRPC 接入层在 `server/etcdserver/api/v3rpc/lease.go`。把「客户端 API」当成「Lessor 接口方法」去读源码会找不到。
+> **归类更正**：客户端 API、`EtcdServer` 方法与 `Lessor` 接口是三层，不能混着读。`Lessor` 接口（`server/lease/lessor.go`）包含 `Grant` / `Revoke` / `Renew` / `Lookup` / `Attach` / `Detach` / `Checkpoint` / `Promote` / `Demote` 等**进程内**操作；gRPC 接入层 `LeaseServer`（`server/etcdserver/api/v3rpc/lease.go`）暴露 `LeaseGrant` / `LeaseRevoke` / `LeaseTimeToLive` / `LeaseLeases` / `LeaseKeepAlive`，其中 `LeaseKeepAlive` 是流方法。单次续期在流处理中调用 `EtcdServer.LeaseRenew`，其余非流请求由 `EtcdServer` 的同名方法处理（`server/etcdserver/v3_server.go`）。
 
 ## Version Baseline
 
 | 项 | 值 |
 | :--- | :--- |
-| 最新稳定版 | **3.7.2** |
-| 维护分支 | 3.6.15 / 3.5.34 |
+| 源码基线 | **3.7.2** |
 | `MaxLeaseTTL`（最大 TTL） | `9000000000` 秒（`server/lease/lessor.go`，**导出常量**） |
 | `minLeaseTTL`（最小 TTL） | **不是常量**，是 `lessor` 结构体字段；运行时按 `ceil(1.5 × ElectionTicks × heartbeat)` 计算 |
 | checkpoint 默认间隔 | `defaultLeaseCheckpointInterval = 5 * time.Minute` |
@@ -37,9 +36,7 @@ $ etcdctl lease grant 600
 $ etcdctl lease timetolive 326975935f48f814
 
 ```
-当 Lease server 收到 client 的创建一个有效期 600 秒的 Lease 请求后，会通过 Raft 模块完成日志同步，随后 Apply 模块通过 Lessor 模块的 Grant 接口执行日志条目内容。
-首先 Lessor 的 Grant 接口会把 Lease 保存到内存的 ItemMap 数据结构中，然后它需要持久化 Lease，将 Lease 数据保存到 boltdb 的 Lease bucket 中，返回一个唯一的 LeaseID 给 client。
-通过这样一个流程，就基本完成了 Lease 的创建
+当 Lease server 收到 client 创建一个有效期 600 秒的 Lease 请求后，请求经 Raft 同步，再由 Apply 模块调用 `Lessor.Grant`。`Grant` 创建 `Lease`、按需把 TTL 钳制到 `minLeaseTTL`，将其插入 `leaseMap` 并持久化到 boltdb 的 Lease bucket，最后返回 LeaseID 给 client。
 
 KV 模块的 API 接口提供了一个"--lease"参数，你可以通过如下命令，将 key node 关联到对应的 LeaseID 上。然后你查询的时候增加 -w 参数输出格式为 json，就可查看到 key 关联的 LeaseID
 通过 put 等命令新增一个指定了 "--lease" 的 key 时，MVCC 模块它会通过 Lessor 模块的 Attach 方法，将 key 关联到 Lease 的 key 内存集合 ItemSet 中。
@@ -50,13 +47,13 @@ KV 模块的 API 接口提供了一个"--lease"参数，你可以通过如下命
 
 ## expire
 
-淘汰过期Lease的工作由Lessor模块的一个异步goroutine负责 它会定时从最小堆中取出已过期的Lease，执行删除Lease和其关联的key列表数据的RevokeExpiredLease任务
+过期 Lease 的发现由 Lessor 的 `runLoop` 负责：它从最小堆检查过期项，把批次发送到 `expiredC`；server 侧再通过 Raft 发起撤销，而不是由 `runLoop` 直接删除 backend 中的 key。
 
 目前etcd是基于最小堆来管理Lease，实现快速淘汰过期的Lease。
 etcd早期的时候，淘汰Lease非常暴力。etcd会直接遍历所有Lease，逐个检查Lease是否过期，过期则从Lease关联的key集合中，取出key列表，删除它们，时间复杂度是O(N)。
 然而这种方案随着Lease数增大，毫无疑问它的性能会变得越来越差。我们能否按过期时间排序呢？这样每次只需轮询、检查排在前面的Lease过期时间，一旦轮询到未过期的Lease， 则可结束本轮检查。
 刚刚说的就是etcd Lease高效淘汰方案最小堆的实现方法。每次新增Lease、续期的时候，它会插入、更新一个对象到最小堆中，对象含有LeaseID和其到期时间unixnano，对象之间按到期时间升序排序。
-etcd Lessor 主循环每隔 500ms 执行一次撤销 Lease 检查（RevokeExpiredLease），每次轮询堆顶的元素，若已过期则加入到待淘汰列表，直到堆顶的 Lease 过期时间大于当前，则结束本轮轮询。
+etcd Lessor 主循环每隔 500ms 执行一次撤销 Lease 检查（`revokeExpiredLeases`），每次轮询堆顶的元素，若已过期则加入到待淘汰列表，直到堆顶的 Lease 过期时间大于当前，则结束本轮轮询。
 相比早期 O(N) 的遍历时间复杂度，使用堆后，插入、更新、删除，它的时间复杂度是 O(Log N)，查询堆顶对象是否过期时间复杂度仅为 O(1)，性能大大提升，可支撑大规模场景下 Lease 的高效淘汰
 
 上面这套描述对应 3.7.2 的 `runLoop`：`delayTicker := time.NewTicker(500 * time.Millisecond)`，每轮依次调 `revokeExpiredLeases()` 与 `checkpointScheduledLeases()`。最小堆由 `LeaseQueue` 实现（`server/lease/lease_queue.go`）。
@@ -84,11 +81,11 @@ etcd Lessor 主循环每隔 500ms 执行一次撤销 Lease 检查（RevokeExpire
 ```go
 resp, _ := cli.TimeToLive(ctx, leaseID, clientv3.WithAttachedKeys())
 // resp.TTL        剩余秒数（已过期返回 -1）
-// resp.GrantedTTL 创建/续期时的初始 TTL
+// resp.GrantedTTL Grant 时确定的 TTL（Renew 不修改它）
 // resp.Keys       [][]byte，带上 WithAttachedKeys 才填充
 ```
 
-`WithAttachedKeys()` 对应 `LeaseTimeToLiveRequest.keys` 字段——etcdctl 里就是 `etcdctl lease timetolive <id> --keys`。这正是排查「哪个 lease 还挂着 key」的最快手段，[troubleshooting.md](/docs/CS/Framework/etcd/troubleshooting.md) 的 NOSPACE 排查常需要定位大 key 归属的 lease。
+`WithAttachedKeys()` 对应 `LeaseTimeToLiveRequest.keys` 字段——etcdctl 里就是 `etcdctl lease timetolive <id> --keys`。这正是排查“哪个 lease 还挂着 key”的最快手段，[troubleshooting](/docs/CS/Framework/etcd/troubleshooting.md) 的 NOSPACE 排查常需要定位大 key 归属的 lease。
 
 ### List All Leases
 
@@ -140,14 +137,14 @@ checkpoint 间隔由 `LeaseCheckpointInterval` 配置，默认 `defaultLeaseChec
 
 ### Cooperation with naming
 
-[naming.md](/docs/CS/Framework/etcd/naming.md) 里 endpoint 注册可以 `clientv3.WithLease(leaseID)`——把业务实例地址挂到一个 lease 上。实例进程挂了、lease 不再续期，endpoint 自动从 etcd 消失，消费方 Watch 到 Delete 摘掉实例。这里 lease 同时充当了「服务健康检查」：lease 活着 = 实例活着。
+[naming（服务发现）](/docs/CS/Framework/etcd/naming.md) 里 endpoint 注册可以 `clientv3.WithLease(leaseID)`——把业务实例地址挂到一个 lease 上。实例进程挂了、lease 不再续期，endpoint 自动从 etcd 消失，消费方 Watch 到 Delete 摘掉实例。这里 lease 同时充当了「服务健康检查」：lease 活着 = 实例活着。
 
 ## Pitfall List
 
 > [!WARNING]
 > 逐条对照 3.7.2 源码核实，都是「照旧文档写会出错」的点：
 
-1. **`LeaseTimeToLive` / `LeaseKeepAlive` 不在 `Lessor` 接口里** —— 它们是 `EtcdServer` 的方法（`server/etcdserver/v3_server.go`），gRPC 接入层在 `server/etcdserver/api/v3rpc/lease.go`。`Lessor` 只有 `Lookup` / `Renew` 这类进程内方法。
+1. **`LeaseKeepAlive` 不是 `EtcdServer` 方法，也不是 `Lessor` 接口方法** —— 它是 gRPC `LeaseServer` 的流方法；流内单次续期调用 `EtcdServer.LeaseRenew`，最终落到 `Lessor.Renew`。`LeaseTimeToLive` / `LeaseLeases` / `LeaseGrant` / `LeaseRevoke` 才由 `EtcdServer` 提供非流入口。
 2. **`EnableLeaseCheckpoint` 这个配置项在 3.7.2 里不存在** —— 3.6 起改成 feature gate `LeaseCheckpoint`，且**默认 false**。「3.5 起默认开启」不适用于 3.7。
 3. **`LeaseCheckpointPersist` 不能单独开** —— 只开它不加 `LeaseCheckpoint`，`Validate()` 会直接返回错误拒绝启动。
 4. **「gate 存在」不等于「gate 生效」** —— 判断当前集群实际行为要看默认值代码。`LeaseCheckpointPersist` 的注释说「v3.6 起默认启用、v3.7 移除」，而 3.7.2 里它**没被移除也未默认启用**。
@@ -160,15 +157,15 @@ checkpoint 间隔由 `LeaseCheckpointInterval` 配置，默认 `defaultLeaseChec
 
 ## Links
 
+- [Core_Mechanisms（lease revoke 与 checkpoint 的 Raft 路径）](/docs/CS/Framework/etcd/Core_Mechanisms.md)
 - [etcd](/docs/CS/Framework/etcd/etcd.md)
 - [compare（与 ZooKeeper 临时节点的对应）](/docs/CS/Framework/etcd/compare.md)
 - [concurrency（分布式锁 / 选主依赖 Session 租约）](/docs/CS/Framework/etcd/concurrency.md)
-- [naming（endpoint 绑定 lease 自动下线）](/docs/CS/Framework/etcd/naming.md)
 
 ## References
 
 1. [etcd source - server/lease/lessor.go（Lessor 接口、主循环、TTL 常量）](https://github.com/etcd-io/etcd/blob/v3.7.2/server/lease/lessor.go)
 2. [etcd source - server/features/etcd_features.go（LeaseCheckpoint / FastLeaseKeepAlive 等 gate 默认值）](https://github.com/etcd-io/etcd/blob/v3.7.2/server/features/etcd_features.go)
 3. [etcd source - server/etcdserver/v3_server.go（Lease* 的 gRPC 入口实现）](https://github.com/etcd-io/etcd/blob/v3.7.2/server/etcdserver/v3_server.go)
-4. [etcd Documentation - Lease (TTL) API](https://etcd.io/docs/v3.7/api/lease/)
+4. [etcd API](https://etcd.io/docs/v3.7/learning/api/)
 5. [etcd source - client/v3/lease.go（客户端 Lease 接口）](https://github.com/etcd-io/etcd/blob/v3.7.2/client/v3/lease.go)

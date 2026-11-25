@@ -592,9 +592,6 @@ func (p *ProgressTracker) ConfState() pb.ConfState {
 
 ## Links
 
-- [raft（共识模块）](/docs/CS/Framework/etcd/raft.md)
-- [net（网络层与 Pipeline/Stream）](/docs/CS/Framework/etcd/net.md)
-- [cluster（集群运维与成员变更）](/docs/CS/Framework/etcd/cluster.md)
 - [monitoring（监控与指标阈值）](/docs/CS/Framework/etcd/monitoring.md)
 - [Raft 论文精读](/docs/CS/Distributed/Consensus/Raft.md)
 
@@ -605,5 +602,5 @@ func (p *ProgressTracker) ConfState() pb.ConfState {
 3. [etcd-io/raft：tracker/state.go（外置仓库）](https://github.com/etcd-io/raft/blob/main/tracker/state.go)
 4. [etcd-io/raft：tracker/tracker.go（外置仓库）](https://github.com/etcd-io/raft/blob/main/tracker/tracker.go)
 5. [etcd-io/raft：raft.go（外置仓库）](https://github.com/etcd-io/raft/blob/main/raft.go)
-6. [In Search of an Understandable Consensus Algorithm (Extended Version)](https://github.com/ongardie/dissertation/blob/master/etcd/extended_paper.pdf)
-7. [etcd Documentation - Raft](https://etcd.io/docs/v3.5/architecture/raft/)
+6. [In Search of an Understandable Consensus Algorithm (Extended Version)](https://ongardie.net/var/blurbs/pubs/raft-tr14.pdf)
+7. [etcd Raft implementation](https://github.com/etcd-io/raft)

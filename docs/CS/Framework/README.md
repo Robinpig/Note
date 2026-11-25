@@ -40,7 +40,7 @@ digraph framework_index {
 
 按"强一致键值底座 / 配置与注册中心"两类定位取舍，完整维度矩阵见 [etcd 横向对照](/docs/CS/Framework/etcd/compare.md)。
 
-- [etcd](/docs/CS/Framework/etcd/README.md)：K8s 后端首选的强一致 KV；枢纽 + boot（启动生命周期）/ request（请求路径）/ features（服务发现·事务）分册，配套完整的共识（raft/tracker）、存储（boltdb/MVCC）、网关、运维笔记。
+- [etcd](/docs/CS/Framework/etcd/README.md)：K8s 后端首选的强一致 KV；枢纽 + boot（启动生命周期）/ request（请求路径）/ [Core_Mechanisms](/docs/CS/Framework/etcd/Core_Mechanisms.md)（Propose → Raft → Apply → MVCC → Read/Watch → Recovery 跨层主链）/ features（服务发现·事务）分册，配套完整的共识（raft/tracker）、存储（boltdb/MVCC）、网关、运维笔记。
 - [ZooKeeper](/docs/CS/Framework/ZooKeeper/README.md)：经典协调底座，Zab 共识、znode树、watch 与 session 配方。
 - [Nacos](/docs/CS/Framework/nacos/README.md)：配置中心 + 注册中心，AP（Distro）与 CP（JRaft）双模式。
 - [Apollo](/docs/CS/Framework/Apollo/Apollo.md)：携程出品的分布式**配置管理中心**，定位是「配置发布平台」——app/env/cluster/namespace 四维坐标、修改与发布双权限、灰度分支、编辑审计。已拆为**枢纽 + 分册**（[Architecture](/docs/CS/Framework/Apollo/Architecture.md) / [Client](/docs/CS/Framework/Apollo/Client.md) / [Config Push](/docs/CS/Framework/Apollo/Config_Push.md) / [Namespace](/docs/CS/Framework/Apollo/Namespace.md) / [Portal](/docs/CS/Framework/Apollo/Portal.md) / [Storage](/docs/CS/Framework/Apollo/Storage.md) / [Deployment and Ops](/docs/CS/Framework/Apollo/Deployment_and_Ops.md)），四条判定线是「四维坐标先问维度、服务端唯一外部依赖 MySQL、推送是通知+拉取两段式、Java 客户端已拆到独立仓库 apollo-java」。版本基线：服务端 3.0.0（Java 17，database-discovery 默认），客户端线独立演进。
@@ -101,8 +101,6 @@ digraph framework_index {
 ## Links
 
 - [CS 主目录](/docs/CS/CS.md)
-- [etcd 横向对照（协调组件选型）](/docs/CS/Framework/etcd/compare.md)
-- [Istio](/docs/CS/Framework/Istio/Istio.md)
 - [LangTool（AI 领域入口）](/docs/CS/AI/LLM/LLM.md)
 
 ## References

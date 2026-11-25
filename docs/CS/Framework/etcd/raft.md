@@ -8,7 +8,7 @@ etcd 3.6 之后，Raft 算法实现从主仓库**物理外置**为独立依赖 `
 
 > [!NOTE]
 >
-> 本篇所有代码块、行号均取自 `/tmp/etcd-src/etcd-3.7.2` 解压源码，**只贴主仓库文件**。需要算法实现（`stepLeader`、`MaybeDecrTo`、`readOnly` 等）请去 `etcd-io/raft` 仓库；本库 [tracker.md](/docs/CS/Framework/etcd/tracker.md) 已把其中最关键的 `tracker` 部分单独抽出解析。
+> 本篇所有代码块、行号均取自 **etcd v3.7.2** 解压源码，**只贴主仓库文件**。需要算法实现（`stepLeader`、`MaybeDecrTo`、`readOnly` 等）请去 `etcd-io/raft` 仓库；本库 [tracker.md](/docs/CS/Framework/etcd/tracker.md) 已把其中最关键的 `tracker` 部分单独抽出解析。
 
 主仓库里 raft 相关的文件只有 4 个，且**没有 `raft_node.go`**（`raftNode` 定义在 `raft.go:81`）：
 
@@ -373,7 +373,7 @@ func NewRaftLoggerZap(lg *zap.Logger) raft.Logger {
 
 外置库的 `Ready` 结构体定义在 `go.etcd.io/raft/v3`，本篇**不贴**（它已不属于 etcd 主仓库）。这里只讲 etcdserver 如何消费它——全部在 `raft.go:185-243` 及其延伸。
 
-关键前提：`Ready` 里的字段**全部只读**，且处理顺序有强约束（先落盘、再发消息、最后 apply）。etcd 把这个顺序改了一处：**先投 applyc，再落盘**。
+关键前提：`Ready` 只在当前批次有效，消费方不能修改它的字段。etcd 的处理顺序也不是统一的“先落盘、再发消息、最后 apply”：**所有节点都先投 `applyc`；leader 随后先发副本消息再落盘，follower 则先落盘再发消息**。含 ConfChange 的 follower 还要等待配置变更 apply。
 
 ### Step 1: SoftState —— Acknowledge Leadership
 
@@ -421,7 +421,7 @@ if len(rd.ReadStates) != 0 {
 }
 ```
 
-`internalTimeout` 硬编码为 `time.Second`（`:175`）。只取**最后一个** `ReadState`：`readStateC` 容量为 1，前面的要么已被消费、要么被覆盖——线性读要的是「当前已确认的最新 read index」，早的那些已无意义。消费方见第 6 节。
+`internalTimeout` 硬编码为 `time.Second`（`:175`）。只取**最后一个** `ReadState`：`readStateC` 容量为 1，发送方要么等待消费，要么在超时分支放弃本次投递，并不会覆盖一个尚未消费的值——线性读要的是「当前已确认的最新 read index」。消费方见 [Linearizable Read](/docs/CS/Framework/etcd/raft.md?id=linearizable-read-and-client-mutex)。
 
 ### Step 3: Package toApply and Submit to State Machine
 
@@ -450,7 +450,7 @@ case <-r.stopped:
 三点值得注意：
 
 - **两次 `proto.Clone`**：一份给 `raftSnap` 供本循环落盘，一份进 `ap`。因为 `Ready` 只在当前批次有效，而 `ap` 要跨 goroutine 活到 `applyAll` 执行完。
-- **`notifyc`/`raftAdvancedC` 容量都是 1**：整个设计依赖「至多一次写入、至多一次读取」，所以第 4 步里 `confChanged` 时才做第二次 `notifyc <- struct{}{}`（`:317`）。
+- **`notifyc`/`raftAdvancedC` 容量都是 1**：普通路径只发送一次持久化阶段通知；含 ConfChange 的 follower 会复用同一个 `notifyc` 槽位发送第二次屏障，因此必须等 `applyAll` 消费第一次通知后才能继续（`:317`）。
 - **`updateCommittedIndex`（`:344`）** 取 `entries` 末条与 snapshot index 的较大者，只在非 0 时回调——snapshot 的 index 可能远大于本批 entries。
 
 `applyc` 是**无缓冲**信道（`raft.go:146`），所以这一步会阻塞直到 `EtcdServer.run()` 的调度器接走：
@@ -462,7 +462,9 @@ case ap := <-s.r.apply():
 	sched.Schedule(f)
 ```
 
-FIFO 调度器保证 apply 严格按 raft 产出顺序执行。`applyAll` 的第一行是 `s.applySnapshot(ep, apply)`，第二行 `s.applyEntries(ep, apply)`（`server.go:972-973`）。
+`schedule.NewFIFOScheduler` 接收 apply 任务；`applyEntries` 另用 index 连续性检查保证日志不会跳序执行。`applyAll` 的第一行是 `s.applySnapshot(ep, apply)`，第二行是 `s.applyEntries(ep, apply)`（`server.go:972-974`）。
+
+**普通 entry 路径不会先等待本地 WAL**：`applyAll` 先 apply entries、校验 backend、推进并 Trigger applied index，最后才等待 raft goroutine 的 `notifyc`，然后创建 snapshot / 压缩 Raft log（`server.go:975-985`）。这个等待是 snapshot 的前置屏障，避免 applied index 超过 Raft storage 中已有的日志。非空 snapshot 是例外：`applySnapshot` 会先消费 `notifyc`，确认快照与 WAL snapshot record 已持久化，再切换 backend（`server.go:1030-1042`）。
 
 > [!NOTE]
 >
@@ -477,7 +479,7 @@ FIFO 调度器保证 apply 严格按 raft 产出顺序执行。`applyAll` 的第
 
 ### Step 4: Persist to Disk
 
-顺序被一条注释严格约束（`:245-246`）：
+持久化内部有严格约束：**快照文件与 WAL snapshot record 必须早于同批其它 entries 和 HardState**（`:245-246`）：
 
 ```go
 // server/etcdserver/raft.go:245-262
@@ -500,11 +502,11 @@ if !raft.IsEmptyHardState(rd.HardState) {
 }
 ```
 
-快照分支之后还有一段 `Sync` + `ApplySnapshot` + `Release`（`:264-285`），其中 `Sync` 的注释直接引用了 issue #10219——不强制 fsync hard state 就 `Release` 旧 WAL，会触发 `panic: tocommit(107) is out of range [lastIndex(84)]`。最后 `r.raftStorage.Append(rd.Entries)`（`:287`）更新内存态。
+快照分支**内部**还有一段 `Sync` + `ApplySnapshot` + `Release`（`:264-285`）：先强制 WAL fsync HardState，再通知 `applySnapshot` 可以恢复 backend，最后释放旧 WAL。`Sync` 的注释直接引用了 issue #10219——不强制 fsync hard state 就 `Release` 旧 WAL，会触发 `panic: tocommit(107) is out of range [lastIndex(84)]`。分支结束后，`r.raftStorage.Append(rd.Entries)`（`:287`）更新内存态。
 
 ### Step 5: Send Message + Advance
 
-leader 与 follower 的路径**故意不同**：
+leader 与 follower 的路径**故意不同**。下面是 leader 分支，但它在源码中位于上面的 `Save` **之前**：
 
 ```go
 // server/etcdserver/raft.go:237-243
@@ -517,7 +519,7 @@ if islead {
 }
 ```
 
-leader 在**投完 applyc 之后立刻发**（不等落盘），这就是论文 10.2.1 的并行优化——注释里 `// ...` 的省略部分正是 follower 路径的完整实现，follower 必须等 `notifyc`（落盘完成）再发，且若本批含 ConfChange 还要**再等一次 apply 完成**：
+leader 在**投完 `applyc` 之后立刻发**（不等本地落盘），这就是论文 10.2.1 的并行优化。follower 则在 `Save` 完成后才处理并发送消息（`:297-324`）：普通 follower 先向 `notifyc` 写一次，解除 `applyAll` 的 snapshot 屏障；若本批含 ConfChange，还要**再等一次 apply 完成**。`applyWait.Trigger` 本身不消费 channel；真正腾出槽位的是 `applyAll` 在 Trigger 后执行的 `<-apply.notifyc`，随后 follower 才能发送第二次通知：
 
 ```go
 // server/etcdserver/raft.go:304-321
@@ -544,9 +546,9 @@ if confChanged {
 r.transport.Send(msgs)
 ```
 
-最后 `r.Advance()`（`:331`），再在 `confChanged` 时补 `raftAdvancedC <- struct{}{}`（`:333-336`）。
+leader 在本地 `Save` 后也会写一次 `notifyc`（`:325-327`）。两条路径最后都调用 `r.Advance()`（`:331`），再在 `confChanged` 时补 `raftAdvancedC <- struct{}{}`（`:333-336`）。完整跨 goroutine 时序见 [Core Mechanisms](/docs/CS/Framework/etcd/Core_Mechanisms.md)。
 
-### processMessages: Three Filter Rules
+### processMessages: Four Filter Rules
 
 发出去之前每条消息过一遍筛（`:357-402`）：
 
@@ -718,7 +720,7 @@ func (r *Read) LinearizableReadNotify(ctx context.Context) error {
 }
 ```
 
-循环体（`:96` 起）每次先换一个新 notifier，再 `requestCurrentIndex` 拿 read index，等 `appliedIndex >= confirmedIndex` 后 `nr.notify(nil)` 一次性放行所有等在这个 notifier 上的读。细节见 [read.md](/docs/CS/Framework/etcd/read.md)。
+循环体（`:96` 起）每次先换一个新 notifier，再 `requestCurrentIndex` 拿 read index；正常情况下，等 `appliedIndex >= confirmedIndex` 后 `nr.notify(nil)` 一次性放行所有等在这个 notifier 上的读。first-commit-in-term 与 retry timer 都会触发重发，过期 request ID 会被过滤。完整链路见 [read.md](/docs/CS/Framework/etcd/read.md) 与 [Core Mechanisms](/docs/CS/Framework/etcd/Core_Mechanisms.md)。
 
 ### Client Mutex.TryLock
 
@@ -802,15 +804,13 @@ func (m *Mutex) TryLock(ctx context.Context) error {
 ## Links
 
 - [etcd（总览与架构）](/docs/CS/Framework/etcd/etcd.md)
-- [tracker（ProgressTracker 与流控）](/docs/CS/Framework/etcd/tracker.md)
 - [net（网络层与 Pipeline/Stream）](/docs/CS/Framework/etcd/net.md)
-- [read（etcdserver 如何把 ReadIndex 接到 Range 请求）](/docs/CS/Framework/etcd/read.md)
 - [Raft 论文精读](/docs/CS/Distributed/Consensus/Raft.md)
 
 ## References
 
 1. [etcd-io/raft（外置的 Raft 算法实现仓库）](https://github.com/etcd-io/raft)
 2. [etcd v3.7.2 Release Notes](https://github.com/etcd-io/etcd/blob/main/CHANGELOG/CHANGELOG-3.7.md)
-3. [In Search of an Understandable Consensus Algorithm (Extended Version)](https://github.com/ongardie/dissertation/blob/master/etcd/extended_paper.pdf)
+3. [In Search of an Understandable Consensus Algorithm (Extended Version)](https://ongardie.net/var/blurbs/pubs/raft-tr14.pdf)
 4. [etcd 源码分析（知乎专栏）](https://www.zhihu.com/column/c_1574793366772060162)
 5. [etcd Raft 库解析](https://www.codedump.info/post/20180922-etcd-raft/)

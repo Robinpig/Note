@@ -1,6 +1,6 @@
 ## Introduction
 
-[etcd](/docs/CS/Framework/etcd/etcd.md) 的**请求处理路径**深潜：客户端请求如何经 gRPC 拦截器进入 `KVServer`，quota 模块如何做请求限流（`ErrTooManyRequests` / `ErrRequestTooLarge` / 7s 超时），以及 `get` / `put` 一次读写请求在 etcd server 侧从「进入」到「提交 Raft 提案」的全链路。启动链见 [boot](/docs/CS/Framework/etcd/boot.md)；提案之后的 Raft 复制、Ready 消费与 apply 见 [raft](/docs/CS/Framework/etcd/raft.md)；线性读（ReadIndex）机制见 [read](/docs/CS/Framework/etcd/read.md)。
+[etcd](/docs/CS/Framework/etcd/etcd.md) 的**请求处理路径**深潜：客户端请求如何经 gRPC 拦截器进入 `KVServer`，quota 模块如何做请求限流（`ErrTooManyRequests` / `ErrRequestTooLarge` / 7s 超时），以及 `get` / `put` 一次读写请求在 etcd server 侧从「进入」到「apply 后返回结果」的全链路。跨模块的提交、apply 与 revision 边界见 [Core_Mechanisms](/docs/CS/Framework/etcd/Core_Mechanisms.md)；启动链见 [boot](/docs/CS/Framework/etcd/boot.md)；Raft 复制、Ready 消费见 [raft](/docs/CS/Framework/etcd/raft.md)；线性读（ReadIndex）机制见 [read](/docs/CS/Framework/etcd/read.md)。
 
 > [!NOTE]
 > 版本基线同 [etcd](/docs/CS/Framework/etcd/etcd.md)：**3.7.2**（raft 已外置 `go.etcd.io/raft/v3` v3.7.0）。
@@ -61,40 +61,44 @@ const (
 
 **为什么不建议 db 超过 8G**：etcd 不支持数据分片，所有 key-value 落在 boltdb 单个 bucket；db 过大时启动期重建 `treeIndex`、事务提交时 freelist 的 `O(N)` 遍历、以及查询触发的主缺页中断都会显著放大延时与内存压力，进而让任意 expensive read 引发 OOM / 丢包。更细的配额与性能调优（含 `--quota-backend-bytes`、compact、freelist 类型）见 [tuning](/docs/CS/Framework/etcd/tuning.md)。
 
-限流的核心判定在 `EtcdServer.processInternalRaftRequestOnce`：先比 committed / applied 间隙，再查包大小，最后才 `Propose`：
+限流的核心判定在 `EtcdServer.processInternalRaftRequestOnce`：先比 committed / applied 间隙，再生成 request ID、检查包大小，最后才 `Propose`：
 
 ```go
-func (s *EtcdServer) processInternalRaftRequestOnce(ctx context.Context, r pb.InternalRaftRequest) (*applyResult, error) {
+// etcdserver/v3_server.go:1058-1133（节选）
+func (s *EtcdServer) processInternalRaftRequestOnce(ctx context.Context, r *pb.InternalRaftRequest) (*apply.Result, error) {
     ai := s.getAppliedIndex()
     ci := s.getCommittedIndex()
-    if ci > ai+maxGapBetweenApplyAndCommitIndex {
-        return nil, ErrTooManyRequests          // ① 已提交但还未 apply 的日志过多
+    if exceedsRequestLimit(ai, ci, r, s.FeatureEnabled(features.PriorityRequest)) {
+        return nil, errors.ErrTooManyRequests          // ① 已提交但还未 apply 的日志过多
     }
-    // check authinfo if it is not InternalAuthenticateRequest
-    // max-request-bytes '1572864' 1.5M
+
+    r.Header = &pb.RequestHeader{ID: s.reqIDGen.Next()}
+    // 认证信息写入 Header 后序列化 data
     if len(data) > int(s.Cfg.MaxRequestBytes) {
-        return nil, ErrRequestTooLarge          // ② 包大小超 --max-request-bytes（默认 1.5M）
+        return nil, errors.ErrRequestTooLarge          // ② 包大小超 --max-request-bytes（默认 1.5M）
     }
-    // ...
+
+    ch := s.w.Register(id)
     err = s.r.Propose(cctx, data)
     select {
     case x := <-ch:
-        return x.(*applyResult), nil
+        return x.(*apply.Result), nil
     case <-cctx.Done():
         proposalsFailed.Inc()
-        s.w.Trigger(id, nil) // GC wait
+        s.w.Trigger(id, nil) // 只清理 waiter，不撤回已提交日志
         return nil, s.parseProposeCtxErr(cctx.Err(), start)  // ③ 等待 apply 结果超时（默认 7s）
     case <-s.done:
-        return nil, ErrStopped
+        return nil, errors.ErrStopped
     }
 }
 ```
 
 | 判定 | 返回错误 | 触发条件 | 默认值 / 出处 |
 |---|---|---|---|
-| ① apply lag | `ErrTooManyRequests`（"etcdserver: too many requests"） | `committed - applied > maxGapBetweenApplyAndCommitIndex`（5000） | 间隙阈值 5000 |
+| ① apply lag | `ErrTooManyRequests`（"etcdserver: too many requests"） | `committed - applied > maxNormalGap` | 普通请求 5000 |
+| ① priority apply lag | 同上 | 仅 feature gate 开启后的 `LeaseRevoke` 可使用 `maxPriorityGap` | `PriorityRequest` 默认 false / Alpha，阈值 10000 |
 | ② 包过大 | `ErrRequestTooLarge`（"etcdserver: request is too large"） | `len(data) > MaxRequestBytes` | `--max-request-bytes` 默认 1.5M（1572864） |
-| ③ 提案超时 | `ErrTimeout`（"etcdserver: request timed out"） | 等待 apply 通知超过 ctx 超时（5s 磁盘 IO + 2×1s 竞选超时 ≈ 7s） | 默认 7s |
+| ③ 提案超时 | `ErrTimeout`（"etcdserver: request timed out"） | Propose 或等待 apply 通知超过 ctx 超时（5s 磁盘 IO + 2×1s 竞选超时 ≈ 7s） | 默认 7s |
 
 > 限流只挡在「写路径」入口；读路径（含线性读）不受 quota 约束，其一致性由 [read](/docs/CS/Framework/etcd/read.md) 的 ReadIndex 机制保证。
 
@@ -102,11 +106,13 @@ func (s *EtcdServer) processInternalRaftRequestOnce(ctx context.Context, r pb.In
 
 ### 消息入口
 
-一个 etcd 节点运行后，有 3 个通道接收外界消息（以 kv 增删改查为例）：
+一个 v3.7.2 etcd 节点运行后，主要有 3 类消息入口：
 
-1. **client 的 HTTP 调用**：经注册到 http 模块的 `keysHandler.ServeHTTP` 解析后，调用 `EtcdServer.Do()` 处理。
-2. **client 的 gRPC 调用**：启动时把 `quotaKVServer`（组合增强了 `kvServer`）注册到 gRPC server；消息解析完后调用 `kvServer` 的 `Range`/`Put`/`DeleteRange`/`Txn`/`Compact`，最终落到 `EtcdServer` 的实现。
-3. **节点间 gRPC 消息**：每个 `EtcdServer` 含 `Transport`，其 `peers` map 封装了到其它节点的 `streamReader`/`streamWriter`；`streamReader` 的 `recvc`/`propc` 队列收到消息后由 peer 交给 `raftNode.Process` 处理。
+1. **client 的 gRPC 调用**：启动时把 quota 增强后的 `KVServer` 注册到 gRPC server；消息解析完后调用 `Range`/`Put`/`DeleteRange`/`Txn`/`Compact`，最终落到 `EtcdServer` 的实现。
+2. **peer 的 Raft 消息**：每个 member 通过 `rafthttp.Transport` 与其它成员通信，使用 HTTP/2 流与 POST，而不是 gRPC；`streamReader` 的 `recvc`/`propc` 队列收到消息后交给 `raftNode.Process`。
+3. **内部异步事件**：例如 lessor 的过期 lease 批次、apply 调度、snapshot 请求与 compaction barrier。它们不是新的客户端 API，但会驱动写路径与后台状态转换。
+
+v2 的 HTTP `/v2/keys` 入口在 v3.6 已移除，不能再把 v2 handler 当作 3.7.2 的第三条客户端入口。
 
 clientv3 库基于 gRPC 封装了 KVServer / Cluster / Auth / Lease / Watch 等 API，并自带负载均衡与健康探测。其负载均衡算法为 **Round-robin**（每个请求轮询选 endpoint 建长连接）。
 
@@ -140,16 +146,27 @@ func (c *kVClient) Range(ctx context.Context, in *RangeRequest, opts ...grpc.Cal
 etcdctl put hello world --endpoints http://127.0.0.1:2379
 ```
 
-写流程相比读额外经过 **Quota + WAL + Apply** 三模块：
+写流程相比读额外经过 **Proposal + Raft + Apply + MVCC**：
 
 1. client 经负载均衡选节点，发起 gRPC 调用；
-2. 请求过 gRPC 拦截器（Leader 检查、慢查询等），再经 **quota** 限流（见上节三判定）；
-3. 进入 `KVServer`，向 `Node` 提交 `Propose`，生成全局 revision 并封装成 Raft 日志条目；
-4. 后续由 Raft 复制到多数派、持久化 WAL、提交后进入 **apply** 管线异步按序执行——Raft 事件循环、`Ready` 五步消费、`applyAll` 与 FIFOScheduler 见 [raft](/docs/CS/Framework/etcd/raft.md)。
+2. 请求过 gRPC 拦截器（认证、Learner 限制、慢查询等），写请求进入 `raftRequest`；
+3. `processInternalRaftRequestOnce` 检查 apply gap 与 `MaxRequestBytes`，生成 request ID 并注册 waiter；
+4. follower 把 proposal 交给 Raft 转发给 leader；leader 复制到多数派后形成 committed entry；
+5. `Ready` 把 committed entries 投递到 apply 队列，`applyAll` 按日志顺序执行；
+6. apply 阶段经过 Auth / Quota / Backend / MVCC，**此时才分配 `(main, sub)` revision**并更新 treeIndex 与 backend buffer；
+7. apply 返回后按 request ID 触发 waiter，调用者收到 Put / Txn 结果；超时只清理 waiter，不撤回已提交日志。
 
-> 写路径上许多步骤是异步/并发的（如 WAL 落盘与向副本发 AppendEntries 并行），序号并非严格时间序。
+> 写路径上许多步骤是异步/并发的（如 WAL 落盘与向副本发 AppendEntries 并行），序号表示逻辑依赖而非严格时间序。`applyAll` 甚至先 apply、先 trigger applyWait，再等待 Raft 持久化 `notifyc`；该等待主要保护 snapshot 与 Raft log compaction。
 
 ## Links
 
 - [net（gRPC 传输与 Peer）](/docs/CS/Framework/etcd/net.md)
 - [troubleshooting（NOSPACE / slow apply）](/docs/CS/Framework/etcd/troubleshooting.md)
+
+## References
+
+1. [etcd v3.7.2 - gRPC KV service](https://github.com/etcd-io/etcd/blob/v3.7.2/server/etcdserver/api/v3rpc/key.go)
+2. [etcd v3.7.2 - gRPC interceptors](https://github.com/etcd-io/etcd/blob/v3.7.2/server/etcdserver/api/v3rpc/interceptor.go)
+3. [etcd v3.7.2 - EtcdServer request processing](https://github.com/etcd-io/etcd/blob/v3.7.2/server/etcdserver/v3_server.go)
+4. [etcd v3.7.2 - apply dispatcher](https://github.com/etcd-io/etcd/blob/v3.7.2/server/etcdserver/apply/apply.go)
+5. [etcd v3.7.2 - quota applier](https://github.com/etcd-io/etcd/blob/v3.7.2/server/etcdserver/apply/quota.go)

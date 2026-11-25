@@ -1,89 +1,65 @@
 ## Introduction
 
-etcd的使用场景是一种“读多写少”的场景，etcd里  的一个key，其实并不会发生频繁的变更，但是一旦发生变更，etcd就需要通知监控这个key的所有客户端
+etcd v3 不是“把全部数据加载进内存”的内存数据库。它把**用户 key 的 revision 代际索引**放在内存，把**每个 revision 的完整 `mvccpb.KeyValue`** 持久化在 backend 的 bbolt 文件中；尚未提交的 backend 写缓冲还会叠加在 bbolt 视图之上。内存占用主要由 key、revision 链表、索引和缓冲决定，而不是全部历史 value。
 
-etcd本质上是内存数据库，所有的数据都是加载到了内存中，当然，它跟redis一样，数据都是持久化了的，只是在启动的时候，将文件数据重新全部加载到内存中
+etcd v2 则是内存数据库：整个 store 由大锁保护，持久化主要依赖把内存状态序列化为快照。它的读写锁竞争明显，watch 又只保留固定长度的历史事件窗口；写请求较多或网络抖动时，窗口淘汰会迫使客户端重新全量拉取。v3 用 MVCC 同时解决了历史版本、多 key 事务和 watch 回放问题。
 
-etcd v2 是一个内存数据库，整个数据库拥有一个`Stop-the-World`的大锁，通过锁机制来解决并发带来的数据竞争。
+> [!NOTE]
+> 本篇以 **etcd v3.7.2** 为源码基线。跨模块的 `Propose → Raft → Apply → MVCC` 顺序见 [Core_Mechanisms](/docs/CS/Framework/etcd/Core_Mechanisms.md)；这里只展开状态机内部的数据模型、事务与可见性边界。
 
-但是存在**并发性能问题**：
+## Components
 
-- 1）锁的粒度不好控制，每次都会锁整个数据库
-- 2）写锁和读锁相互阻塞。
-- 3）前面的事务会阻塞后面的事务，对并发性能影响很大。
+MVCC 把一次键空间变更拆成四种职责：
 
-同时在高并发环境下还存在另一个严重的问题：
+| 组件 | 保存什么 | 不负责什么 |
+| :--- | :--- | :--- |
+| `store` | `currentRev`、`compactMainRev`、事务生命周期与 revision 分配 | Raft 日志复制、客户端等待 |
+| `treeIndex` | 用户 key 到 revision 代际的 B-tree 索引，以及每个 key 的 generation / revision 链表 | 不保存完整历史 value，也不是磁盘指针表 |
+| `backend` | bbolt 中的 revision → 完整 `mvccpb.KeyValue`，以及尚未提交的写缓冲 | 不替 Raft 决定提交顺序 |
+| `watchableStore` | watcher 分组、最新事件发布、历史回放与 victim 重试 | 不改变 MVCC 的原子提交边界 |
 
-- **watch 机制可靠性问题**：etcd 中的 watch 机制会依赖旧数据，v2 版本基于滑动窗口实现的 watch 机制，只能保留最近的 1000 条历史事件版本，当 etcd server 写请求较多、网络波动时等场景，很容易出现事件丢失问题，进而又触发 client 数据全量拉取，产生大量 expensive request，甚至导致 etcd 雪崩。
+用户数据位于 backend 的 `key` bucket：**磁盘 key 是 revision，磁盘 value 是完整的 `mvccpb.KeyValue`**。`meta` bucket 保存 compact、consistent index 等元数据；lease、alarm、member、auth 等模块也写入同一个 bbolt 文件，但使用各自的 bucket。
 
+## Revision Model
 
+一次原子事务只推进一次 main revision；同一事务中的多个变更使用 sub 排序：
 
-etcd v2并未实时地将数据写入磁盘，持久化是靠快照来实现的，具体实现就是  将整个内存中的数据复制一份出来，然后序列化成JSON，写入磁盘  中，成为一个快照
+```text
+Raft entry  ──apply──>  MVCC write txn  ──>  main = currentRev + 1
+                                          sub = 0, 1, 2, ...
+```
 
+- `revision` 在 **apply 阶段**分配，不在 API 或 Propose 阶段分配。
+- 空 store 恢复后 `currentRev = 1`、`compactMainRev = -1`，因此第一次写得到 `(2, 0)`。
+- 一个 Txn 修改 3 个 key，它们共享 main，sub 依次为 `0/1/2`；没有实际变更的 Txn 不推进 `currentRev`。
+- `sub` 是存储层事务内顺序，不直接暴露在 `KeyValue.ModRevision` 中；后者只表示 main revision。
 
+正常 revision 编码为 `main(8, big-endian) + '_' + sub(8, big-endian)`，共 17 字节；tombstone 在尾部追加 `'t'`，共 18 字节。编码细节见 [boltdb](/docs/CS/Framework/etcd/boltdb.md)。
 
+```go
+// server/storage/mvcc/kvstore_txn.go:174-184, 204-207
+func (s *store) Write(trace *traceutil.Trace) TxnWrite {
+    s.mu.RLock()
+    tx := s.b.BatchTx()
+    tx.LockInsideApply()
+    tw := &storeTxnWrite{
+        storeTxnCommon: storeTxnCommon{s, tx, 0, 0, trace},
+        tx:             tx,
+        beginRev:       s.currentRev,
+        changes:        make([]*mvccpb.KeyValue, 0, 4),
+    }
+    return newMetricsTxnWrite(tw)
+}
 
+func (tw *storeTxnWrite) Put(key, value []byte, lease lease.LeaseID) int64 {
+    tw.put(key, value, lease)
+    return tw.beginRev + 1
+}
+```
 
+## Response Metadata
 
-
-etcd v3 为什么要选择 MVCC
-
-
-
-多版本并发控制 (Multiversion concurrency control) 模块是为了解决etcd v2 不支持保存 key 的历史版本、不支持多 key 事务等问题而产生的
-它核心由内存树形索引模块 (treeIndex) 和嵌入式的 KV 持久化存储库 boltdb 组成
-
-treeIndex模块是基于Google开源的内存版btree库实现的 treeIndex模块只会保存用户的key和相关版本号信息，用户key的value数据存储在boltdb里面，相比ZooKeeper和etcd v2全内存存储，etcd v3对内存要求更低
-
-
-
-
-
-boltdb的key是全局递增的版本号(revision)，value是用户key、value等字段组合成的结构体，然后通过treeIndex模块来保存用户key和版本号的映射关系。
-
-读事务流程从treeIndex中获取key的版本号
-
-在获取到版本号信息后，就可从boltdb模块中获取用户的key-value数据了。不过并不是所有请求都一定要从boltdb获取数据 etcd出于数据一致性、性能等考虑，在访问boltdb前，首先会从一个内存读事务buffer中，二分查找你要访问key是否在buffer里面，若命中则直接返回
-
-若buffer未命中，此时就真正需要向boltdb模块查询数据 
-boltdb里每个bucket类似对应MySQL一个表，用户的key数据存放的bucket名字的是key，etcd MVCC元数据存放的bucket是meta。
-
-因boltdb使用B+ tree来组织用户的key-value数据，获取bucket key对象后，通过boltdb的游标Cursor可快速在B+ tree找到key hello对应的value数据，返回给client
-
-
-
-
-
-重建内存索引btree的时候，遍历boltdb，从版本号0到最大版本号不断遍历，从value里面解析出对应的key、revision等信息，重建btree
-
-
-
-当etcd收到一个请求Get Key时，请求被层层传递到了mvcc层后，它首先需要从内存索引btree中查找key对应的版本号，随后从boltdb里面根据版本号查出对应的value, 然后返回给client
-
-
-
-当你执行 put 命令后，请求经过 gRPC KV Server、Raft 模块流转，对应的日志条目被提交后，Apply 模块开始执行此日志内容
-
-
-
-**MVCC 模块**将请求请划分成两个类别，分别是读事务（ReadTxn）和写事务（WriteTxn）。读事务负责处理 range 请求，写事务负责 put/delete 操作。读写事务基于 treeIndex、Backend/boltdb 提供的能力，实现对 key-value 的增删改查功能。
-
-**treeIndex 模块**基于内存版 B-tree 实现了 key 索引管理，它保存了用户 key 与版本号（revision）的映射关系等信息。
-
-**Backend 模块**负责 etcd 的 key-value 持久化存储，主要由 ReadTx、BatchTx、Buffer 组成，ReadTx 定义了抽象的读事务接口，BatchTx 在 ReadTx 之上定义了抽象的写事务接口，Buffer 是数据缓存区
-
-
-
-**treeIndex 模块正是为了解决这个问题**，支持保存 key 的历史版本，提供稳定的 Watch 机制和事务隔离等能力。
-
-etcd 在每次修改 key 时会生成一个全局递增的版本号（revision）。
-
-- 然后通过数据结构 B-tree 保存用户 key 与版本号之间的关系；
-- 再以版本号作为 boltdb key，以用户的 key-value 等信息作为 boltdb value，保存到 boltdb
-
-
-
-
+`ResponseHeader.Revision` 是请求执行时 KV store 的 revision，不等于返回 key 自身的 `ModRevision`。普通读响应的 header 表示读取快照；watch progress 响应的 header 表示进度，后续事件 revision 更高。
 
 ```go
 type ResponseHeader struct {
@@ -104,11 +80,7 @@ type ResponseHeader struct {
 }
 ```
 
-ResponseHeader.Revision代表该请求成功执行之后etcd的revision
-
-
-
-键值对数据结构的定义具体如下
+`KeyValue` 同时携带业务值与版本元数据：
 
 ```go
 
@@ -135,55 +107,117 @@ type KeyValue struct {
 }
 ```
 
-KeyValue.CreateRevision代表etcd的某个key最后一次创建时etcd的  revison，KeyValue.ModRevision则代表etcd的某个key最后一次更新  时etcd的revison。verison特指etcd键空间某个key从创建开始被修改  的次数，即KeyValue.Version
+- `CreateRevision` 在当前 generation 首次创建时确定，后续更新沿用。
+- `ModRevision` 是最后一次修改的 main revision。
+- `Version` 在同一 generation 内逐次递增；delete 后重新创建会从 1 开始。
+- delete 事件的 `KeyValue` 只带 key 与修改 revision，不保留原 value；`PrevKv` 是否返回由请求选项决定。
 
+## Read Path
 
+`ReadTx` 在一次读取开始时固定 `compactMainRev` 与 `currentRev`。只读请求使用 `ConcurrentReadTx()` 复制读缓冲，减少与正在提交的 backend 写事务之间的阻塞。
 
-etcd将物理数据存储为一棵持久B+树中的键值对。为了高效，每  个revision的存储状态都只包含相对于之前revision的增量。一个  revision可能对应于树中的多个key
+1. 请求 revision 大于快照 `currentRev` 时返回 `ErrFutureRev`；`rev <= 0` 先归一为 `currentRev`，归一后小于 `compactMainRev` 才返回 `ErrCompacted`。
+2. `treeIndex` 按用户 key 范围和目标 revision 选出每个 key 对应的 revision。
+3. backend 的 `UnsafeRange` 先查写缓冲，未命中再查 bbolt，并合并结果；单 key 查询强制 `limit = 1`，避免缓冲与磁盘中的同一记录重复。
+4. 将完整 value 反序列化为 `mvccpb.KeyValue`，返回时 header 携带读取快照的 revision。
 
+```go
+// server/storage/mvcc/kvstore_txn.go:108-150（节选）
+revpairs, total := tr.s.kvindex.Revisions(key, end, rev, int(ro.Limit), ro.WithTotalCount)
+// ...
+for i, revpair := range revpairs[:len(kvs)] {
+    revBytes = RevToBytes(revpair, revBytes)
+    _, vs := tr.tx.UnsafeRange(schema.Key, revBytes, nil, 0)
+    // ...
+    kv := &mvccpb.KeyValue{}
+    if err := proto.Unmarshal(vs[0], kv); err != nil {
+        tr.s.lg.Fatal("failed to unmarshal mvccpb.KeyValue", zap.Error(err))
+    }
+    kvs[i] = kv
+}
+```
 
+这里有两个容易混淆的“范围扫描”：**用户 key / 前缀查询**由 treeIndex 定位；**watch 历史回放**按 backend 的 revision 区间扫描。后者不是因为 revision 排序就能直接回答任意用户前缀查询。
 
-B+树中键值对的key即revision，revision是一个2元组（main，  sub），其中main是该revision的主版本号，sub是同一revision的副版本  号，其用于区分同一个revision的不同key。B+树中键值对的value包含  了相对于之前revision的修改，即相对于之前revision的一个增量。  
+## Write Path
 
-B+树按key的字典字节序进行排序。这样，etcd v3对revision增量的  范围查询（range query，即从某个revision到另一个revision）会很快  ——因为我们已经记录了从一个特定revision到其他revision的修改量。  etcd v3的压缩操作会删除过时的键值对
+写事务固定 `beginRev = currentRev`，每次 put / delete 都使用 `beginRev + 1` 作为 main，以 `len(changes)` 作为 sub：
 
-etcd v3还在内存中维护了一个基于B树的二级索引来加快对key的  范围查询。该B树索引的key是向用户暴露的etcd v3存储的key，而该B  树索引的value则是一个指向上文讨论的持久化B+树的增量的指针。  etcd v3的压缩操作会删除指向B树索引的无效指针
+```go
+// server/storage/mvcc/kvstore_txn.go:223-261（节选）
+rev := tw.beginRev + 1
+// ...
+idxRev := Revision{Main: rev, Sub: int64(len(tw.changes))}
+ibytes = RevToBytes(idxRev, ibytes)
 
+kv := &mvccpb.KeyValue{
+    Key:            key,
+    Value:          value,
+    CreateRevision: c,
+    ModRevision:    rev,
+    Version:        ver,
+    Lease:          int64(leaseID),
+}
 
+d, err := proto.Marshal(kv)
+// ...
+tw.tx.UnsafeSeqPut(schema.Key, ibytes, d)
+tw.s.kvindex.Put(key, idxRev)
+tw.changes = append(tw.changes, kv)
+```
 
-etcd v2的每个key只保留一个value，所以数据库并不大，可以直  接放在内存中。但是etcd v3实现了MVCC以后，每个key的value都需要  保存多个历史版本，这就极大地增加了存储的数据量，因此内存中就  会存储不下这么多数据。对此，一个自然的解决方案就是将数据存储  在磁盘里。etcd v3当前使用BoltDB将数据存储在磁盘中
+delete 使用带 tombstone 标记的 revision key，value 只序列化 `Key`；随后调用 `kvindex.Tombstone` 开启新的 generation。整个事务的变更先累积在 `changes`，供 watch 在提交边界发布事件。
 
+## Commit Boundary
 
+“提交”在 etcd 中至少有三层，不能混用：
 
+| 边界 | 含义 | 保证 |
+| :--- | :--- | :--- |
+| Raft commit | entry 已被多数派复制，获得全局顺序 | 尚不代表本地状态机已应用 |
+| MVCC `TxnWrite.End` | 推进 `currentRev` 并发布本次事务的可见状态 | 同事务变更对外原子可见 |
+| backend commit / WAL sync | bbolt 事务或 WAL 真正落盘 | 决定 crash 后的持久状态 |
 
+普通 put 只进入 backend 写缓冲，不必每次都立即提交 bbolt；达到 batch limit 才提交。**只要本批存在 delete，就必须在解锁时提交**，否则后续请求可能从 bbolt 读到 stale value，破坏线性一致性。put 有覆盖在 bbolt 之上的读缓冲，delete 没有等价的安全读取路径。
 
-## put
+```go
+// server/storage/mvcc/kvstore_txn.go:209-220
+func (tw *storeTxnWrite) End() {
+    if len(tw.changes) != 0 {
+        tw.s.revMu.Lock()
+        tw.s.currentRev++
+    }
+    tw.tx.Unlock()
+    if len(tw.changes) != 0 {
+        tw.s.revMu.RUnlock()
+    }
+    tw.s.mu.RUnlock()
+}
+```
 
-一个 put 命令流程如下：
+watchable store 在底层 `TxnWrite.End()` **之前**调用 `notify`，并在整个过程中持有 watchable store 锁，避免异步发布方看到 revision 已推进但 watcher 状态尚未准备好的半完成状态：
 
-首先是流程一client端发起gRPC调用到etcd节点，和读请求不一样的是，写请求需要经过db配额（Quota）模块
+```go
+// server/storage/mvcc/watchable_store_txn.go（节选）
+tw.s.mu.Lock()
+tw.s.notify(rev, evs)
+tw.TxnWrite.End()
+tw.s.mu.Unlock()
+```
 
-1. 首先它需要从 treeIndex 模块中查询 key 的 keyIndex 索引信息
-2. 其次 etcd 会根据当前的全局版本号（空集群启动时默认为 1）自增，生成 put hello 操作对应的版本号 revision{2,0}，这就是 boltdb 的 key
+因此，watch 事件的产生与 MVCC 可见性属于同一个原子边界，但网络发送可以滞后；发送阻塞由 victim 机制处理，不回滚写事务。
 
-当etcd server收到put/txn等写请求的时候，会首先检查下当前etcd db大小加上你请求的key-value大小之和是否超过了配额（quota-backend-bytes）。
-如果超过了配额，它会产生一个告警（Alarm）请求，告警类型是NO SPACE，并通过Raft日志同步给其它节点，告知db无空间了，并将告警持久化存储到db中。
-最终，无论是API层gRPC模块还是负责将Raft侧已提交的日志条目应用到状态机的Apply模块，都拒绝写入，集群只读
+## Restore
 
-为什么当你把配额（quota-backend-bytes）调大后，集群依然拒绝写入呢?
+启动或恢复 backend 时，etcd 从 `key` bucket 按 revision 顺序扫描，解析完整 `mvccpb.KeyValue` 重建 treeIndex，并恢复 key 与 lease 的关联。历史 value 不是“相对上一版本的增量”，每个 revision 都保存独立完整的值。
 
-原因就是我们前面提到的NO SPACE告警。Apply模块在执行每个命令的时候，都会去检查当前是否存在NO SPACE告警，如果有则拒绝写入。所以还需要你额外发送一个取消告警（etcdctl alarm disarm）的命令，以消除所有告警
+恢复同时读取 finished / scheduled compact revision：
 
-其次你需要检查etcd的压缩（compact）配置是否开启、配置是否合理。etcd保存了一个key所有变更历史版本，如果没有一个机制去回收旧的版本，那么内存和db大小就会一直膨胀，在etcd里面，压缩模块负责回收旧版本的工作。
-压缩模块支持按多种方式回收旧版本，比如保留最近一段时间内的历史版本。不过你要注意，它仅仅是将旧版本占用的空间打个空闲（Free）标记，后续新的数据写入的时候可复用这块空间，而无需申请新的空间
-如果你需要回收空间，减少db大小，得使用碎片整理（defrag）， 它会遍历旧的db文件数据，写入到一个新的db文件。但是它对服务性能有较大影响，不建议你在生产集群频繁使用
+- `finishedCompact` 恢复逻辑压缩水位；若扫描到的最大 revision 更小，`currentRev` 不能低于它。
+- 若上次在删除最新 tombstone 后、写入 finished 水位前崩溃，`scheduledCompact` 防止 revision 回退。
+- `scheduledCompact > finishedCompact` 时重新调度压缩，继续完成上次未完成的工作。
 
-最后你需要注意配额（quota-backend-bytes）的行为，默认’0’就是使用etcd默认的2GB大小，你需要根据你的业务场景适当调优。如果你填的是个小于0的数，就会禁用配额功能，这可能会让你的db大小处于失控，导致性能下降，不建议你禁用配额
-
-
-
-通过流程二的配额检查后，请求就从API层转发到了流程三的KVServer模块的put方法，我们知道etcd是基于Raft算法实现节点间数据复制的，因此它需要将put写请求内容打包成一个提案消息，提交给Raft模块。不过KVServer模块在提交提案前，还有如下的一系列检查和限速
-
+## Put Example
 
 <div style="text-align: center;">
 
@@ -193,31 +227,29 @@ etcd v2的每个key只保留一个value，所以数据库并不大，可以直  
 
 <p style="text-align: center;">Fig.1. put</p>
 
+一次 `put hello world` 的顺序是：
 
+1. gRPC `KVServer` 完成鉴权、请求大小与配额检查，注册 request ID 对应的 waiter，然后向 Raft Propose。
+2. Raft 将 entry 复制到多数派并提交；本节点按日志顺序 apply。
+3. MVCC 此时才分配 `(main, sub)`，更新 backend 缓冲与 treeIndex，记录 `changes`。
+4. watchable `End` 在锁内先 `notify`，再调用底层 `End` 推进 `currentRev`；随后返回 apply 路径并唤醒 waiter。
+5. backend 按批处理策略提交；WAL / Raft 持久化与 snapshot 安全边界由上层协调。
 
-最后通过一系列检查之后，会生成一个唯一的ID，将此请求关联到一个对应的消息通知channel，然后向Raft模块发起（Propose）一个提案（Proposal）
-
-向Raft模块发起提案后，KVServer模块会等待此put请求，等待写入结果通过消息通知channel返回或者超时。etcd默认超时时间是7秒（5秒磁盘IO延时+2*1秒竞选超时时间），如果一个请求超时未返回结果，则可能会出现你熟悉的etcdserver: request timed out错误
-
-Raft模块收到提案后，如果当前节点是Follower，它会转发给Leader，只有Leader才能处理写请求。Leader收到提案后，通过Raft模块输出待转发给Follower节点的消息和待持久化的日志条目，日志条目则封装了提案内容
-
-etcdserver从Raft模块获取到以上消息和日志条目后，作为Leader，它会将put提案消息广播给集群各个节点，同时需要把集群Leader任期号、投票信息、已提交索引、提案内容持久化到一个WAL（Write Ahead Log）日志文件中，用于保证集群的一致性、可恢复性
-
-
-
-
-
-
+NOSPACE 的一个关键细节是：quota applier 先执行 Put，再根据入口空间预算返回 `ErrNoSpace`，所以触发配额的写可能已经生效；NOSPACE Alarm 本身也要经 Raft apply，成员才进入拒绝后续写入的状态。请求超时同样只清理 waiter，不撤回已提交 entry。详细入口、限流和告警顺序见 [request](/docs/CS/Framework/etcd/request.md) 与 [troubleshooting](/docs/CS/Framework/etcd/troubleshooting.md)。
 
 ## Links
 
-- [etcd](/docs/CS/Framework/etcd/etcd.md)
-- [troubleshooting（NOSPACE 告警与 compact/defrag 处置）](/docs/CS/Framework/etcd/troubleshooting.md)
+- [treeIndex（用户 key 与 revision 代际索引）](/docs/CS/Framework/etcd/treeIndex.md)
+- [read（线性读如何等待 apply）](/docs/CS/Framework/etcd/read.md)
+- [watch（事件发布、历史回放与 victim）](/docs/CS/Framework/etcd/watch.md)
 - [concurrency（STM 的 readSet 依赖 revision）](/docs/CS/Framework/etcd/concurrency.md)
-- [read（线性读如何等 apply 到指定 revision）](/docs/CS/Framework/etcd/read.md)
-
-
 
 ## References
 
-1. [etcd教程(六)---etcd多版本并发控制 - (lixueduan.com)](https://www.lixueduan.com/posts/etcd/06-why-mvcc/)
+- [etcd v3.7.2 - MVCC transaction implementation](https://github.com/etcd-io/etcd/blob/v3.7.2/server/storage/mvcc/kvstore_txn.go)
+- [etcd v3.7.2 - revision encoding](https://github.com/etcd-io/etcd/blob/v3.7.2/server/storage/mvcc/revision.go)
+- [etcd v3.7.2 - key index](https://github.com/etcd-io/etcd/blob/v3.7.2/server/storage/mvcc/key_index.go)
+- [etcd v3.7.2 - backend read transaction](https://github.com/etcd-io/etcd/blob/v3.7.2/server/storage/backend/read_tx.go)
+- [etcd v3.7.2 - backend batch transaction](https://github.com/etcd-io/etcd/blob/v3.7.2/server/storage/backend/batch_tx.go)
+- [etcd v3.7.2 - watch transaction publication](https://github.com/etcd-io/etcd/blob/v3.7.2/server/storage/mvcc/watchable_store_txn.go)
+- [etcd v3.7.2 - MVCC restore and compaction metadata](https://github.com/etcd-io/etcd/blob/v3.7.2/server/storage/mvcc/kvstore.go)

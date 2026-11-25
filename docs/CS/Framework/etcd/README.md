@@ -2,7 +2,7 @@
 
 etcd 是 Kubernetes 的默认后端存储，也是一个通用的强一致键值仓库。本目录按"从对外 API 到底层存储"的纵向分层来组织笔记：请求先进入客户端 / API 接入层，经 Raft 达成共识，再落到 KV 状态机（MVCC + boltdb）完成持久化；协调原语、安全、运维、版本与横向对比则横贯或补充在这条主链之外。
 
-[etcd](/docs/CS/Framework/etcd/etcd.md) 是概念枢纽：版本基线、分层导航与逐页索引都在这里。原先承载全部细节的单一长文（架构、构建部署、启动链、server、quota、节点消息处理、网络、Peer、特性）已按「启动 → 请求 → 特性」拆成 [boot](/docs/CS/Framework/etcd/boot.md) / [request](/docs/CS/Framework/etcd/request.md) / [features](/docs/CS/Framework/etcd/features.md)，避免与成熟的 [raft](/docs/CS/Framework/etcd/raft.md) / [net](/docs/CS/Framework/etcd/net.md) 分册重复。本页是这些笔记的导航索引：建议阅读顺序是「枢纽 → 启动与生命周期 → 请求处理路径 → 共识层 Raft → 存储与 MVCC 引擎 → 客户端与 API」，再按需跳到协调原语、安全、运维与版本对比。
+[etcd](/docs/CS/Framework/etcd/etcd.md) 是概念枢纽：版本基线、分层导航与逐页索引都在这里。原先承载全部细节的单一长文已按「启动 → 请求 → 特性」拆成 [boot](/docs/CS/Framework/etcd/boot.md) / [request](/docs/CS/Framework/etcd/request.md) / [features](/docs/CS/Framework/etcd/features.md)，避免与成熟的 [raft](/docs/CS/Framework/etcd/raft.md) / [net](/docs/CS/Framework/etcd/net.md) 分册重复；[Core_Mechanisms](/docs/CS/Framework/etcd/Core_Mechanisms.md) 则把这些分册重新接成一条 `Propose → Raft → Apply → MVCC → Read/Watch → Recovery` 的源码级主链。本页是导航索引，建议阅读顺序是「枢纽 → 启动与生命周期 → 请求处理路径 → 跨层主链 → 共识层 Raft → 存储与 MVCC 引擎 → 客户端与 API」，再按需跳到协调原语、安全、运维与版本对比。
 
 ## Layered Architecture Diagram
 
@@ -71,6 +71,11 @@ digraph etcd_index {
     req     [label="request.md\n请求处理路径"];
     feat    [label="features.md\n服务发现 / 事务"];
   }
+  subgraph cluster_core {
+    label="跨层机制（v3.7.2 源码主线）";
+    color="#d9d2e9";
+    core    [label="Core_Mechanisms.md\nPropose → Raft → Apply → MVCC\nRead / Watch → Recovery"];
+  }
 
   client -> net -> raft;
   gateway -> net;
@@ -87,15 +92,20 @@ digraph etcd_index {
   boot -> raft;
   req -> raft;
   feat -> client;
+  req -> core [style=dashed, arrowhead=none, constraint=false];
+  core -> raft [style=dashed, arrowhead=none, constraint=false];
+  core -> mvcc [style=dashed, arrowhead=none, constraint=false];
+  core -> watch [style=dashed, arrowhead=none, constraint=false];
 }
 ```
 
 ## Overview and Startup
 
-[etcd](/docs/CS/Framework/etcd/etcd.md) 是概念枢纽：版本基线、分层导航与逐页索引都在这里；原来承载全部细节的单一长文已按「启动 → 请求 → 特性」拆开，避免与成熟的 [raft](/docs/CS/Framework/etcd/raft.md) / [net](/docs/CS/Framework/etcd/net.md) 分册重复。顺着一条写请求理解全貌，建议顺序是「枢纽 → [boot](/docs/CS/Framework/etcd/boot.md)（启动与生命周期）→ [request](/docs/CS/Framework/etcd/request.md)（请求处理路径）→ Raft 共识 → MVCC 存储」，再按需跳到协调原语、安全、运维与版本对比。
+[etcd](/docs/CS/Framework/etcd/etcd.md) 是概念枢纽：版本基线、分层导航与逐页索引都在这里；原来承载全部细节的单一长文已按「启动 → 请求 → 特性」拆开，避免与成熟的 [raft](/docs/CS/Framework/etcd/raft.md) / [net](/docs/CS/Framework/etcd/net.md) 分册重复。顺着一条写请求理解全貌，建议顺序是「枢纽 → [boot](/docs/CS/Framework/etcd/boot.md)（启动与生命周期）→ [request](/docs/CS/Framework/etcd/request.md)（请求处理路径）→ [Core_Mechanisms](/docs/CS/Framework/etcd/Core_Mechanisms.md)（跨层主链）→ Raft 共识 → MVCC 存储」，再按需跳到协调原语、安全、运维与版本对比。
 
 - **启动与生命周期** —— [boot](/docs/CS/Framework/etcd/boot.md)：构建部署、整体架构、v2/v3 数据模型、`start → startEtcd → NewServer → serveClients → run` 启动链，以及启动时如何把外置 Raft 接线进来。
 - **请求处理路径** —— [request](/docs/CS/Framework/etcd/request.md)：gRPC 拦截器、`KVServer`、quota 请求限流（`ErrTooManyRequests` / `MaxRequestBytes` / 7s 超时），以及 `get` / `put` 在 etcd 内部的全链路（propose → Raft → apply → 通知客户端）。
+- **跨层主链** —— [Core_Mechanisms](/docs/CS/Framework/etcd/Core_Mechanisms.md)：以 v3.7.2 源码贯通 proposal、Raft `Ready`、apply、MVCC 提交、watch/read 与恢复，重点解释 committed/applied、三套序号、请求超时、WAL/backend 持久化和 compaction 崩溃恢复。
 - **高层特性** —— [features](/docs/CS/Framework/etcd/features.md)：基于 etcd 的服务发现原理与 Apache APISIX 实战、v3 迷你事务（Txn）与 ACID。更完整的横向对比见 [compare](/docs/CS/Framework/etcd/compare.md)。
 
 如果需要把 etcd 作为库嵌进自己的进程，而不是独立部署，看 [embed](/docs/CS/Framework/etcd/embed.md)（`server/embed` 模块，3.5 起稳定）。
@@ -130,17 +140,17 @@ etcd 的一致性由 [raft](/docs/CS/Framework/etcd/raft.md) 提供——日志�
 
 ## Links
 
-- [etcd（概念枢纽）](/docs/CS/Framework/etcd/etcd.md)
-- [boot（启动与生命周期）](/docs/CS/Framework/etcd/boot.md)
-- [request（请求处理路径）](/docs/CS/Framework/etcd/request.md)
-- [features（服务发现 / 事务）](/docs/CS/Framework/etcd/features.md)
 - [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)
 - [Nacos](/docs/CS/Framework/nacos/Nacos.md)
+- [Consul](/docs/CS/Framework/consul/README.md)
 - [K8s 中的 etcd 存储](/docs/CS/Container/k8s/etcd.md)
 - [K8s](/docs/CS/Container/k8s/K8s.md)
 
 ## References
 
 1. [etcd 官方文档](https://etcd.io/docs/)
-2. [深入浅出 etcd 系列 part 1 – 解析 etcd 的架构和代码框架](https://mp.weixin.qq.com/s/C2WKrfcJ1sVQuSxlpi6uNQ)
-3. [深入浅出etcd/raft —— 0x00 引言](https://blog.mrcroxx.com/posts/code-reading/etcdraft-made-simple/0-introduction/)
+2. [etcd v3.7.2 - EtcdServer](https://github.com/etcd-io/etcd/blob/v3.7.2/server/etcdserver/server.go)
+3. [etcd v3.7.2 - Raft Ready processing](https://github.com/etcd-io/etcd/blob/v3.7.2/server/etcdserver/raft.go)
+4. [etcd v3.7.2 - MVCC transaction implementation](https://github.com/etcd-io/etcd/blob/v3.7.2/server/storage/mvcc/kvstore_txn.go)
+5. [etcd v3.7.2 - Bootstrap recovery](https://github.com/etcd-io/etcd/blob/v3.7.2/server/etcdserver/bootstrap.go)
+6. [etcd Documentation - Disaster recovery](https://etcd.io/docs/v3.7/op-guide/recovery/)

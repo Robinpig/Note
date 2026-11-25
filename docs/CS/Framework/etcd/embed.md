@@ -2,7 +2,7 @@
 
 `go.etcd.io/etcd/embed`（3.5 起位于 `server/embed` module，旧版是 `go.etcd.io/etcd/embed`）把 etcd 作为**库**嵌入 Go 程序，而不是依赖外部 `etcd` 二进制。典型场景：单元测试里起一个内存/临时目录的 etcd、把 etcd 作为单二进制应用的内置存储、或简化部署。
 
-etcd.md 的启动流程里只把 `embed.StartEtcd` / `embed.Config` 当成调用点出现（[etcd.md](/docs/CS/Framework/etcd/etcd.md) 的 `startEtcd` 段），没有系统讲生命周期与字段。本文补全。所有字段名与默认值均取自 `server/embed/config.go`（v3.5.34）。
+etcd 枢纽只保留版本与导航；启动链细节在 [boot](/docs/CS/Framework/etcd/boot.md)。本文补全 embed 的生命周期与字段，所有字段名与默认值以 **v3.7.2** 的 `server/embed/config.go` 为准。
 
 ## Lifecycle
 
@@ -23,10 +23,10 @@ kv := e.Server.KV()                  // 进程内直接调用，无需走网络
 
 关键事实（来自 `server/embed/etcd.go`）：
 
-- `func StartEtcd(inCfg *Config) (e *Etcd, err error)`（第 112 行）。它**非阻塞返回**：内部另起 goroutine 启动 server、client/peer listeners、raft；返回时 etcd 还在拉起，需等 `e.Server.ReadyNotify()` 或监听 `e.ServerReadyC()` 确认可服务。
-- `e.Server` 字段是 `*etcdserver.EtcdServer`（第 260 行 `e.Server = etcdserver.NewServer(srvcfg)`），是访问存储与集群状态的入口。
-- `func (e *Etcd) Close()`（第 400 行）**幂等**：内部用计数器防止重复关闭；它会停掉 raft、listeners、并 `e.Server.Cleanup()`。
-- 启动失败时会自动 `e.Close()` 回滚已建资源（第 125–129 行），所以调用方拿到 `err` 后不必再 Close。
+- `func StartEtcd(inCfg *Config) (e *Etcd, err error)`（`server/embed/etcd.go:110`）。它同步完成参数校验、listener 配置、`NewServer` 与 `Server.Start()`，返回时相关 goroutine 已启动，但**不保证已加入集群或可服务**；需等 `e.Server.ReadyNotify()` 或监听 `e.ServerReadyC()`。
+- `e.Server` 字段是 `*etcdserver.EtcdServer`（`:260` 赋值），是访问存储与集群状态的入口。
+- `func (e *Etcd) Close()`（`:414`）**不是幂等操作**：`closeOnce` 只保护 `stopc` 的关闭，listeners、clients、`Server.Stop()` 与 `errc` 等清理步骤每次调用都会执行，重复关闭可能 panic。每个实例只调用一次。
+- 启动失败时，defer 会回滚已建资源并调用 `e.Close()`（`:117-129`），随后把返回的 `e` 置为 `nil`；调用方拿到 `err` 后不必再 Close。
 
 > [!WARNING]
 > `StartEtcd` 返回成功 ≠ etcd 已可服务。集群模式下还要等选主与 peer 连通；单节点 `ClusterState="new"` 也建议等 `e.Server.ReadyNotify()`。测试里直接 `defer e.Close()` 即可，但业务进程要监听 ready 信号再接流量。
@@ -56,7 +56,7 @@ kv := e.Server.KV()                  // 进程内直接调用，无需走网络
 | `TickMs` | `--heartbeat-interval` | **100** ms | 必须 > 0 |
 | `ElectionMs` | `--election-timeout` | **1000** ms | 必须 ≥ `5 × TickMs`，上限 `maxElectionMs = 50000` ms |
 
-源码里 `Verify()` 的检查（第 718–728 行）：`TickMs==0` / `ElectionMs==0` 报错；`5*TickMs > ElectionMs` 报错；`ElectionMs > 50000` 报错。这组约束与 [etcd.md](/docs/CS/Framework/etcd/etcd.md) Tuning 段讲的心跳/选举调优一致，只是这里从配置校验角度再次确认。
+源码里 `Verify()` 检查：`TickMs==0` / `ElectionMs==0` 报错；`5*TickMs > ElectionMs` 报错；`ElectionMs > 50000` 报错。这组约束与 [tuning](/docs/CS/Framework/etcd/tuning.md) 的心跳/选举调优一致，只是这里从配置校验角度再次确认。
 
 ### Capacity and Backend
 
@@ -64,22 +64,22 @@ kv := e.Server.KV()                  // 进程内直接调用，无需走网络
 | :--- | :--- | :--- | :--- |
 | `MaxTxnOps` | `--max-txn-ops` | **128** (`DefaultMaxTxnOps`) | 单事务最大操作数 |
 | `MaxRequestBytes` | `--max-request-bytes` | **1.5 MiB** (`DefaultMaxRequestBytes = 1.5*1024*1024`) | 单请求最大字节 |
-| `SnapshotCount` | `--snapshot-count` | **100000** (`etcdserver.DefaultSnapshotCount`) | 每多少条 Raft  entry 做一次快照压缩 |
-| `QuotaBackendBytes` | `--quota-backend-bytes` | 2 GiB（上限 8 GiB） | boltdb 配额，超限触发 NOSPACE（见 [troubleshooting](/docs/CS/Framework/etcd/troubleshooting.md)） |
+| `SnapshotCount` | `--snapshot-count` | **10000** (`etcdserver.DefaultSnapshotCount`) | 距上次落盘快照的 applied 差值超过该值时触发 |
+| `QuotaBackendBytes` | `--quota-backend-bytes` | 2 GiB（8 GiB 为建议上限） | boltdb 配额，超限触发 NOSPACE（见 [troubleshooting](/docs/CS/Framework/etcd/troubleshooting.md)） |
 | `BackendBatchInterval` | `--backend-batch-interval` | 0（etcd 内部约 100ms 批处理） | 后端事务提交前最大等待 |
 | `BackendBatchLimit` | `--backend-batch-limit` | 10000 | 后端事务提交前最大操作数 |
 | `MaxSnapFiles` | `--max-snapshots` | **5** (`DefaultMaxSnapshots`) | 保留快照文件数 |
 | `MaxWalFiles` | `--max-wals` | **5** (`DefaultMaxWALs`) | 保留 WAL 文件数 |
 
 > [!NOTE]
-> `SnapshotCount=100000` 是 **Raft 层**的快照频率（每 10 万条 entry 压缩一次 raft log）。etcd.md Tuning 段提到的"每 10,000 次变更做快照"是 **V2 后端**的旧值——V3（当前默认）走的是 100000 这条。两者不是一回事，调 `--snapshot-count` 时要清楚改的是 Raft 日志而非 MVCC 历史（MVCC 历史靠 [compact](/docs/CS/Framework/etcd/compact.md) 的 compact/defrag）。
+> `SnapshotCount=10000` 是 **Raft 层**的落盘快照阈值：`appliedi - diskSnapshotIndex > SnapshotCount` 时才触发，因此实际是超过 10000 条而非恰好第 10000 条。3.6 起默认值从 100000 降到 10000，v3.7.2 保持该值。它不等于 V2 后端快照逻辑，也不控制 MVCC 历史；后者靠 [compact](/docs/CS/Framework/etcd/compact.md) 的 compact/defrag。
 
 ### Security and Compaction
 
 - `ClientTLSInfo` / `PeerTLSInfo`（`transport.TLSInfo`）：客户端/peer 的 TLS 材料。
 - `AuthToken` / `AuthTokenTTL`：认证 token 类型与 TTL（见 [security](/docs/CS/Framework/etcd/security.md)）。
 - `AutoCompactionMode` / `AutoCompactionRetention`：`periodic`（如 `1h`）或 `revision`（如 `1000`）。
-- `ExperimentalEnableLeaseCheckpoint`：leader 定期向 follower 发 checkpoint，防止 leader 切换时剩余 TTL 被重置（3.6 起默认开启）。
+- `ExperimentalEnableLeaseCheckpoint` 是旧版配置名；3.7.2 使用 `LeaseCheckpoint` / `LeaseCheckpointPersist` feature gate，二者均为 alpha 且**默认关闭**（见 [lease](/docs/CS/Framework/etcd/lease.md)）。
 - `ExperimentalInitialCorruptCheck`：启动即做一次损坏检查（见 [troubleshooting](/docs/CS/Framework/etcd/troubleshooting.md) 的 corrupt 段）。
 
 ## Common Pitfalls
@@ -93,14 +93,12 @@ kv := e.Server.KV()                  // 进程内直接调用，无需走网络
 ## Links
 
 - [etcd（启动流程里的 embed 调用点）](/docs/CS/Framework/etcd/etcd.md)
+- [Core_Mechanisms（backend、WAL 与 snapshot 的持久边界）](/docs/CS/Framework/etcd/Core_Mechanisms.md)
 - [cluster（数据目录布局 member/snap、member/wal）](/docs/CS/Framework/etcd/cluster.md)
 - [boltdb（后端存储引擎）](/docs/CS/Framework/etcd/boltdb.md)
-- [troubleshooting（NOSPACE / corrupt）](/docs/CS/Framework/etcd/troubleshooting.md)
-- [security（AuthToken / TLS）](/docs/CS/Framework/etcd/security.md)
-- [compact（MVCC 历史压缩，区别于 SnapshotCount）](/docs/CS/Framework/etcd/compact.md)
 
 ## References
 
-1. [etcd source - server/embed/etcd.go（StartEtcd / Close / Etcd 结构）](https://github.com/etcd-io/etcd/blob/v3.5.34/server/embed/etcd.go)
-2. [etcd source - server/embed/config.go（Config 字段与默认值常量）](https://github.com/etcd-io/etcd/blob/v3.5.34/server/embed/config.go)
-3. [etcd Documentation - Embd Etcd（集成示例）](https://etcd.io/docs/v3.5/integrations/embed/)
+1. [etcd v3.7.2 - StartEtcd and lifecycle](https://github.com/etcd-io/etcd/blob/v3.7.2/server/embed/etcd.go)
+2. [etcd v3.7.2 - Config fields and defaults](https://github.com/etcd-io/etcd/blob/v3.7.2/server/embed/config.go)
+3. [Embedding etcd in a Go Application](https://etcd.io/docs/v3.7/dev-guide/golang_embed_pkg/)

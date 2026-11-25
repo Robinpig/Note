@@ -1,5 +1,8 @@
 ## Introduction
 
+> [!NOTE]
+> 本篇以 **etcd v3.7.2** 为源码基线。`watchableStore` 的 channel 容量、批量同步和 victim 重试常量均以该版本为准；跨层的事件发布边界见 [MVCC](/docs/CS/Framework/etcd/MVCC.md)。
+
 在etcd v2 Watch机制实现中，使用的是HTTP/1.x协议，实现简单、兼容性好，每个watcher对应一个TCP连接。client通过HTTP/1.1协议长连接定时轮询server，获取最新的数据变化事件。
 然而当你的watcher成千上万的时，即使集群空负载，大量轮询也会产生一定的QPS，server端会消耗大量的socket、内存等资源，导致etcd的扩展性、稳定性无法满足Kubernetes等业务场景诉求
 
@@ -26,11 +29,9 @@ type EventHistory struct {
 
 
 ```go
+// server/storage/mvcc/watchable_store.go:542-572（节选）
 type watcher struct {
-    // the watcher key
     key []byte
-    // end indicates the end of the range to watch.
-    // If end is set, the watcher is on a range.
     end []byte
 
     // victim is set when ch is blocked and undergoing victim processing
@@ -38,15 +39,16 @@ type watcher struct {
 
     // compacted is set when the watcher is removed because of compaction
     compacted bool
+    // restore is true when a synced watcher is moved to unsynced after restore.
     restore bool
 
+    startRev int64
     // minRev is the minimum revision update the watcher will accept
     minRev int64
     id     WatchID
 
     fcs []FilterFunc
-    // a chan to send out the watch response.
-    // The chan might be shared with other watchers.
+    // The channel might be shared with other watchers in the same stream.
     ch chan<- WatchResponse
 }
 ```
@@ -140,7 +142,7 @@ type WatchResponse struct {
 ```
 
 
-## watch Request Flow
+## Watch Request Flow
 
 当你通过etcdctl或API发起一个watch key请求的时候，etcd的gRPCWatchServer收到watch请求后，会创建一个serverWatchStream, 它负责接收client的gRPC Stream的create/cancel watcher请求(recvLoop goroutine)，并将从MVCC模块接收的Watch事件转发给client(sendLoop goroutine)。
 当serverWatchStream收到create watcher请求后，serverWatchStream会调用MVCC模块的WatchStream子模块分配一个watcher id，并将watcher注册到MVCC的WatchableKV模块。
@@ -228,38 +230,37 @@ func (tw *watchableStoreTxnWrite) End() {
 }
 ```
 
-接收Watch事件channel的buffer容量默认1024 若出现channel buffer满了，etcd为了保证Watch事件的高可靠性，并不会丢弃它，而是将此watcher从synced watcherGroup中删除，然后将此watcher和事件列表保存到一个名为受害者victim的watcherBatch结构中，通过异步机制重试保证事件的可靠性
+接收 Watch 事件的 channel 由 `NewWatchStream` 创建，v3.7.2 默认 buffer 容量为 **128**（`chanBufLen`），不是旧笔记中的 1024。若 channel 已满，etcd 不会丢弃待发送事件，而是把 watcher 从 synced/unsynced 分组中移出，将 watcher 与事件批次保存为 victim，交给异步机制重试。
 
-notify操作它是在修改事务结束时同步调用的，必须是轻量级、高性能、无阻塞的，否则会严重影响集群写性能。
-那么若因网络波动、CPU高负载等异常导致watcher处于victim集合中后，etcd是如何处理这种slow watcher呢？
-在介绍Watch机制整体架构时，我们知道WatchableKV模块会启动两个异步goroutine，其中一个是syncVictimsLoop，正是它负责slower watcher的堆积的事件推送。
-它的基本工作原理是，遍历victim watcherBatch数据结构，尝试将堆积的事件再次推送到watcher的接收channel中。若推送失败，则再次加入到victim watcherBatch数据结构中等待下次重试。
-若推送成功，watcher监听的最小版本号(minRev)小于等于server当前版本号(currentRev)，说明可能还有历史事件未推送，需加入到unsynced watcherGroup中，由下面介绍的历史事件推送机制，推送minRev到currentRev之间的事件。
-若watcher的最小版本号大于server当前版本号，则加入到synced watcher集合中，进入上面介绍的最新事件通知机制
+`notify` 在修改事务结束时同步调用，必须轻量、高性能且不阻塞，否则会严重影响集群写性能。
+若网络波动、CPU 高负载等异常使 watcher 进入 victim 集合，WatchableKV 启动的两个异步 goroutine 中，`syncVictimsLoop` 负责推送慢 watcher 积压的事件。
+其基本工作方式是遍历 victim 中的 watcher batch，尝试再次发送已计算好的响应；仍失败就保留在 victim 中等待下一轮。`syncVictimsLoop` 在没有 victim 时等待通知，有 victim 时使用 **10ms** timer 重试。
 
+重试成功后，如果 `minRev <= currentRev`，说明可能仍有历史事件未推送，watcher 转入 unsynced；否则说明已追上当前 revision，转回 synced。若批次还有 `moreRev`，先更新 `minRev` 再做上述判断。
 
-历史事件
+## Historical Replay
 
-WatchableKV模块的另一个goroutine，syncWatchersLoop，正是负责unsynced watcherGroup中的watcher历史事件推送。
-在历史事件推送机制中，如果你监听老的版本号已经被etcd压缩了，client该如何处理？
-要了解这个问题，我们就得搞清楚syncWatchersLoop如何工作，它的核心支撑是boltdb中存储了key-value的历史版本。
-syncWatchersLoop，它会遍历处于unsynced watcherGroup中的每个watcher，为了优化性能，它会选择一批unsynced watcher批量同步，找出这一批unsynced watcher中监听的最小版本号。
-因boltdb的key是按版本号存储的，因此可通过指定查询的key范围的最小版本号作为开始区间，当前server最大版本号作为结束区间，遍历boltdb获得所有历史数据。
-然后将KeyValue结构转换成事件，匹配出监听过事件中key的watcher后，将事件发送给对应的watcher事件接收channel即可。发送完成后，watcher从unsynced watcherGroup中移除、添加到synced watcherGroup中
-若watcher监听的版本号已经小于当前etcd server压缩的版本号，历史变更数据就可能已丢失，因此etcd server会返回ErrCompacted错误给client。client收到此错误后，需重新获取数据最新版本号后，再次Watch。你在业务开发过程中，使用Watch API最常见的一个错误之一就是未处理此错误
+WatchableKV 模块的另一个 goroutine `syncWatchersLoop` 负责 unsynced watcher 的历史事件推送。v3.7.2 的默认周期为 **100ms**，每批最多选择 **512** 个 watcher（`maxWatchersPerSync`）。
 
-事件快速匹配
-etcd使用map记录了监听单个key的watcher 同时Watch特性不仅仅可以监听单key，它还可以指定监听key范围、key前缀，因此etcd还使用了如下的区间树
-当收到创建watcher请求的时候，它会把watcher监听的key范围插入到上面的区间树中，区间的值保存了监听同样key范围的watcher集合/watcherSet。
-当产生一个事件时，etcd首先需要从map查找是否有watcher监听了单key，其次它还需要从区间树找出与此key相交的所有区间，然后从区间的值获取监听的watcher集合
+它选出这批 watcher 的最小 `minRev`，固定当前 `curRev`，然后按 backend revision key 范围 `[minRev, curRev+1)` 扫描历史记录，将命中的用户 key 转换为 Event 后发送。扫描结束后，若还有更多事件则继续留在 unsynced，否则转入 synced。用户前缀过滤发生在把 revision 记录转换为 Event 之后，不是直接按用户 key 扫描 bbolt。
 
+如果 `minRev < compactMainRev`，历史已不可读，server 发送带 `CompactRevision` 的取消响应；client 应重新拉取最新数据，再以新的 revision 创建 watch。channel 满时不会删除 watcher，下一轮会重试发送该压缩响应。创建 watch 时若传入负的 `StartRevision`，gRPC 层直接返回 `Created + Canceled`，原因放在 `CancelReason`；正常历史追赶遇到的压缩则设置 `CompactRevision` 与 `Canceled`。
 
+backend 恢复时，`watchableStore.Restore` 把 synced watcher 移到 unsynced 并设置 `restore` 标记，使追赶逻辑可以处理恢复前记下的未来 revision，避免误 panic。
 
-
-
-
+## Fast Event Matching
+etcd 使用 map 记录监听单个 key 的 watcher。Watch 也支持 key 范围与前缀，因此 etcd 还用区间树保存监听区间；区间的 value 是共享该区间的 watcher 集合。事件产生时，先查单 key map，再查与事件 key 相交的所有区间，从这些区间取出 watcher 集合。
 
 ## Links
 
 - [etcd](/docs/CS/Framework/etcd/etcd.md)
+- [Core_Mechanisms（Apply → MVCC → Watch 的发布边界）](/docs/CS/Framework/etcd/Core_Mechanisms.md)
+- [compact（历史水位与 CompactRevision）](/docs/CS/Framework/etcd/compact.md)
 - [troubleshooting（revision 已被压缩导致 watch 失效）](/docs/CS/Framework/etcd/troubleshooting.md)
+
+## References
+
+- [etcd v3.7.2 - watchable store](https://github.com/etcd-io/etcd/blob/v3.7.2/server/storage/mvcc/watchable_store.go)
+- [etcd v3.7.2 - watcher group](https://github.com/etcd-io/etcd/blob/v3.7.2/server/storage/mvcc/watcher_group.go)
+- [etcd v3.7.2 - watch transaction publication](https://github.com/etcd-io/etcd/blob/v3.7.2/server/storage/mvcc/watchable_store_txn.go)
+- [etcd v3.7.2 - gRPC watch server](https://github.com/etcd-io/etcd/blob/v3.7.2/server/etcdserver/api/v3rpc/watch.go)
