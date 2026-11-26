@@ -192,6 +192,152 @@ Flink 会把满足条件的多个算子**链（chain）**在一起，放进同�
 - 下游 Task 的 **InputGate**（含多个 InputChannel）消费对应分区；
 - 传输基于 Netty，使用**基于信用（credit-based）的流控**：下游为每个 channel 声明可用 credit，上游只有拿到 credit 才发送，避免把下游压垮，这是 Flink 背压机制的基础。
 
+### The Network Stack in Source
+
+2.3 的网络栈有两个容易理解错的点，源码证据如下：
+
+- **credit 在下游按 channel 记账，但"可发多少"由上游的 reader 决定**——不是下游直接推一个全局数字；
+- **批模式的 shuffle 不再只有"全内存 / 全落盘"两种极端**：Hybrid Shuffle 把数据按 segment 在 memory / disk / remote 三层之间动态切换，但这个能力仍是 `@Experimental`。
+
+```dot
+digraph NetworkStack {
+  rankdir=LR;
+  node [shape=box, style=rounded];
+
+  wr [label="RecordWriter\n按 partitioner 选 subpartition"];
+  rp [label="ResultPartition\nPipelined / Blocking /\nTieredResultPartition"];
+  tier [label="Tiered Storage\nmemory → disk → remote\n按 segment 切换"];
+  netty [label="Netty\nCreditBasedSequenceNumberingViewReader\nnumCreditsAvailable"];
+  ig [label="InputGate\nRemoteInputChannel\nunannouncedCredit"];
+  task [label="下游 Task\nMailbox 处理 buffer"];
+
+  wr -> rp;
+  rp -> tier [label=" batch + hybrid mode"];
+  rp -> netty [label=" pipelined"];
+  tier -> netty;
+  netty -> ig [label=" buffer + backlog"];
+  ig -> task;
+  task -> ig [label=" 回收 buffer → 新增 credit", style=dashed];
+  ig -> netty [label=" notifyCreditAvailable", style=dashed];
+}
+```
+
+**Credit 的记账处**：下游 `RemoteInputChannel` 用 `unannouncedCredit` 累计尚未通告的信用，只在从 0 变正时触发一次通知：
+
+```java
+private final AtomicInteger unannouncedCredit = new AtomicInteger(0);
+
+private void notifyCreditAvailable() throws IOException {
+    partitionRequestClient.notifyCreditAvailable(this);
+}
+
+/**
+ * The unannounced credit is increased by the given amount and might notify increased credit to
+ * the producer.
+ */
+public void increaseUnannouncedCredit(int numAvailableBuffers) {
+    if (numAvailableBuffers > 0 && unannouncedCredit.getAndAdd(numAvailableBuffers) == 0) {
+        notifyCreditAvailable();
+    }
+}
+```
+
+回收 buffer 时，只有 `initialCredit == 0`（无专属 buffer）的场景才必须清空未通告信用并重置发送端，否则会与已阻塞通道的状态不一致：
+
+```java
+if (initialCredit == 0) {
+    // this unannounced credit can be a positive value because credit assignment and the
+    // ... it is important to clear this unannounced credit and
+    // at the same time reset the sender's available credits to keep consistency
+    unannouncedCredit.set(0);
+}
+```
+
+**上游的 credit 闸门**：`CreditBasedSequenceNumberingViewReader` 持有 `numCreditsAvailable`，事件（event）不受 credit 限制，数据 buffer 才受限：
+
+```java
+private Buffer.DataType getNextDataType(BufferAndBacklog bufferAndBacklog) {
+    final Buffer.DataType nextDataType = bufferAndBacklog.getNextDataType();
+    if (numCreditsAvailable > 0 || nextDataType.isEvent()) {
+        return nextDataType;
+    }
+    return Buffer.DataType.NONE;
+}
+```
+
+取走一个数据 buffer 就扣减信用，扣成负数直接抛异常——说明"credit 机制"在协议层是**硬约束**，不是启发式节流：
+
+```java
+public BufferAndAvailability getNextBuffer() throws IOException {
+    BufferAndBacklog next = subpartitionView.getNextBuffer();
+    if (next != null) {
+        if (next.buffer().isBuffer() && --numCreditsAvailable < 0) {
+            throw new IllegalStateException("no credit available");
+        }
+        // ...
+    }
+}
+```
+
+这解释了背压的精确形态：**下游没有可用 buffer → 不回收 → 不增加 credit → 上游 reader 的 credit 归零 → 数据 buffer 被判定为 NONE（不可读）→ 上游缓冲区占满 → 一路反压到 source**。事件始终能穿过，所以 checkpoint barrier 不会被背压卡死。
+
+### Tiered Shuffle: Memory, Disk and Remote
+
+`BatchShuffleMode`（`flink-core/.../api/common/BatchShuffleMode.java`）定义了批作业的三种交换方式：`ALL_EXCHANGES_PIPELINED`（上下游同时运行、低延迟）、`ALL_EXCHANGES_BLOCKING`（分阶段、省资源）、以及下游可在上游运行期间随时启动的 hybrid 模式（源码注释明确它会 spill 全部数据到磁盘以支持重新消费）。
+
+Hybrid Shuffle 的写入端 `TierProducerAgent` 列表**按优先级排序，索引越小优先级越高**：
+
+```java
+/**
+ * Note that the {@link TierProducerAgent}s are sorted by priority, with a lower index
+ * indicating a higher priority.
+ */
+private final List<TierProducerAgent> tierProducerAgents;
+```
+
+每个 subpartition 独立记录"当前写到哪一层、哪个 segment"，写满或当前层拒绝时**顺序尝试下一层**：
+
+```java
+private void chooseStorageTierToStartSegment(
+        TieredStorageSubpartitionId subpartitionId, int totalNumBuffers) throws IOException {
+    int subpartitionIndex = subpartitionId.getSubpartitionId();
+    int segmentIndex = currentSubpartitionSegmentId[subpartitionIndex];
+    int nextSegmentIndex = segmentIndex + 1;
+
+    for (TierProducerAgent tierProducerAgent : tierProducerAgents) {
+        if (tierProducerAgent.tryStartNewSegment(
+                subpartitionId, nextSegmentIndex, totalNumBuffers)) {
+            currentSubpartitionSegmentId[subpartitionIndex] = nextSegmentIndex;
+            currentSubpartitionTierAgent[subpartitionIndex] = tierProducerAgent;
+            return;
+        }
+    }
+    throw new IOException("Failed to choose a storage tier to start a new segment.");
+}
+```
+
+`TierFactoryInitializer` 决定有哪些层可用：先装 memory、再装 disk；remote 层**只有在配置了远端路径时才加入**，配置外部 tier class 时则只装那一个：
+
+```java
+List<TierFactory> tierFactories = new ArrayList<>();
+tierFactories.add(createMemoryTierFactory(configuration));
+tierFactories.add(createDiskTierFactory(configuration));
+if (externalTierFactoryClass != null) {
+    tierFactories.add(createExternalTierFactory(configuration, externalTierFactoryClass));
+} else if (remoteStoragePath != null) {
+    tierFactories.add(createRemoteTierFactory(configuration));
+}
+```
+
+各层的准入条件就是"为什么会掉到下一层"：
+
+- **Memory**：需要 Netty 连接已建立、该 subpartition 排队 buffer 未超 `subpartitionMaxQueuedBuffers`、且内存池能保证 `max(numBuffersPerSegment, minNumBuffers)` 的容量。任一不满足就 `return false`。
+- **Disk**：用 `filePath.getUsableSpace()` 减去本 segment 所需字节，仍大于 `totalSpace * minReservedDiskSpaceFraction` 才允许——**磁盘预留比例是硬闸门**。
+- **Remote**：路径来自 `taskmanager.network.hybrid-shuffle.remote.path`，源码标注 `@Experimental` 且 `noDefaultValue()`，文档明确"磁盘空间不足时才写入远端"。
+
+> [!WARNING]
+> 旧资料常把 Flink shuffle 说成"流式走内存、批式走磁盘"的静态二分。2.3 的 Hybrid Shuffle 是**按 segment、按 subpartition 动态选层**；remote 层默认关闭且接口尚未稳定（官方明确建议不要自行实现 external tier）。把 tier 选择说成"全内存/全磁盘"会漏掉 2.x 的核心改动。
+
 ### Partitioning / Shuffle
 
 上下游之间的数据分区方式决定记录如何路由到并行子任务：
@@ -209,6 +355,8 @@ Flink 会把满足条件的多个算子**链（chain）**在一起，放进同�
 
 当下游处理不过来时，credit 耗尽 → 上游停止网络发送 → 输入端缓冲被占满 → 反压一路传导回 Source，从而让整条链路按最慢算子的速度运行。Flink Web UI 可直接查看各任务的背压比例，定位慢算子。
 
+精确的传导链见上文 [The Network Stack in Source](#the-network-stack-in-source)：credit 归零时 `getNextDataType()` 对数据 buffer 返回 `NONE`，但 event（含 checkpoint barrier）仍被放行——这是"背压不会卡死检查点"的源码级原因。
+
 ## Stream vs Batch on Same Runtime
 
 尽管 DataSet API（批）已逐步被 DataStream API 的批执行模式取代，但底层是**同一个流式运行时**：处理有界数据时，调度与 shuffle 可以采用更批式的优化（如阻塞式 shuffle、sort-merge shuffle、算子间流水线断开），处理无界数据时则全流水线常驻。这与 Spark “微批 RDD”、[Storm](/docs/CS/Framework/Flink/Storm.md) “至少一次为主”的执行模型形成对比。
@@ -219,6 +367,8 @@ Flink 会把满足条件的多个算子**链（chain）**在一起，放进同�
 - **为什么并行度要抽成独立 store**：Adaptive Scheduler 的核心能力是"按当前可用资源决定并行度"，这要求并行度是可变决策而非图的固有属性；抽成 store 后，同一份 JobGraph 可生成不同并行度的执行图。
 - **为什么 ExecutionGraph 是接口**：不同调度器（Default / Adaptive / Reactive）对图的操作方式不同，接口 + `attachJobGraph()` 让 scheduler 自己决定怎么建图与初始化。
 - **为什么调度器用状态机**：资源、checkpoint 失败、作业状态变化是异步并发事件；把"当前状态能响应哪些事件"编码进 state 接口，比一堆 if-else 更不容易出竞态。
+- **为什么 credit 是硬约束而非节流**：credit 归零时上游 reader 直接把数据 buffer 判为不可读，扣成负数就抛异常。这让"下游处理不过来"能精确、无丢失地传回 source，而 event 通道始终保留，checkpoint barrier 不受背压影响。
+- **为什么 hybrid shuffle 按 segment 选层**：segment 是落盘/换层的原子单位，粒度比"整个 partition 一次性决定"细得多；memory 满就 spill 到 disk、disk 触发预留阈值才走 remote，既保住流式低延迟，又让批作业不必把全部中间结果常驻内存。代价是 tier 接口仍 `@Experimental`，配置面比旧资料复杂。
 
 ## Links
 
@@ -239,3 +389,9 @@ Flink 会把满足条件的多个算子**链（chain）**在一起，放进同�
 6. [Flink 2.3.0 Source: AdaptiveScheduler.java](https://github.com/apache/flink/blob/release-2.3.0/flink-runtime/src/main/java/org/apache/flink/runtime/scheduler/adaptive/AdaptiveScheduler.java)
 7. [Flink 2.3.0 Source: pom.xml](https://github.com/apache/flink/blob/release-2.3.0/pom.xml)
 8. [FLIP-549: Support Application Management](https://cwiki.apache.org/confluence/spaces/FLINK/pages/386272238/FLIP-549+Support+Application+Management)
+9. [Flink 2.3.0 Source: CreditBasedSequenceNumberingViewReader.java](https://github.com/apache/flink/blob/release-2.3.0/flink-runtime/src/main/java/org/apache/flink/runtime/io/network/netty/CreditBasedSequenceNumberingViewReader.java)
+10. [Flink 2.3.0 Source: RemoteInputChannel.java](https://github.com/apache/flink/blob/release-2.3.0/flink-runtime/src/main/java/org/apache/flink/runtime/io/network/partition/consumer/RemoteInputChannel.java)
+11. [Flink 2.3.0 Source: TieredStorageProducerClient.java](https://github.com/apache/flink/blob/release-2.3.0/flink-runtime/src/main/java/org/apache/flink/runtime/io/network/partition/hybrid/tiered/storage/TieredStorageProducerClient.java)
+12. [Flink 2.3.0 Source: TierFactoryInitializer.java](https://github.com/apache/flink/blob/release-2.3.0/flink-runtime/src/main/java/org/apache/flink/runtime/io/network/partition/hybrid/tiered/shuffle/TierFactoryInitializer.java)
+13. [Flink 2.3.0 Source: BatchShuffleMode.java](https://github.com/apache/flink/blob/release-2.3.0/flink-core/src/main/java/org/apache/flink/api/common/BatchShuffleMode.java)
+14. [Flink 2.3.0 Source: NettyShuffleEnvironmentOptions.java](https://github.com/apache/flink/blob/release-2.3.0/flink-core/src/main/java/org/apache/flink/configuration/NettyShuffleEnvironmentOptions.java)

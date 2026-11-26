@@ -32,6 +32,110 @@ FLIP-27 把两者拆开：
 - **标准化指标**：跨 source 统一的吞吐、延迟、lag 指标；
 - **可协调**：enumerator 在 JobManager 侧，便于做全局协调（如 Kafka 分区分配、文件枚举去重）。
 
+### Source Coordination in Source
+
+> [!NOTE]
+> 版本基线：Flink **2.3.0**（tag `release-2.3.0`）。下文源码片段均取自该 tag，路径相对仓库根目录，不带行号。
+
+FLIP-27 的"enumerator 在 JM、reader 在 TM"在源码里由 `SourceCoordinator`（`flink-runtime/.../source/coordinator/`）实现。它不是普通组件，而是**跑在单线程 event loop 上的协调器**——enumerator 的所有回调都被串行化，这才让"简单实现一个 `SplitEnumerator`"成为可能：
+
+```java
+/**
+ * A source coordinator runs on the coordinator side (JobManager) ... and calls corresponding
+ * method of the SplitEnumerator to take actions.
+ */
+public class SourceCoordinator<SplitT extends SourceSplit, EnumChkT> ...
+```
+
+启动顺序有明确约束：先标记 `started`（区分"没调用 start"和"start 失败"），必要时创建 enumerator，再把 `enumerator.start()` 作为 event loop 的**第一个任务**：
+
+```java
+public void start() throws Exception {
+    LOG.info("Starting split enumerator for source {}.", operatorName);
+    started = true;
+    if (enumerator == null) {
+        enumerator = source.createEnumerator(context);
+    }
+
+    // The start sequence is the first task in the coordinator executor.
+    // We rely on the single-threaded coordinator executor to guarantee
+    // the other methods are invoked after the enumerator has started.
+    runInEventLoop(() -> enumerator.start(), "starting the SplitEnumerator.");
+}
+```
+
+**分片请求不是来者不拒**：reader 发 `RequestSplitEvent` 时，coordinator 先看 `AssignmentTracker` 是否已经宣布该 reader "没有更多 split"，是则直接忽略，避免无意义的枚举器调用：
+
+```java
+private void handleRequestSplitEvent(int subtask, int attemptNumber, RequestSplitEvent event) {
+    // request splits from the enumerator only if the enumerator has un-assigned splits
+    // this helps to reduce unnecessary split requests to the enumerator
+    if (!context.hasNoMoreSplits(subtask)) {
+        enumerator.handleSplitRequest(subtask, event.hostName());
+    }
+}
+```
+
+**checkpoint 与分片分配对齐**是 exactly-once 的关键。`SplitAssignmentTracker` 注释明确："维护自上次成功 checkpoint 以来的所有分配，是为了让 subtask 能**独立 failover**"：
+
+```java
+// All the split assignments since the last successful checkpoint.
+// Maintaining this allow the subtasks to fail over independently.
+// The mapping is [CheckpointId -> [SubtaskId -> LinkedHashSet[SourceSplits]]].
+private final SortedMap<Long, Map<Integer, LinkedHashSet<SplitT>>> assignmentsByCheckpointId;
+
+// The split assignments since the last checkpoint attempt.
+private Map<Integer, LinkedHashSet<SplitT>> uncheckpointedAssignments;
+```
+
+每次 checkpoint 把"未快照的分配"挂到该 checkpoint ID 下，这样某个 reader 失败时只需重放它自己那部分 split，不必让整个 source 回滚：
+
+```java
+public void onCheckpoint(long checkpointId) throws Exception {
+    // Include the uncheckpointed assignments to the snapshot.
+    assignmentsByCheckpointId.put(checkpointId, uncheckpointedAssignments);
+    uncheckpointedAssignments = new HashMap<>();
+}
+```
+
+快照内容分两种：流模式只序列化 enumerator 状态；批模式（`BATCH_CHECKPOINT_ID`）额外把 assignment tracker 一起写入——因为批作业没有周期性 checkpoint 来持续记录分配：
+
+```java
+if (checkpointId == BATCH_CHECKPOINT_ID) {
+    // assignments
+    byte[] assignmentData = context.getAssignmentTracker().snapshotState(splitSerializer);
+    out.writeInt(assignmentData.length);
+    out.write(assignmentData);
+
+    // enumerator
+    byte[] enumeratorData = toBytes(checkpointId);
+    out.writeInt(enumeratorData.length);
+    out.write(enumeratorData);
+} else {
+    context.onCheckpoint(checkpointId);
+    result.complete(toBytes(checkpointId));
+}
+```
+
+**HybridSource 的 source 切换**也由 coordinator 驱动：只有当 `finishedReaders.size() == context.currentParallelism()`（所有 reader 都读完当前 source）才切到下一个 enumerator，并**先给所有 reader 发切换事件、再发新分片**，避免 reader 收到不属于当前 source 的 split：
+
+```java
+finishedReaders.add(subtaskId);
+if (finishedReaders.size() == context.currentParallelism()) {
+    LOG.debug("All readers finished, ready to switch enumerator!");
+    if (currentSourceIndex + 1 < sources.size()) {
+        switchEnumerator();
+        // switch all readers prior to sending split assignments
+        for (int i = 0; i < context.currentParallelism(); i++) {
+            sendSwitchSourceEvent(i, currentSourceIndex);
+        }
+    }
+}
+```
+
+> [!WARNING]
+> 源码位置提醒：`SplitEnumerator` / `SourceReader` 接口在 **`flink-core`**，而 `SourceCoordinator` / `SplitAssignmentTracker` 在 **`flink-runtime`**。旧资料常把整个 FLIP-27 说成"一个包里的接口"，按类找源码时别被误导。
+
 > [!WARNING]
 > Flink 2.x 已**移除** `SourceFunction`。新写连接器一律基于 FLIP-27 的 `Source` 接口；仍在用 `FlinkKafkaConsumer` 等老实现的作业，需要在升级到 2.x 前迁移到新实现（如 `KafkaSource`）。
 
@@ -112,6 +216,13 @@ Source 可重放（Kafka / 文件系统，能按 offset、位置回到过去）
 
 三者缺一不可。也正因如此，"Flink 宣称的 exactly-once"落到具体链路上，一定要回到这三个环节逐个确认，而不是只看框架名。
 
+## Why This Shape
+
+- **为什么 enumerator 跑在单线程 event loop**：`SplitEnumerator` 的实现者只需处理串行回调，不必自己加锁；coordinator 把并发的 split 请求、checkpoint、reader 事件排成一队，这是 FLIP-27"降低 connector 作者门槛"的核心手段。
+- **为什么要单独追踪 split 分配**：数据源的 exactly-once 靠"可重放 + 记住读到哪"，而分配记录决定"哪些 split 已经给了谁"。按 checkpoint 分桶保存后，单个 reader 失败可以局部恢复，不必全局回滚。
+- **为什么批模式快照多存一份 assignment**：流式作业有周期性 checkpoint 持续记录分配；批模式没有，必须在唯一那次快照里把分配一起写进去，否则恢复时不知道每个 reader 拿到过哪些分片。
+- **为什么 HybridSource 切换要等所有 reader 完成**：两个 source 的 offset / split 语义可能完全不同，只有全部 reader 越过边界、位置转换完成后才能安全地换 enumerator，否则会出现跨 source 的重复或丢失。
+
 ## Links
 
 - [Checkpoint](/docs/CS/Framework/Flink/Checkpoint.md)
@@ -126,3 +237,7 @@ Source 可重放（Kafka / 文件系统，能按 offset、位置回到过去）
 2. [FLIP-27: Refactor Source Interface](https://cwiki.apache.org/confluence/display/FLINK/FLIP-27%3A+Refactor+Source+Interface)
 3. [Flink Docs - Kafka Connector](https://nightlies.apache.org/flink/flink-docs-stable/docs/connectors/datastream/kafka/)
 4. [Flink Blog - Introducing the new Kinesis/DynamoDB Streams sources（说明 2.x 移除 SourceFunction）](https://flink.apache.org/2024/11/25/introducing-the-new-amazon-kinesis-data-stream-and-amazon-dynamodb-stream-sources)
+5. [Flink 2.3.0 Source: SourceCoordinator.java](https://github.com/apache/flink/blob/release-2.3.0/flink-runtime/src/main/java/org/apache/flink/runtime/source/coordinator/SourceCoordinator.java)
+6. [Flink 2.3.0 Source: SplitAssignmentTracker.java](https://github.com/apache/flink/blob/release-2.3.0/flink-runtime/src/main/java/org/apache/flink/runtime/source/coordinator/SplitAssignmentTracker.java)
+7. [Flink 2.3.0 Source: SplitEnumerator.java](https://github.com/apache/flink/blob/release-2.3.0/flink-core/src/main/java/org/apache/flink/api/connector/source/SplitEnumerator.java)
+8. [Flink 2.3.0 Source: HybridSourceSplitEnumerator.java](https://github.com/apache/flink/blob/release-2.3.0/flink-connectors/flink-connector-base/src/main/java/org/apache/flink/connector/base/source/hybrid/HybridSourceSplitEnumerator.java)

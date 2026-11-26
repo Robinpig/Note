@@ -4,6 +4,9 @@
 
 "弹性（Resilient）"就来自这一点：**容错不靠复制，靠重算**。这与 [MapReduce](/docs/CS/Distributed/MapReduce.md) 靠落盘换容错不同，Spark 把中间结果尽量留在内存里，用 lineage 换可靠性。
 
+> [!NOTE]
+> 本页源码基线：**Spark 4.3.0**（tag `v4.3.0`，commit `98bc0212`，2026-10-27）。以下片段均取自该 tag，不混用其它版本。
+
 ## RDD 的五个内部属性
 
 | 属性 | 含义 | 作用 |
@@ -15,6 +18,81 @@
 | `preferredLocations(split)` | 数据本地性提示 | 调度时把 Task 送到数据所在节点（延迟调度） |
 
 论文里给出的接口就是这三件事：`getPartitions`、`getIterator(partition)`、`getPreferredLocations(partition)`。
+
+### Source: The Five Members on `RDD`
+
+论文里的"五个属性"在 4.3.0 源码里对应 `RDD.scala` 抽象类的成员。注意它们不全是纯抽象方法：`compute` 是唯一的抽象方法并标注 `@DeveloperApi`，其余都有默认实现。
+
+```scala
+  /**
+   * :: DeveloperApi ::
+   * Implemented by subclasses to compute a given partition.
+   */
+  @DeveloperApi
+  def compute(split: Partition, context: TaskContext): Iterator[T]
+
+  /**
+   * Implemented by subclasses to return the set of partitions in this RDD. This method will only
+   * be called once, so it is safe to implement a time-consuming computation in it.
+   *
+   * The partitions in this array must satisfy the following property:
+   *   `rdd.partitions.zipWithIndex.forall { case (partition, index) => partition.index == index }`
+   */
+  protected def getPartitions: Array[Partition]
+
+  /**
+   * Implemented by subclasses to return how this RDD depends on parent RDDs. This method will only
+   * be called once, so it is safe to implement a time-consuming computation in it.
+   */
+  protected def getDependencies: Seq[Dependency[_]] = deps
+
+  /**
+   * Optionally overridden by subclasses to specify placement preferences.
+   */
+  protected def getPreferredLocations(split: Partition): Seq[String] = Nil
+
+  /** Optionally overridden by subclasses to specify how they are partitioned. */
+  @transient val partitioner: Option[Partitioner] = None
+```
+
+注释里有两处容易忽略的约束：`partition.index` 必须等于它在数组里的下标；`getPartitions` / `getDependencies` 只会被调用一次，因此实现里可以做耗时计算。`partitioner` 是 `@transient val Option[Partitioner]` 且默认 `None`，只有 KV RDD 才会覆盖它——这正是"带 schema 的 RDD 才能进 Catalyst 优化"的底层根据之一。
+
+### Source: `iterator` Is the Single Entry Point
+
+分区计算只有一个入口——`final def iterator`，它不可被子类覆盖。持久化判断在这个基类入口处统一完成，而不是散落在各子类内部。
+
+```scala
+  final def iterator(split: Partition, context: TaskContext): Iterator[T] = {
+    if (storageLevel != StorageLevel.NONE) {
+      getOrCompute(split, context)
+    } else {
+      computeOrReadCheckpoint(split, context)
+    }
+  }
+```
+
+分支条件是 `storageLevel != StorageLevel.NONE`：命中持久化走 `getOrCompute`（读缓存块，缺失才算并落盘），否则走 `computeOrReadCheckpoint`。这把 `persist()` 与 lineage 重算两条路径在入口处就分开了。
+
+### Source: How Checkpoint Truncates Lineage
+
+`computeOrReadCheckpoint` 是"checkpoint 截断血统"这一说法的代码级证据——它并不调用本 RDD 的 `compute`，而是委托给 `firstParent.iterator`，把计算链直接跳到 checkpoint 点。
+
+```scala
+  private[spark] def computeOrReadCheckpoint(split: Partition, context: TaskContext): Iterator[T] =
+  {
+    if (isCheckpointedAndMaterialized) {
+      firstParent[T].iterator(split, context)
+    } else {
+      compute(split, context)
+    }
+  }
+```
+
+判定条件是 `isCheckpointedAndMaterialized = checkpointData.exists(_.isCheckpointed)`，同时覆盖 reliable 与 local 两种 checkpoint；另一个方法 `isReliablyCheckpointed` 才严格匹配 `ReliableRDDCheckpointData`。一个反直觉点：无论可靠还是本地 checkpoint，这里都统一走 `firstParent.iterator`，没有分叉。
+
+> [!TIP]
+> 4.3.0 在 `RDD.scala` 里新增了 `verifyCheckpointChecksums` 与 "sealed checksum" 机制（checkpoint 落盘时算校验和、读取时自检并将块封印为单一一致版本），属于 checkpoint 可靠性的增量加固，与 lineage 截断的主逻辑无关。
+
 
 ## 依赖：窄依赖与宽依赖
 
@@ -29,6 +107,77 @@
 
 1. **Stage 在宽依赖处切分**：DAGScheduler 沿依赖图回溯，遇到宽依赖就断开成一个新 Stage（见 [Scheduler](/docs/CS/Framework/Spark/Scheduler.md)）；
 2. **容错的粒度不同**：窄依赖失败只需重算父分区（代价小）；宽依赖失败可能需要重算多个父分区，代价大——这也是 checkpoint / 持久化的意义所在。
+
+### Source: Dependencies Are Serializeable Edges
+
+`Dependency.scala` 把依赖体系的形式化契约压缩得很小：根类只有一个 `def rdd`，窄依赖的契约是"子分区依赖哪些父分区下标"，注释明确窄依赖 `allow for pipelined execution`。
+
+```scala
+@DeveloperApi
+abstract class Dependency[T] extends Serializable {
+  def rdd: RDD[T]
+}
+
+@DeveloperApi
+abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
+  def getParents(partitionId: Int): Seq[Int]
+  override def rdd: RDD[T] = _rdd
+}
+```
+
+`map` / `filter` 这类一一对应对应 `OneToOneDependency.getParents = List(partitionId)`，`union` / `cartesian` 对应 `RangeDependency` 的区间偏移映射。窄依赖在源码里就是"父分区下标列表"，可流水线执行的前提是子分区只需少量确定的父分区。
+
+`ShuffleDependency` 则携带了 shuffle 的全部语义字段，`_rdd` 标 `@transient`（executor 侧不需要父 RDD）：
+
+```scala
+class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
+    @transient private val _rdd: RDD[_ <: Product2[K, V]],
+    val partitioner: Partitioner,
+    val serializer: Serializer = SparkEnv.get.serializer,
+    val keyOrdering: Option[Ordering[K]] = None,
+    val aggregator: Option[Aggregator[K, V, C]] = None,
+    val mapSideCombine: Boolean = false,
+    val shuffleWriterProcessor: ShuffleWriteProcessor = new ShuffleWriteProcessor,
+    val rowBasedChecksums: Array[RowBasedChecksum] = ShuffleDependency.EMPTY_ROW_BASED_CHECKSUMS,
+    private val _checksumMismatchFullRetryEnabled: Boolean = false,
+    val checksumMismatchQueryLevelRollbackEnabled: Boolean = false)
+  extends Dependency[Product2[K, V]] with Logging {
+```
+
+`mapSideCombine` 默认 `false`，且开启时强制要求 `aggregator`（源码里 `require(aggregator.isDefined, "Map-side combine without Aggregator specified!")`）——这是 `reduceByKey` 能在 map 端先合并、从而优于 `groupByKey` 的形式化约束。值得注意的是 4.3.0 新增的 `shuffleHandle` 字段在依赖**构造期**就通过 `shuffleManagerFor(this).registerShuffle(shuffleId, this)` 决定用哪个 ShuffleManager，为下一节的第三类依赖埋下伏笔。
+
+### A Third Dependency Kind in 4.3.0
+
+经典教材把依赖分成窄依赖与宽依赖两类。**Spark 4.3.0 出现了第三类**：`PipelinedShuffleDependency`，它是 `ShuffleDependency` 的子类，输出可增量读取——consumer 在 producer 仍在运行时就能开始读，不必等材料完全物化。
+
+```scala
+@DeveloperApi
+class PipelinedShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
+    _rdd: RDD[_ <: Product2[K, V]],
+    partitioner: Partitioner,
+    serializer: Serializer = SparkEnv.get.serializer,
+    keyOrdering: Option[Ordering[K]] = None,
+    aggregator: Option[Aggregator[K, V, C]] = None,
+    mapSideCombine: Boolean = false,
+    shuffleWriterProcessor: ShuffleWriteProcessor = new ShuffleWriteProcessor,
+    rowBasedChecksums: Array[RowBasedChecksum] = ShuffleDependency.EMPTY_ROW_BASED_CHECKSUMS)
+  extends ShuffleDependency[K, V, C](
+    _rdd, partitioner, serializer, keyOrdering, aggregator, mapSideCombine,
+    shuffleWriterProcessor, rowBasedChecksums) {
+  setShuffleMergeAllowed(false)
+}
+```
+
+类体只有一句 `setShuffleMergeAllowed(false)`：push-based shuffle merge 要等全局 finalize 才暴露输出，与"边产边读"直接冲突。名字用 *pipelined* 而非 *streaming* 是刻意的——它是通用的执行能力（依赖 Stage 的软件流水），流处理只是第一个用户。这个类型担任两件事：给 DAGScheduler 当"producer / consumer 可并发"的 marker，以及在选择 shuffle manager 时作为类型路由键（见 [Shuffle](/docs/CS/Framework/Spark/Shuffle.md)）。
+
+> [!WARNING]
+> 别把"窄依赖 allow pipelined execution"与 4.3 的"pipelined shuffle"混为一谈：前者指**同一个 Stage 内**分区流水线（无需落盘），后者指**跨 Stage** 的 shuffle 边产边读，靠 `PipelinedShuffleDependency` 类型标识，由 DAGScheduler 并发调度。名字相同，层次不同。
+
+### Why This Shape
+
+- `iterator` 做成 `final` 且把持久化判断放在基类，是为了让所有 RDD 子类的缓存/重算语义统一，避免每个变换算子各自处理存储级别。
+- 依赖被设计成可序列化的轻量边（根类只有 `def rdd`），才能让 driver 把依赖关系随 task 序列化到 executor，同时支撑 lineage 重算——这是"容错靠重算而非复制"的最小信息载体。
+- 4.3 选择"新增一个 `ShuffleDependency` 子类"而非给宽依赖加布尔开关，是为了让"能否增量读"成为**类型级别**的静态契约：driver 与 executor 各自对依赖这个序列化字段做模式匹配即可一致的路由，不需要共享 `shuffleId → 行为` 的可变状态。代价是老代码里只匹配父类型 `ShuffleDependency` 的地方仍按"完全物化"看待它。
 
 ## 构造 RDD 的四种方式
 
@@ -119,4 +268,6 @@ Spark 4.x 里 RDD 仍是**执行底座**：DataFrame / Dataset / SQL 最终都�
 
 1. [Spark: Cluster Computing with Working Sets（RDD 原始论文）](https://people.csail.mit.edu/matei/papers/2010/hotcloud_spark.pdf)
 2. [Resilient Distributed Datasets: A Fault-Tolerant Abstraction for In-Memory Cluster Computing](https://www.usenix.org/system/files/conference/nsdi12/nsdi12-final138.pdf)
-3. [Spark Docs - RDD Programming Guide](https://spark.apache.org/docs/latest/rdd-programming-guide.html)
+3. [Spark Docs - RDD Programming Guide](https://spark.apache.org/docs/4.3.0/rdd-programming-guide.html)
+4. [RDD.scala @ v4.3.0](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/rdd/RDD.scala)
+5. [Dependency.scala @ v4.3.0](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/Dependency.scala)

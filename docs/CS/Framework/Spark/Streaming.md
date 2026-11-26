@@ -1,11 +1,15 @@
 ## Introduction
 
+> [!NOTE]
+> 本页源码基线：**Spark 4.3.0**（tag `v4.3.0`，commit `98bc0212`，2026-10-27）。以下片段均取自该 tag，不混用其它版本。
+
 Spark 的流处理有两条世代不同的路线：
 
 | 路线 | 抽象 | 状态 | 说明 |
 | ---- | ---- | ---- | ---- |
 | Spark Streaming（DStream） | 一串小批 **RDD** | **自 Spark 3.4.0 起弃用**（官方标注为 legacy，不再更新） | 微批模型，延迟较高但语义成熟 |
-| Structured Streaming | 无限增长的**表** + 增量查询 | 主推 | 与 Spark SQL 同一套引擎，能用 Catalyst 与 Tungsten |
+| Structured Streaming（micro-batch） | 无限增长的**表** + 增量查询 | 主推、默认 | 与 Spark SQL 同一套引擎，能用 Catalyst 与 Tungsten |
+| Real-Time Mode（4.3.0） | 同一套 API，长驻 task 持续处理 | **4.3 起 GA**（SPARK-57281 移除 `@Experimental`） | 毫秒级延迟，4.3 起支持有状态查询，详见下文 |
 
 > [!WARNING]
 > 新作业不要用 DStream。官方建议迁移到 Structured Streaming；`StreamingContext` / `JavaStreamingContext` 已在 3.4 标注弃用。
@@ -27,7 +31,62 @@ Spark 的流处理有两条世代不同的路线：
 | 默认（不指定） | 上一批完成后立刻起下一批 | 百毫秒级 | 通用 |
 | `Trigger.ProcessingTime(interval)` | 固定间隔起批 | = 间隔 | 控制资源与下游写入节奏 |
 | `Trigger.Once()` | 只跑一批（把可用数据算完就停） | —— | 批处理式补数、低成本增量同步 |
-| `Trigger.Continuous(interval)` | 连续处理模式（实验性），长驻任务持续处理 | 毫秒级 | 低延迟诉求，能力受限 |
+| `Trigger.Continuous(interval)` | 连续处理模式，长驻任务持续处理 | 毫秒级 | 低延迟诉求，能力受限 |
+| `Trigger.RealTime()`（4.3.0） | 长驻 task + pipelined shuffle，每 `batchDurationMs` 提交一次进度 | 毫秒级 | Real-Time Mode 的触发器，4.3 起支持有状态查询 |
+
+## Real-Time Mode (4.3.0)
+
+这是 4.3.0 最重磅的流处理变化。它复用了 Structured Streaming 的 API 与 `MicroBatchExecution` 执行器，但换掉了"每批重新调度 task"的模式——启动**长驻 task（long-running tasks）**持续读取与处理输入，从而消除每批的调度开销。官方文档给出的数据：微批端到端延迟下限约 100ms，Real-Time Mode 降到"处理与传输一条记录所需的时间（通常几毫秒）"。
+
+> [!WARNING]
+> 4.3 之前 Continuous Mode 常被拿来与 Flink 的逐事件模型类比，但它能力受限且带 `@Experimental`；4.3 的 Real-Time Mode 才是正式的毫秒级方案。别再写"Spark 只有微批、延迟必然秒级"——准确说法是**默认微批（秒级/百毫秒级），可选 Real-Time Mode（毫秒级）**。
+
+### Source: The Trigger and the Execution Reuse
+
+`RealTimeTrigger` 存在于触发器定义中，携带批次时长（默认由 `Duration(5, MINUTES)` 构造，用于控制进度提交的频率，而非处理延迟）：
+
+```scala
+case class RealTimeTrigger(batchDurationMs: Long) extends Trigger {
+  require(batchDurationMs > 0, "the batch duration should not be negative")
+
+  implicit val defaultFormats: DefaultFormats = DefaultFormats
+}
+```
+
+一个关键的**反直觉事实**：4.3.0 源码里**没有独立的 `RealTimeExecution` 类**。`StreamExecution` 只有 `MicroBatchExecution` 与 `ContinuousExecution` 两个子类；Real-Time Mode 走的是 `AsyncProgressTrackingMicroBatchExecution extends MicroBatchExecution`——一个为异步进度跟踪与 `RealTimeTrigger` 定制的子类。差别在于 task 的生命周期——普通微批每批结束 task 就退出、下批重新调度；Real-Time Mode 的 input task 是长驻的，一批接着一批地持续读，进度日志（offset commit）由单线程后台线程池异步串行写。延迟差异来自调度开销的消除，而非"逐事件 vs 微批"的模型切换。
+
+```scala
+class AsyncProgressTrackingMicroBatchExecution(
+    sparkSession: SparkSession,
+    trigger: Trigger,
+    triggerClock: Clock,
+    extraOptions: Map[String, String],
+    plan: WriteToStream)
+  extends MicroBatchExecution(sparkSession, trigger, triggerClock, extraOptions, plan) {
+```
+
+`StreamExecution` 里对 `RealTimeTrigger` 有专门分派，把执行器指向这个子类。
+
+### Source: Stateful Queries Run on Pipelined Shuffles
+
+4.3.0 让 Real-Time Mode 支持有状态查询（聚合、`dropDuplicates`、`transformWithState`），靠的正是 [Shuffle](/docs/CS/Framework/Spark/Shuffle.md) 页讲的 pipelined shuffle。官方发布说明写得很直接：
+
+> SPARK-58508 Support stateful queries in Real-Time Mode, including `dropDuplicates`, by running them on pipelined shuffles
+
+普通 shuffle 会让长驻 task 死锁——有状态聚合需要 shuffle，而 shuffle 必须等 producer 把输出全部写完才能被 consumer 读，但 Real-Time 的 producer task 永不结束（它在等下一条输入）。解法就是 `PipelinedShuffleDependency`：consumer 边读 producer 正在产出的部分输出，两者作为 pipelined group 并发调度。SQL 层的注入点就是 `ShuffleExchangeExec` 的那个 `pipelined` 布尔位（见 [Shuffle](/docs/CS/Framework/Spark/Shuffle.md) 的源码片段）。
+
+### Constraints and Positioning
+
+Real-Time Mode 继承 pipelined shuffle 的全部约束（见 [Scheduler](/docs/CS/Framework/Spark/Scheduler.md)）：不支持推测执行、不支持动态资源分配、作业不能混用普通与 pipelined shuffle。这些限制解释了为什么它是一条"可选路线"而非默认——它用适用面换延迟。
+
+延迟与语义的横向定位（4.3.0 官方文档）：
+
+| 模式 | 端到端延迟 | 语义 | 能力覆盖 |
+| ---- | ---- | ---- | ---- |
+| Micro-batch（默认） | ~100ms | Exactly-once | 全部流操作，含所有有状态操作 |
+| Real-Time Mode | 几毫秒 | Exactly-once（长驻 task 每批提交进度） | 4.3 起含有状态聚合、去重、`transformWithState` |
+
+选型上，Real-Time Mode 把 Spark 在"准且延迟敏感"这一格的竞争力补上了——但它仍是"长驻 task + 微批进度提交"，与 [Flink](/docs/CS/Framework/Flink/Flink.md) 真正的逐事件流水线在故障恢复粒度上仍有差别。
 
 ## 时间语义与迟到数据
 
@@ -83,3 +142,6 @@ Spark 的流处理有两条世代不同的路线：
 2. [Spark Release 3.2.0（RocksDB StateStore SPARK-34198、AQE 默认开启）](https://spark.apache.org/releases/spark-release-3-2-0.html)
 3. [Spark Release 4.0.0（transformWithState、State Store Data Source）](https://spark.apache.org/releases/spark-release-4-0-0.html)
 4. [Spark API Docs - StreamingContext（3.4.0 起弃用）](https://spark.apache.org/docs/4.0.0/api/java/org/apache/spark/streaming/StreamingContext.html)
+5. [Spark Docs - Real-Time Mode @ 4.3.0（long-running tasks、延迟与能力矩阵）](https://spark.apache.org/docs/4.3.0/streaming/real-time-mode.html)
+6. [Spark Release 4.3.0（SPARK-58508 有状态 Real-Time、SPARK-57281 移除 @Experimental）](https://spark.apache.org/releases/spark-release-4-3-0.html)
+7. [AsyncProgressTrackingMicroBatchExecution.scala @ v4.3.0](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/runtime/AsyncProgressTrackingMicroBatchExecution.scala)

@@ -384,6 +384,121 @@ public CheckpointBarrier asUnaligned() {
 
 `completedCheckpointStore` 仍维护已完成 checkpoint 列表，share state 的生命周期由 `SharedStateRegistry` 管；`addCompletedCheckpointToStoreAndSubsumeOldest` 负责淘汰最旧的一个。
 
+### Choosing the Recovery Path in Source
+
+上面是"从快照恢复"的通用流程，但**失败后重启哪些 Task** 由 `FailoverStrategy` 决定；而"要不要触发新 checkpoint"另有开关。这两件事在旧资料里常被混为一谈。
+
+> [!NOTE]
+> 版本基线：Flink **2.3.0**（tag `release-2.3.0`）。下文源码片段均取自该 tag，路径相对仓库根目录，不带行号。
+
+`FailoverStrategy` 接口只问一个问题——给定失败的 vertex，哪些 vertex 要重启（注意参数 `cause` 是可用的）：
+
+```java
+/** New interface for failover strategies. */
+public interface FailoverStrategy {
+
+    /**
+     * Returns a set of IDs corresponding to the set of vertices that should be restarted.
+     */
+    Set<ExecutionVertexID> getTasksNeedingRestart(
+            ExecutionVertexID executionVertexId, Throwable cause);
+}
+```
+
+两种策略，由 `jobmanager.execution.failover-strategy` 选择（ `"full"` / `"region"`，其它值直接抛 `IllegalConfigurationException`）：
+
+```java
+switch (strategyParam.toLowerCase()) {
+    case FULL_RESTART_STRATEGY_NAME:
+        return new RestartAllFailoverStrategy.Factory();
+
+    case PIPELINED_REGION_RESTART_STRATEGY_NAME:
+        return new RestartPipelinedRegionFailoverStrategy.Factory();
+
+    default:
+        throw new IllegalConfigurationException("Unknown failover strategy: " + strategyParam);
+}
+```
+
+- **full**：不看 cause，直接返回拓扑里所有 vertex：
+```java
+public Set<ExecutionVertexID> getTasksNeedingRestart(
+        ExecutionVertexID executionVertexId, Throwable cause) {
+    return IterableUtils.toStream(topology.getVertices())
+            .map(SchedulingExecutionVertex::getId)
+            .collect(Collectors.toSet());
+}
+```
+- **region**：从失败 vertex 所在 pipelined region 出发 BFS，**只有不可用的输入分区才把其 producer region 拉进来**，并把所有 consumer region 纳入——这就是"局部恢复"的边界计算。如果是 `PartitionException`（数据消费错误），先把对应 partition 标记为 failed，恢复后再清掉：
+```java
+Optional<PartitionException> dataConsumptionException =
+        ExceptionUtils.findThrowable(cause, PartitionException.class);
+if (dataConsumptionException.isPresent()) {
+    resultPartitionAvailabilityChecker.markResultPartitionFailed(
+            dataConsumptionException.get().getPartitionId().getPartitionId());
+}
+// ... compute regions to restart ...
+if (dataConsumptionException.isPresent()) {
+    resultPartitionAvailabilityChecker.removeResultPartitionFromFailedState(
+            dataConsumptionException.get().getPartitionId().getPartitionId());
+}
+```
+处于 `CREATED`（尚未启动）状态的 vertex 会被跳过——不必重启一个还没跑起来的任务。
+
+**恢复不等于立刻开 checkpoint**。`ExecutionTrackingCheckpointCoordinatorDeActivator` 同时跟踪 JobStatus 与每个 Execution 的状态，只有"作业 RUNNING 且所有 task 都不是 pending"才启动周期调度器：
+
+```java
+@Override
+public void onStateUpdate(
+        ExecutionAttemptID execution, ExecutionState previousState, ExecutionState newState) {
+    if (newState == ExecutionState.RUNNING || newState == ExecutionState.FINISHED) {
+        pendingExecutions.remove(execution);
+    } else {
+        pendingExecutions.add(execution);
+    }
+    maybeStartOrStopCheckpointScheduler();
+}
+
+private void maybeStartOrStopCheckpointScheduler() {
+    if (jobStatus == JobStatus.RUNNING && allTasksRunning()) {
+        if (!started) {
+            coordinator.startCheckpointScheduler();
+        }
+    } else if (started) {
+        coordinator.stopCheckpointScheduler();
+    }
+}
+```
+
+这解释了 FLIP-547"恢复期也能 checkpoint"为什么要单独设计——默认情况下恢复过程中的 task 处于非 RUNNING 状态，`allTasksRunning()` 为 false，周期 checkpoint 根本不会启动；显式支持恢复期 checkpoint 需要绕过这个闸门。
+
+**重启时的状态选择**集中在 `restoreLatestCheckpointedStateInternal()`：先取 `completedCheckpointStore.getLatestCheckpoint()`，没有 checkpoint 时按 `errorIfNoCheckpoint` 决定报错还是重置 coordinators，有则交给 `StateAssignmentOperation` 分配：
+
+```java
+CompletedCheckpoint latest = completedCheckpointStore.getLatestCheckpoint();
+
+if (latest == null) {
+    if (errorIfNoCheckpoint) {
+        throw new IllegalStateException("No completed checkpoint available");
+    }
+    // ... reset master hooks and coordinators to empty state ...
+    return OptionalLong.empty();
+}
+
+this.forceFullSnapshot = latest.getProperties().isUnclaimed();
+
+final Map<OperatorID, OperatorState> operatorStates = extractOperatorStates(latest);
+StateAssignmentOperation stateAssignmentOperation =
+        new StateAssignmentOperation(
+                latest.getCheckpointID(), tasks, operatorStates, allowNonRestoredState, ...);
+stateAssignmentOperation.assignStates();
+```
+
+`isUnclaimed()` 决定 `forceFullSnapshot`——从"无人认领"的 checkpoint 恢复后，下一次必须做全量快照，避免增量快照的 delta 链建立在错误的基线上。
+
+> [!NOTE]
+> `JobResultStore`（`flink-runtime/.../highavailability/`）用 `dirty` / `clean` 两态记录全局终止作业的结果：dirty 表示清理未完成。选主时先查它，防止一个已经完成的作业在 HA 切换后被重新拉起（详见 [JobManager](/docs/CS/Framework/Flink/JobManager.md) 的 Leadership 章节）。
+
 > [!WARNING]
 > 旧资料常说 `StateBackend` / `SubtaskCheckpointCoordinatorImpl` 在 `flink-streaming-java` 模块。2.3 源码树里这两个类都在 **`flink-runtime`**（`org.apache.flink.streaming.runtime.tasks` 包名未变，但模块归属变了）。查源码时按类找，不要按旧模块路径找。
 
@@ -401,6 +516,9 @@ public CheckpointBarrier asUnaligned() {
 - **为什么用数据流里的 barrier 而不是独立控制信号**：barrier 与记录同序传播，天然携带"哪些数据属于快照前/后"的分界信息；独立的 RPC 无法表达这个顺序关系。
 - **为什么 ack 与 commit 分两阶段**：外部 sink 的事务要等全局快照成功后才能提交，否则恢复时出现"状态回到了旧值但事务已提交"的裂脑。
 - **为什么 shared state 在 ack 判断前注册**：迟到 ack 里的状态句柄若不被登记，会在 task 仍引用时被清理；先注册、后按 checkpoint 淘汰，是更安全的生命周期顺序。
+- **为什么 failover 按 region 而非固定粒度**：pipelined region 恰好是"互相背压、数据不可独立重放"的最小边界；只重启失败 region 及其上下游受影响 region，比 restart-all 省时间，又不会破坏 exactly-once。
+- **为什么 checkpoint 调度器要等所有 task RUNNING**：恢复中的 task 状态还在装载，此时触发快照会把不完整的状态写进 completed store；`ExecutionTrackingCheckpointCoordinatorDeActivator` 用双条件闸门把这件事挡住。
+- **为什么 unclaimed checkpoint 触发 forceFullSnapshot**：它的 delta 基准没有被任何成功的作业认领，继续做增量会让新作业的状态链挂在不可靠的历史上；强制全量是以一次快照成本换恢复正确性。
 
 ## Links
 
@@ -420,3 +538,7 @@ public CheckpointBarrier asUnaligned() {
 6. [Flink 2.3.0 Source: SubtaskCheckpointCoordinatorImpl.java](https://github.com/apache/flink/blob/release-2.3.0/flink-runtime/src/main/java/org/apache/flink/streaming/runtime/tasks/SubtaskCheckpointCoordinatorImpl.java)
 7. [Flink 2.3.0 Source: CheckpointBarrier.java](https://github.com/apache/flink/blob/release-2.3.0/flink-runtime/src/main/java/org/apache/flink/runtime/io/network/api/CheckpointBarrier.java)
 8. [FLIP-547: Support checkpoint during recovery](https://cwiki.apache.org/confluence/spaces/FLINK/pages/384895569/FLIP-547+Support+checkpoint+during+recovery)
+9. [Flink 2.3.0 Source: FailoverStrategy.java](https://github.com/apache/flink/blob/release-2.3.0/flink-runtime/src/main/java/org/apache/flink/runtime/executiongraph/failover/FailoverStrategy.java)
+10. [Flink 2.3.0 Source: RestartPipelinedRegionFailoverStrategy.java](https://github.com/apache/flink/blob/release-2.3.0/flink-runtime/src/main/java/org/apache/flink/runtime/executiongraph/failover/RestartPipelinedRegionFailoverStrategy.java)
+11. [Flink 2.3.0 Source: ExecutionTrackingCheckpointCoordinatorDeActivator.java](https://github.com/apache/flink/blob/release-2.3.0/flink-runtime/src/main/java/org/apache/flink/runtime/checkpoint/ExecutionTrackingCheckpointCoordinatorDeActivator.java)
+12. [Flink 2.3.0 Source: JobResultStore.java](https://github.com/apache/flink/blob/release-2.3.0/flink-runtime/src/main/java/org/apache/flink/runtime/highavailability/JobResultStore.java)
