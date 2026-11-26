@@ -160,6 +160,7 @@ export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhi
 - [Extensions：扩展体系](/docs/CS/AI/LLM/Agent/Product/Pi/Extensions.md)
 - [Providers：Provider 与模型目录](/docs/CS/AI/LLM/Agent/Product/Pi/Providers.md)
 - [Tools：工具系统](/docs/CS/AI/LLM/Agent/Product/Pi/Tools.md)
+- [TUI：终端渲染机制](/docs/CS/AI/LLM/Agent/Product/Pi/TUI.md)
 
 ## References
 

@@ -200,6 +200,7 @@ daemon 生命周期**绑定于 SSH 会话**：会话断开，远端进程即退�
 - [Tools：工具系统](/docs/CS/AI/LLM/Agent/Product/Pi/Tools.md)
 - [Durable：持久化 Agent 框架](/docs/CS/AI/LLM/Agent/Product/Pi/Durable.md)
 - [CodeMode：codemode 实现机制](/docs/CS/AI/LLM/Agent/Product/Pi/CodeMode.md)
+- [Chord：跨进程对象运行时](/docs/CS/AI/LLM/Agent/Product/Pi/Chord.md)
 
 ## References
 

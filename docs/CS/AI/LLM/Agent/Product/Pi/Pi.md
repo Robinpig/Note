@@ -49,12 +49,12 @@ Pi 的运行时正是 [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md)（Loop / To
 
 | 包 | npm 名 | 职责 | 内部依赖 |
 | :--- | :--- | :--- | :--- |
-| `telemetry` | @earendil-works/pi-telemetry | 厂商中立的遥测契约与类型化 schema | — |
-| `schema` | @earendil-works/pi-schema | 无 eval 的 JSON Schema 校验（drafts 2020-12/7 编译成闭包） | — |
-| `chord` | @earendil-works/chord | 应用组合运行时：Context、Service、RPC、facet 打包 | — |
-| `tui` | @earendil-works/pi-tui | 终端 UI：差分渲染、布局、编辑器、markdown、按键 | — |
-| `codemode` | @earendil-works/pi-codemode | 沙箱化 JavaScript 执行（QuickJS WASM；脚本经 `tools.<name>()` 调注入工具） | — |
-| `mcp` | @earendil-works/pi-mcp | 自研 JSON-RPC 的 Model Context Protocol 客户端（不依赖官方 SDK） | — |
+| `telemetry` | @earendil-works/pi-telemetry | 厂商中立的遥测契约与类型化 schema（无 exporter / 无全局当前 span）— 见 [Telemetry](/docs/CS/AI/LLM/Agent/Product/Pi/Telemetry.md) | — |
+| `schema` | @earendil-works/pi-schema | 无 eval 的 JSON Schema 校验（drafts 2020-12/7 编译成闭包）— 见 [Schema](/docs/CS/AI/LLM/Agent/Product/Pi/Schema.md) | — |
+| `chord` | @earendil-works/chord | 跨进程对象 + 插件热替换的应用组合运行时（**非 service/rpc 分层**）— 见 [Chord](/docs/CS/AI/LLM/Agent/Product/Pi/Chord.md) | — |
+| `tui` | @earendil-works/pi-tui | 终端 UI：行级差分渲染、布局缓存、输入缓冲、编辑器 — 见 [TUI](/docs/CS/AI/LLM/Agent/Product/Pi/TUI.md) | — |
+| `codemode` | @earendil-works/pi-codemode | 沙箱化 JavaScript 执行（QuickJS WASM；脚本经 `tools.<name>()` 调注入工具）— 见 [CodeMode](/docs/CS/AI/LLM/Agent/Product/Pi/CodeMode.md) | — |
+| `mcp` | @earendil-works/pi-mcp | 自研 JSON-RPC 的 Model Context Protocol 客户端（不依赖官方 SDK）— 见 [MCP](/docs/CS/AI/LLM/Agent/Product/Pi/MCP.md) | — |
 | `ai` | @earendil-works/pi-ai | 统一多 Provider LLM API、模型发现、鉴权 | telemetry, schema |
 | `agent` | @earendil-works/pi-agent-core | 通用 Agent 核心：传输抽象、状态管理（不含持久化 Harness） | ai |
 | `durable` | @earendil-works/pi-durable | 持久化对话/任务/文档运行时，含实验性 Harness 与多后端存储 | chord, ai |
@@ -178,6 +178,8 @@ export const DEFAULT_COMPACTION_SETTINGS: CompactionSettings = {
 
 **信任与隔离**在 [Security](/docs/CS/AI/LLM/Agent/Product/Pi/Security.md)：Pi 无内置权限系统，project trust 管加载（决策链七级、`trust.json`、非交互模式行为），隔离靠四种外部环境（Docker 两类 / OpenShell / Gondolin）。
 
+**五个基础能力包**（本次补齐，均在枢纽 Packages 表挂入口）：[Chord](/docs/CS/AI/LLM/Agent/Product/Pi/Chord.md) 是跨进程对象 + 插件热替换运行时、`pi-durable` 的底座——注意它没有 `service/` / `rpc/` 目录，facet 只声明不执行；[Schema](/docs/CS/AI/LLM/Agent/Product/Pi/Schema.md) 把 JSON Schema 编成闭包做到无 eval，是工具参数校验的落点（TypeBox 超集特性已失效）；[TUI](/docs/CS/AI/LLM/Agent/Product/Pi/TUI.md) 用行级字符串比较做差分渲染，变化滚出可视区即全量重绘；[MCP](/docs/CS/AI/LLM/Agent/Product/Pi/MCP.md) 自研 JSON-RPC + 四 transport，只有 OAuth 改编自官方 SDK；[Telemetry](/docs/CS/AI/LLM/Agent/Product/Pi/Telemetry.md) 是厂商中立契约 + 内存参考，schema 只做编译期类型、运行时零校验。
+
 ## Trade-offs
 
 - **上手快但需自己配置**：安装一条命令，但不像 [Claude Code](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/ClaudeCode.md) / [Codex](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md) 那样开箱带 Plan mode、子 agent、审批框——这些在 Pi 里要么装包要么写扩展。
@@ -206,6 +208,7 @@ export const DEFAULT_COMPACTION_SETTINGS: CompactionSettings = {
 - [Codex](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md) / [Claude Code](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/ClaudeCode.md) / [OpenCode](/docs/CS/AI/LLM/Agent/Product/OpenCode/OpenCode.md) — 同层产品对照
 - [MCP](/docs/CS/AI/LLM/Protocol/MCP.md) — Pi 内置 MCP 客户端的外部协议面
 - [AgentLoop](/docs/CS/AI/LLM/Agent/Product/Pi/AgentLoop.md) — agent 主循环原理专项
+- [Chord / Schema / TUI / MCP / Telemetry](/docs/CS/AI/LLM/Agent/Product/Pi/Chord.md) — 五个基础能力包的分册入口（从 Chord 互链可达其余四篇）
 
 ## References
 

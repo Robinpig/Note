@@ -188,6 +188,7 @@ docker run --rm -it -e ANTHROPIC_API_KEY -v "$PWD:/workspace" -v pi-agent-home:/
 - [Extensions：扩展体系](/docs/CS/AI/LLM/Agent/Product/Pi/Extensions.md)
 - [Approval 与沙箱（Codex）](/docs/CS/AI/LLM/Agent/Product/Codex/Approval.md)
 - [Permission 理论](/docs/CS/AI/LLM/Agent/Theory/Permission.md)
+- [MCP：客户端与 OAuth](/docs/CS/AI/LLM/Agent/Product/Pi/MCP.md)
 
 ## References
 

@@ -398,6 +398,7 @@ Note over A,B: realpath 不同（不同文件）则各自并行，不互锁
 - [Session：会话树](/docs/CS/AI/LLM/Agent/Product/Pi/Session.md)
 - [Interaction：交互侧](/docs/CS/AI/LLM/Agent/Product/Pi/Interaction.md)
 - [Durable：持久化 Agent 框架](/docs/CS/AI/LLM/Agent/Product/Pi/Durable.md)
+- [Schema：无 eval 参数校验](/docs/CS/AI/LLM/Agent/Product/Pi/Schema.md)
 
 ## References
 

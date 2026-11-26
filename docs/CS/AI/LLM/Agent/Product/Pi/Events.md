@@ -621,6 +621,7 @@ packages/coding-agent/src/core/extensions/runner.ts：
 - [Pi.md?id=architecture](/docs/CS/AI/LLM/Agent/Product/Pi/Pi.md?id=architecture)
 - [Context：上下文与压缩](/docs/CS/AI/LLM/Agent/Product/Pi/Context.md)
 - [Pi 枢纽](/docs/CS/AI/LLM/Agent/Product/Pi/Pi.md)
+- [TUI：终端渲染机制](/docs/CS/AI/LLM/Agent/Product/Pi/TUI.md)
 
 ## References
 

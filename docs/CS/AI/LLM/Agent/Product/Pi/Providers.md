@@ -503,6 +503,7 @@ export class ModelRegistry {
 - [Tools：工具系统](/docs/CS/AI/LLM/Agent/Product/Pi/Tools.md)
 - [Extensions：扩展与工具暴露](/docs/CS/AI/LLM/Agent/Product/Pi/Extensions.md)
 - [Events：事件流](/docs/CS/AI/LLM/Agent/Product/Pi/Events.md)
+- [MCP：客户端与 OAuth](/docs/CS/AI/LLM/Agent/Product/Pi/MCP.md)
 
 ## References
 
