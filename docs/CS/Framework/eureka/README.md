@@ -9,7 +9,7 @@ Eureka 是 Netflix 开源的**服务注册与发现（service registry / discove
 > [!NOTE]
 > **版本基线**：本子树所有源码事实以 Netflix/eureka **v1.10.19**（tag `v1.10.19`，2026-08-24 发布，`com.netflix.eureka:eureka-client` 的 1.x 线最新版）为准；Spring Cloud 侧事实以 **spring-cloud-netflix 5.0.3**（2026-10-22 GA，对应 Spring Boot 4.0.8）为准。需要注意的是**两个 2.0 完全不同**：`2.0.x`（2022-12 起）是把 Eureka 1 移植到 jakarta + Jersey 3 的版本，而 2015 年宣传的「Eureka 2.0 重写」早已废弃并归档为 `2.x-archive` 分支——旧文里「2.0 改 push / 读写分离」的说法指的是后者，**从未交付**，详见 [Eureka](/docs/CS/Framework/eureka/Eureka.md?id=版本线与两个-20)。
 
-建议阅读顺序：**[Eureka](/docs/CS/Framework/eureka/Eureka.md) 总览 → [Server](/docs/CS/Framework/eureka/Server.md) 与 [Client](/docs/CS/Framework/eureka/Client.md) 两端启动链路 → [registry](/docs/CS/Framework/eureka/registry.md) 理解写路径 → [cache](/docs/CS/Framework/eureka/cache.md) 理解为什么下线要几分钟才被感知 → [self_preservation](/docs/CS/Framework/eureka/self_preservation.md) → [replication](/docs/CS/Framework/eureka/replication.md) → 生产面 [config](/docs/CS/Framework/eureka/config.md) / [tuning](/docs/CS/Framework/eureka/tuning.md) / [troubleshooting](/docs/CS/Framework/eureka/troubleshooting.md)**。
+建议阅读顺序：**[Eureka](/docs/CS/Framework/eureka/Eureka.md) 总览 → [Server](/docs/CS/Framework/eureka/Server.md) 与 [Client](/docs/CS/Framework/eureka/Client.md) 两端启动链路 → [registry](/docs/CS/Framework/eureka/registry.md) 理解写路径 → [cache](/docs/CS/Framework/eureka/cache.md) 理解为什么下线要几分钟才被感知 → [self_preservation](/docs/CS/Framework/eureka/self_preservation.md) → [replication](/docs/CS/Framework/eureka/replication.md) → 生产面 [config](/docs/CS/Framework/eureka/config.md) / [tuning](/docs/CS/Framework/eureka/tuning.md) / [troubleshooting](/docs/CS/Framework/eureka/troubleshooting.md)**。想理解它为什么停在维护、结构性不足在哪，读 [Shortcomings](/docs/CS/Framework/eureka/shortcomings.md)。
 
 ```dot
 digraph Eureka {
@@ -43,6 +43,7 @@ digraph Eureka {
 ## Overview and Startup
 
 - [Eureka](/docs/CS/Framework/eureka/Eureka.md)：总纲。定位与 CAP 取舍、两方角色、核心时序（注册 / 续约 / 拉增量 / 下线）、默认时间常数、版本线、与 Nacos / ZooKeeper / Consul / etcd 的横向对照、迁移去向。
+- [Shortcomings](/docs/CS/Framework/eureka/shortcomings.md)：停止维护时间线与结构性不足分析。纯内存注册表、纯拉取感知时延、粗粒度自我保护、尽力而为复制、无租户模型、安全空白、fat client，逐条源码证据 + 后继方案对照。
 - [Server](/docs/CS/Framework/eureka/Server.md)：服务端启动与装配。`EurekaBootStrap`（war / ServletContextListener）与 Spring Cloud 的 `EurekaServerBootstrap` 两条初始化路径、`DefaultEurekaServerContext`、`PeerEurekaNodes` 动态刷新、`syncUp()` + `openForTraffic()`。
 - [Client](/docs/CS/Framework/eureka/Client.md)：客户端启动与生命周期。`DiscoveryClient` 构造、三个线程池、`initScheduledTasks()`、全量拉取与增量拉取、`InstanceInfoReplicator` 按需注册、重注册与优雅下线。
 

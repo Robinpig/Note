@@ -1,10 +1,20 @@
+# gRPC Streaming: Patterns, Flow Control and Cancellation
+
 ## Introduction
 
-流式是 gRPC 相对传统 RPC 最有价值的扩展。传统 RPC 里，客户端发起调用后必须等到服务端把结果集全部算完才能收到第一条数据——对大结果集或长时间任务，客户端在这段时间里完全空等。gRPC 借 HTTP/2 的流（stream）把这个约束拆掉了：请求和响应各自可以是单条消息，也可以是一条消息序列。
+流式是 gRPC 相对传统 RPC 最有价值的扩展：传统 RPC 必须等服务方把结果集全部算完才能收到第一条数据，而 gRPC 借 HTTP/2 的 stream 把请求和响应各自拆成"单条消息"或"消息序列"。一次 RPC 的完整帧序列见 [Architecture](/docs/CS/Framework/gRPC/Architecture.md)；本文以 grpc-java 1.75.0 为准，讲清四种模式的帧序列、背压与取消语义。
+
+> 版本基线：grpc-java 1.75.0（commit 3abc0e6）。默认值均取自该 tag 源码；不是 grpc-go 的数字。
+
+三个反直觉点：
+
+- **双向流两个方向独立**：请求流与响应流各自用自己的 END_STREAM 结束，客户端可以没发完请求就收到响应。
+- **初始窗口 1 MiB（Java）**：不是 HTTP/2 规范默认 65535 字节，也不是 grpc-go 的数字；且默认开 BDP 自动调优。
+- **客户端 keepalive 默认关闭**：长连接场景必须显式开启，否则空闲连接会被中间设备回收。
 
 ## Four Communication Patterns
 
-四种模式只是「请求是否成流」×「响应是否成流」的笛卡尔积，IDL 里的差别仅在于是否加 `stream` 关键字：
+四种模式是「请求是否成流」×「响应是否成流」的笛卡尔积，IDL 差别仅在 `stream` 关键字：
 
 ```protobuf
 service RouteGuide {
@@ -17,89 +27,70 @@ service RouteGuide {
 
 | 模式 | 请求 | 响应 | 典型场景 |
 | :--- | :--- | :--- | :--- |
-| Unary | 单条 | 单条 | 普通请求-响应，绝大多数调用 |
-| Server streaming | 单条 | 流 | 订阅推送、大结果集分批下发、进度回报 |
-| Client streaming | 流 | 单条 | 大文件分块上传、批量写入、流式聚合 |
+| Unary | 单条 | 单条 | 普通请求-响应 |
+| Server streaming | 单条 | 流 | 订阅推送、大结果集分批下发 |
+| Client streaming | 流 | 单条 | 大文件上传、批量写入、流式聚合 |
 | Bidirectional | 流 | 流 | 实时双向通信、代理隧道、语音流 |
 
-双向流里，请求流与响应流**相互独立**：客户端可以在还没发完请求时就收到响应，两边各自的结束由各自的 END_STREAM 决定。这跟 HTTP/1.1 的请求-响应严格交替完全不同。
+`MethodDescriptor.MethodType` 在 stub 生成代码里确定类型（UNARY / SERVER_STREAMING / CLIENT_STREAMING / BIDI_STREAMING），它驱动 `ClientCallImpl.sendMessage` 的 flush 策略和 `ServerCallImpl.closeInternal` 的"OK 但无消息"校验。
 
-## Flow Control
+## Flow Control: Two Levels Plus request(n)
 
-背压由 HTTP/2 的流控承担，gRPC 不另造一套。核心是两级窗口：
+背压由三层叠加，gRPC 不另造传输层流控：
 
-- **Stream 级**：单个 RPC 的窗口，防止一条流吃满缓冲区。
-- **Connection 级**：整条 TCP 连接的窗口，防止一条连接拖垮对端。
+1. **HTTP/2 stream 级窗口**：单 RPC，防止一条流吃满缓冲。
+2. **HTTP/2 connection 级窗口**：整条 TCP 连接，防止一条连接拖垮对端。
+3. **应用层消息计数**：`request(n)` 控制投递多少条消息给应用。
 
-发送方每发出一字节就扣减窗口，接收方消费后发 `WINDOW_UPDATE` 归还额度；窗口耗尽时发送方必须停等。初始窗口取 HTTP/2 规范默认值 **65535 字节**。
-
-在这个基础上，gRPC 实现（Go / C++）还做了 **BDP 动态窗口**：周期性发送 BDP ping 测量带宽延迟积（Bandwidth-Delay Product），据此上调流控窗口。这一层不是 HTTP/2 规范内容，而是 gRPC 的性能优化——长肥管道（高带宽 × 高延迟）场景下，固定 64 KiB 窗口会成为吞吐瓶颈，动态窗口能让窗口跟链路容量匹配。
+Java Netty 的初始窗口是 1 MiB（`NettyChannelBuilder.DEFAULT_FLOW_CONTROL_WINDOW = 1024*1024`），并默认开启 BDP（带宽延迟积）自动调优——窗口随链路容量动态上调，上限 8 MiB。注意两个设置入口语义相反：`initialFlowControlWindow()` 开启调优、`flowControlWindow()` 关闭调优（详见 [FlowControl](/docs/CS/Framework/gRPC/FlowControl.md)）。
 
 > [!WARNING]
->
-> 规范里"建议 8 KiB"与实际默认值并不一致，别照抄规范数值去判断线上行为。以 grpc-go v1.84.0 `internal/transport/defaults.go` 实测，头部列表大小默认是 **16 MiB**（`defaultClientMaxHeaderListSize` / `defaultServerMaxHeaderListSize`），而 `upcomingDefaultHeaderListSize = 8 << 10`（8 KiB）只是"计划中的默认值"——说明官方准备收紧，但当前版本尚未生效。
+> 早期笔记写"初始窗口 65535 字节（HTTP/2 默认）"是照抄规范的错误。实测 grpc-java 1.75.0 是 **1 MiB + BDP 调优**；grpc-go 的 header 上限是 16 MiB 而 Java 是 8 KiB——跨语言对照务必看实现源码，别抄规范数值。
 
 ## Timeout and Cancellation
 
-超时通过请求头的 `grpc-timeout` 传递，格式是最多 8 位的十进制正整数加单位：
-
-| 单位 | 字符 | 单位 | 字符 |
-| :--- | :--- | :--- | :--- |
-| Hour | `H` | Millisecond | `m` |
-| Minute | `M` | Microsecond | `u` |
-| Second | `S` | Nanosecond | `n` |
-
-注意大小写敏感：`M` 是分钟、`m` 是毫秒，写错会让超时差六个数量级。
+超时通过 `grpc-timeout` 传递，编码规则是"贪心精度"（`2s → 2000000u`），见 [ContextDeadline](/docs/CS/Framework/gRPC/ContextDeadline.md)。单位大小写敏感：`M` 分钟、`m` 毫秒、`S` 秒、`n` 纳秒、`u` 微秒、`H` 小时。
 
 几个语义要点：
 
-- deadline 是**绝对值**，`grpc-timeout` 只是把它编码成相对值在线上传输；跨多跳调用时由每一跳重新计算，不是简单透传。
-- 省略 `grpc-timeout` 时，服务端应假定无限超时。客户端可以按部署要求自行下发默认最小超时。
-- 客户端取消会沿 HTTP/2 的 RST_STREAM 传播到服务端，服务端 handler 能从 context 观察到取消——这正是 [RPC](/docs/CS/Distributed/RPC/RPC.md) 里"孤儿（orphan）"问题的现代解答：框架提供了取消通道，但业务代码仍要主动检查。
+- deadline 是**绝对值**，`grpc-timeout` 只是相对编码；每跳重新计算，不是透传。
+- 客户端取消沿 RST_STREAM 传播到服务端；服务端 handler 从 Context 观察取消——但**业务代码要主动检查**，框架只提供通道。
+- 服务端 `ServerStreamCancellationListener` 只在 DEADLINE_EXCEEDED 时主动 `stream.cancel`，客户端取消已由 RST_STREAM 完成（见 [ServerCallChain](/docs/CS/Framework/gRPC/ServerCallChain.md)）。
 
-## Keepalive
+## Keepalive Defaults (grpc-java)
 
-keepalive 的默认配置常被误解。以 grpc-go v1.84.0 `internal/transport/defaults.go` 实测：
-
-| 参数 | 默认值 | 说明 |
+| 参数 | 默认值 | 源码常量 |
 | :--- | :--- | :--- |
-| `defaultClientKeepaliveTime` | `infinity` | **客户端 keepalive 默认关闭** |
-| `defaultClientKeepaliveTimeout` | 20s | ping 超时 |
-| `defaultServerKeepaliveTime` | 2h | 服务端 ping 间隔 |
-| `defaultServerKeepaliveTimeout` | 20s | ping 超时 |
-| `defaultKeepalivePolicyMinTime` | 5min | 服务端强制的最小 ping 间隔 |
-| `defaultMaxStreamsClient` | 100 | 客户端最大并发流 |
-| `defaultWriteQuota` | 64 KiB | 单流可调度的数据量 |
-| `maxWindowSize` | `math.MaxInt32` | 流控窗口上限 |
+| 客户端 keepalive 间隔 | 关闭（`Long.MAX_VALUE`） | `KEEPALIVE_TIME_NANOS_DISABLED` |
+| 客户端 ping 超时 | 20s | `DEFAULT_KEEPALIVE_TIMEOUT_NANOS` |
+| 服务端 keepalive 间隔 | 2h | `DEFAULT_SERVER_KEEPALIVE_TIME_NANOS` |
+| 服务端 ping 超时 | 20s | `DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS` |
 
-两点值得留意：一是客户端 keepalive **默认不开启**（`Time` 为 infinity），需要保持长连接活性时必须显式配置；二是服务端有 `defaultKeepalivePolicyMinTime` 兜底，ping 过于频繁的对端会被判违规并断开——`MaxConnectionIdle` / `MaxConnectionAge` / `MaxConnectionAgeGrace` 三者默认也都是 infinity，即默认不主动回收连接。
+客户端 keepalive 默认不开启；服务端有强制最小 ping 间隔策略，过于频繁的对端会被 GOAWAY。`MaxConnectionIdle` / `MaxConnectionAge` / `MaxConnectionAgeGrace` 默认也都是 infinity（不主动回收）。
 
-## Error Handling
+## Error Handling in Streams
 
-流上的错误一律走 trailer，不占用 HTTP 状态码：
+流上错误一律走 trailer，不占 HTTP 状态码：
 
-- `grpc-status`：状态码，十进制 ASCII 字符串、无前导零。
-- `grpc-message`：Unicode 错误描述，UTF-8 后再百分号编码。解码遇到非法序列时不得报错或丢弃，最坏情况保留原始百分号形式。
-- `grpc-status-details-bin`：仅当状态非 OK 时允许出现，携带 Base64 编码的 `google.rpc.Status`；其中的状态码不得与 `grpc-status` 冲突，消费方必须校验。
+- `grpc-status`：十进制 ASCII 状态码，无前导零。
+- `grpc-message`：UTF-8 后再百分号编码；解码遇非法序列不得报错，最坏保留原百分号形式。
+- `grpc-status-details-bin`：仅非 OK 允许，Base64 编码的 `google.rpc.Status`，内部码不得与 `grpc-status` 冲突。
 
-响应端有两种形态：正常路径是 Response-Headers + 消息 + Trailers；**Trailers-Only** 用于立即失败，把状态直接放进唯一的 HEADERS 帧，少一次往返。无论哪种，**状态必须出现在 Trailers 中**，即使状态码是 OK。
-
-规范还要求实现容忍坏部署：响应里出现非 200 的 HTTP 状态、非 gRPC content-type、或缺失 `grpc-status` 时，都必须合成一个状态上抛给应用层，而不是让调用挂死。
+响应两形态：正常路径 Response-Headers + 消息 + Trailers；Trailers-Only 用于立即失败。**状态必须出现在 Trailers 中，即使 OK。** 完整码表见 [Status](/docs/CS/Framework/gRPC/Status.md)。
 
 ## Links
 
-- [gRPC](/docs/CS/Framework/gRPC/gRPC.md) — 框架总览与版本基线
-- [gRPC Architecture](/docs/CS/Framework/gRPC/Architecture.md) — 帧映射、状态码与 codec
-- [gRPC Ecosystem](/docs/CS/Framework/gRPC/Ecosystem.md) — 拦截器与服务发现
-- [RPC](/docs/CS/Distributed/RPC/RPC.md) — 超时、孤儿与重复执行语义的概念源头
-- [Nginx gRPC](/docs/CS/CN/nginx/grpc.md) — 反向代理侧的 gRPC 配置与限制
+- [gRPC](/docs/CS/Framework/gRPC/gRPC.md) — 枢纽：架构与纠偏
+- [Framing](/docs/CS/Framework/gRPC/Framing.md) — 流消息如何定界
+- [ClientCallChain](/docs/CS/Framework/gRPC/ClientCallChain.md) — sendMessage 的 flush 差异
+- [FlowControl](/docs/CS/Framework/gRPC/FlowControl.md) — 窗口、BDP 与 request(n) 详解
+- [ContextDeadline](/docs/CS/Framework/gRPC/ContextDeadline.md) — 超时编码与取消传播
 - [HTTP](/docs/CS/CN/HTTP/HTTP.md) — HTTP/2 流与流控基础
 
 ## References
 
-1. [gRFC: gRPC over HTTP/2](https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md)
-2. [gRPC Core Concepts - RPC life cycle](https://grpc.io/docs/what-is-grpc/core-concepts/)
-3. [grpc-go internal/transport/defaults.go](https://github.com/grpc/grpc-go/blob/master/internal/transport/defaults.go)
-4. [grpc-go internal/transport/bdp_estimator.go](https://github.com/grpc/grpc-go/blob/master/internal/transport/bdp_estimator.go)
-5. [RFC 7540 §6.9 - WINDOW_UPDATE](https://datatracker.ietf.org/doc/rfc7540/)
-6. [gRFC A6: Client Retries](https://github.com/grpc/grpc/blob/master/doc/connection-backoff.md)
+- [grpc-java v1.75.0 NettyChannelBuilder.java](https://github.com/grpc/grpc-java/blob/v1.75.0/netty/src/main/java/io/grpc/netty/NettyChannelBuilder.java)
+- [grpc-java v1.75.0 GrpcUtil.java](https://github.com/grpc/grpc-java/blob/v1.75.0/core/src/main/java/io/grpc/internal/GrpcUtil.java)
+- [gRFC: gRPC over HTTP/2](https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md)
+- [gRPC Core Concepts - RPC life cycle](https://grpc.io/docs/what-is-grpc/core-concepts/)
+- [RFC 7540 §6.9 - WINDOW_UPDATE](https://datatracker.ietf.org/doc/rfc7540/)

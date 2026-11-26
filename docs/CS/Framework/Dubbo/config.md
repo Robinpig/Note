@@ -1,3 +1,5 @@
+# Dubbo Configuration: Sources, Precedence and Binding
+
 ## Introduction
 
 Dubbo 的配置体系是「多来源叠加 + 逐层覆盖」的模型：同一个配置项可能同时出现在 JVM 启动参数、环境变量、配置中心、Spring 配置文件、注解和 `dubbo.properties` 里，最终生效的是优先级最高的那一个来源。理清这个顺序，是排查「我明明配了却不生效」的唯一办法。
@@ -14,7 +16,7 @@ Dubbo 的配置体系是「多来源叠加 + 逐层覆盖」的模型：同一�
 配置源的装配顺序写在 `Environment` 里，源码注释本身就是权威答案：
 
 ```java
-// dubbo-common/.../common/config/Environment.java:186-201
+// dubbo-common/.../common/config/Environment.java
 // The sequence would be: SystemConfiguration -> EnvironmentConfiguration -> AppExternalConfiguration ->
 // ExternalConfiguration  -> AppConfiguration -> AbstractConfig -> PropertiesConfiguration
 Configuration instanceConfiguration = new ConfigConfigurationAdapter(config, prefix);
@@ -43,13 +45,13 @@ compositeConfiguration.addConfiguration(propertiesConfiguration);
 三个 `InmemoryConfiguration` 的命名也印证了配置中心两级结构的划分：
 
 ```java
-// Environment.java:87-89
+// Environment.java
 this.externalConfiguration    = new InmemoryConfiguration("ExternalConfig");
 this.appExternalConfiguration = new InmemoryConfiguration("AppExternalConfig");
 this.appConfiguration         = new InmemoryConfiguration("AppConfig");
 ```
 
-两个配置源的取数逻辑各有特点：`SystemConfiguration` 只读系统属性（`SystemConfiguration.java:27-28` 直接 `System.getProperty(key)`）；`EnvironmentConfiguration` 除了读环境变量，还会做多种 key 形式的归一化（`EnvironmentConfiguration.java:33-51`），这也是为什么 `dubbo.protocol.port` 与 `DUBBO_PROTOCOL_PORT` 都能被识别。
+两个配置源的取数逻辑各有特点：`SystemConfiguration` 只读系统属性（`SystemConfiguration.java` 直接 `System.getProperty(key)`）；`EnvironmentConfiguration` 除了读环境变量，还会做多种 key 形式的归一化（`EnvironmentConfiguration.java`），这也是为什么 `dubbo.protocol.port` 与 `DUBBO_PROTOCOL_PORT` 都能被识别。
 
 > [!TIP]
 > 生产上最实用的推论：想临时压掉配置中心下发的值做验证，用 `-D` 启动参数即可，它比配置中心优先；想固化一版默认值给所有环境，写 `dubbo.properties` 是一档兜底，但**任何注解 / API 的显式设置都会覆盖它**，不要用它来做「强制值」。
@@ -71,7 +73,7 @@ this.appConfiguration         = new InmemoryConfiguration("AppConfig");
 配置的管理者是 `ConfigManager`（应用级）与 `ModuleConfigManager`（模块级）：
 
 ```java
-// dubbo-common/.../config/context/ConfigManager.java:53
+// dubbo-common/.../config/context/ConfigManager.java
 public class ConfigManager extends AbstractConfigManager implements ApplicationExt {
 ```
 
@@ -84,37 +86,37 @@ public class ConfigManager extends AbstractConfigManager implements ApplicationE
 // ConfigManager.java（loadConfigs，节选）
 @Override
 public void loadConfigs() {
-    // application config has load before starting config center
-    // load dubbo.applications.xxx
+  // application config has load before starting config center
+  // load dubbo.applications.xxx
     loadConfigsOfTypeFromProps(ApplicationConfig.class);
 
-    // load dubbo.monitors.xxx
+  // load dubbo.monitors.xxx
     loadConfigsOfTypeFromProps(MonitorConfig.class);
 
-    // load dubbo.metrics.xxx
+  // load dubbo.metrics.xxx
     loadConfigsOfTypeFromProps(MetricsConfig.class);
 
-    // load dubbo.tracing.xxx
+  // load dubbo.tracing.xxx
     loadConfigsOfTypeFromProps(TracingConfig.class);
 
-    // load multiple config types:
-    // load dubbo.protocols.xxx
+  // load multiple config types:
+  // load dubbo.protocols.xxx
     loadConfigsOfTypeFromProps(ProtocolConfig.class);
 
-    // load dubbo.registries.xxx
+  // load dubbo.registries.xxx
     loadConfigsOfTypeFromProps(RegistryConfig.class);
 
-    // load dubbo.metadata-report.xxx
+  // load dubbo.metadata-report.xxx
     loadConfigsOfTypeFromProps(MetadataReportConfig.class);
 
-    // config centers has bean loaded before starting config center
-    // loadConfigsOfTypeFromProps(ConfigCenterConfig.class);
+  // config centers has bean loaded before starting config center
+  // loadConfigsOfTypeFromProps(ConfigCenterConfig.class);
 
     refreshAll();
 
     checkConfigs();
 
-    // set model name
+  // set model name
     if (StringUtils.isBlank(applicationModel.getModelName())) {
         applicationModel.setModelName(applicationModel.getApplicationName());
     }
@@ -127,7 +129,7 @@ public void loadConfigs() {
 // ConfigManager.java（refreshAll，节选）
 @Override
 public void refreshAll() {
-    // refresh all configs here
+  // refresh all configs here
     getApplication().ifPresent(ApplicationConfig::refresh);
     getMonitor().ifPresent(MonitorConfig::refresh);
     getMetrics().ifPresent(MetricsConfig::refresh);
@@ -148,30 +150,30 @@ public void refreshAll() {
 ```java
 // dubbo-config/dubbo-config-api/.../deploy/DefaultApplicationDeployer.java（startConfigCenter，节选）
 private void startConfigCenter() {
-    // load application config
+  // load application config
     configManager.loadConfigsOfTypeFromProps(ApplicationConfig.class);
 
-    // try set model name
+  // try set model name
     if (StringUtils.isBlank(applicationModel.getModelName())) {
         applicationModel.setModelName(applicationModel.tryGetApplicationName());
     }
 
-    // load config centers
+  // load config centers
     configManager.loadConfigsOfTypeFromProps(ConfigCenterConfig.class);
 
     useRegistryAsConfigCenterIfNecessary();
 
-    // check Config Center
+  // check Config Center
     Collection<ConfigCenterConfig> configCenters = configManager.getConfigCenters();
     ...
     if (CollectionUtils.isNotEmpty(configCenters)) {
         CompositeDynamicConfiguration compositeDynamicConfiguration = new CompositeDynamicConfiguration();
         for (ConfigCenterConfig configCenter : configCenters) {
-            // Pass config from ConfigCenterBean to environment
+  // Pass config from ConfigCenterBean to environment
             environment.updateExternalConfigMap(configCenter.getExternalConfiguration());
             environment.updateAppExternalConfigMap(configCenter.getAppExternalConfiguration());
 
-            // Fetch config from remote config center
+  // Fetch config from remote config center
             compositeDynamicConfiguration.addConfiguration(prepareEnvironment(configCenter));
         }
         environment.setDynamicConfiguration(compositeDynamicConfiguration);
@@ -190,7 +192,7 @@ private void startConfigCenter() {
 ```java
 // DefaultApplicationDeployer.java（useRegistryAsConfigCenterIfNecessary，节选）
 private void useRegistryAsConfigCenterIfNecessary() {
-    // we use the loading status of DynamicConfiguration to decide whether ConfigCenter has been initiated.
+  // we use the loading status of DynamicConfiguration to decide whether ConfigCenter has been initiated.
     if (environment.getDynamicConfiguration().isPresent()) {
         return;
     }
@@ -199,7 +201,7 @@ private void useRegistryAsConfigCenterIfNecessary() {
         return;
     }
 
-    // load registry
+  // load registry
     configManager.loadConfigsOfTypeFromProps(RegistryConfig.class);
 
     List<RegistryConfig> defaultRegistries = configManager.getDefaultRegistries();
@@ -271,12 +273,12 @@ private ConfigCenterConfig registryAsConfigCenter(RegistryConfig registryConfig)
 `dubbo.properties` 的默认文件名只有一个，**就是 classpath 根目录下的 `dubbo.properties`**：
 
 ```java
-// dubbo-common/.../constants/CommonConstants.java:64
+// dubbo-common/.../constants/CommonConstants.java
 String DEFAULT_DUBBO_PROPERTIES = "dubbo.properties";
 ```
 
 ```java
-// dubbo-common/.../utils/ConfigUtils.java:166-174
+// dubbo-common/.../utils/ConfigUtils.java
 String path = SystemPropertyConfigUtils.getSystemProperty(DUBBO_PROPERTIES_KEY);
 if (StringUtils.isEmpty(path)) {
     path = System.getenv(DUBBO_PROPERTIES_KEY);
@@ -287,10 +289,10 @@ if (StringUtils.isEmpty(path)) {
 return ConfigUtils.loadProperties(classLoaders, path, false, true);
 ```
 
-`ConfigUtils.loadProperties` 通过 `ClassLoaderResourceLoader.loadResources(fileName, ...)` 从 classpath 加载（`:240`、`:266`）。路径可以用 `dubbo.config.properties.file` 覆盖（系统属性或环境变量均可）。
+`ConfigUtils.loadProperties` 通过 `ClassLoaderResourceLoader.loadResources(fileName, ...)` 从 classpath 加载（、）。路径可以用 `dubbo.config.properties.file` 覆盖（系统属性或环境变量均可）。
 
 > [!WARNING]
-> **`classpath:/META-INF/dubbo/dubbo.properties` 并不是 Dubbo 的默认查找路径。** 这个路径字符串只出现在 `dubbo-spring-boot-*` 的测试用例 `@PropertySource` 里（如 `CompatibleDubboAutoConfigurationTest.java:44`），不构成框架行为。把配置文件放到 `META-INF/dubbo/` 下**不会被自动加载**，这是很常见的误配。
+> **`classpath:/META-INF/dubbo/dubbo.properties` 并不是 Dubbo 的默认查找路径。** 这个路径字符串只出现在 `dubbo-spring-boot-*` 的测试用例 `@PropertySource` 里（如 `CompatibleDubboAutoConfigurationTest.java`），不构成框架行为。把配置文件放到 `META-INF/dubbo/` 下**不会被自动加载**，这是很常见的误配。
 
 ## @Parameter Annotation and append* Concatenation
 
@@ -307,25 +309,25 @@ return ConfigUtils.loadProperties(classLoaders, path, false, true);
 | `attribute()` | `true` | `false` 时 `refresh()` / `getMetadata()` / `equals()` / `toString()` 忽略该字段 |
 | `append()` | `false` | `true` 时不覆盖而是逗号拼接并去重 |
 
-`appendParameters` 与 `appendAttributes` 都委托给 `appendParameters0(..., boolean asParameters)`（`AbstractConfig.java:182-271`）：
+`appendParameters` 与 `appendAttributes` 都委托给 `appendParameters0(..., boolean asParameters)`（`AbstractConfig.java`）：
 
-- `appendParameters(..., prefix)` → `asParameters = true`：遍历 getter，跳过 `@Parameter.excluded()` 的；key 优先取 `parameter.key()`，否则 `calculatePropertyFromGetter(name)`（getter 名 → 属性名）；`escaped()` 做 `URL.encode`；`append()` 把新值用 `","` 拼到已有值后并 `splitToSet` 去重（`AbstractConfig.java:231-238`）；`prefix` 非空时 key 变为 `prefix + "." + key`。
-- `appendAttributes(..., prefix)` → `asParameters = false`：只保留 `@Parameter.attribute() == true` 的字段，key 经 `StringUtils.convertToSplitName` 转成 **kebab-case**（如 `myField` → `my-field`，`:221-223`）。
-- 嵌套 getter（`isNestedGetter`）会**递归**下钻，前缀累加 `prefix + "." + fieldName`（`:261-265`）；`getParameters()` 这类 `Map` getter 的内容会被整体并入 URL（用户自定义 `<dubbo:parameter>` 即走此路，`:247-260`）。
+- `appendParameters(..., prefix)` → `asParameters = true`：遍历 getter，跳过 `@Parameter.excluded()` 的；key 优先取 `parameter.key()`，否则 `calculatePropertyFromGetter(name)`（getter 名 → 属性名）；`escaped()` 做 `URL.encode`；`append()` 把新值用 `","` 拼到已有值后并 `splitToSet` 去重（`AbstractConfig.java`）；`prefix` 非空时 key 变为 `prefix + "." + key`。
+- `appendAttributes(..., prefix)` → `asParameters = false`：只保留 `@Parameter.attribute() == true` 的字段，key 经 `StringUtils.convertToSplitName` 转成 **kebab-case**（如 `myField` → `my-field`）。
+- 嵌套 getter（`isNestedGetter`）会**递归**下钻，前缀累加 `prefix + "." + fieldName`；`getParameters()` 这类 `Map` getter 的内容会被整体并入 URL（用户自定义 `<dubbo:parameter>` 即走此路）。
 
 > [!TIP]
-> 这两个方法解释了「为什么有些字段出现在 URL、有些不出现」：`executes` / `actives` / `token` 等带 `@Parameter` 会进 URL；而纯 Java 对象字段（`returnType == Object.class`）会被跳过（`:200-202`）。排查「某个配置没传到对端」时，先看它有没有 `@Parameter`、有没有被 `excluded`。
+> 这两个方法解释了「为什么有些字段出现在 URL、有些不出现」：`executes` / `actives` / `token` 等带 `@Parameter` 会进 URL；而纯 Java 对象字段（`returnType == Object.class`）会被跳过。排查「某个配置没传到对端」时，先看它有没有 `@Parameter`、有没有被 `excluded`。
 
 ### refresh(): Overriding Fields from Configuration Sources
 
-`AbstractConfig.refresh()`（`AbstractConfig.java:718-737`）是「七档优先级真正落到字段上」的入口。`needRefresh` 为真时它走 `refreshWithPrefixes(getPrefixes(), getConfigMode())`：
+`AbstractConfig.refresh()`（`AbstractConfig.java`）是「七档优先级真正落到字段上」的入口。`needRefresh` 为真时它走 `refreshWithPrefixes(getPrefixes(), getConfigMode())`：
 
 ```java
-// dubbo-common/src/main/java/org/apache/dubbo/config/AbstractConfig.java:739-756
+// dubbo-common/src/main/java/org/apache/dubbo/config/AbstractConfig.java
 protected void refreshWithPrefixes(List<String> prefixes, ConfigMode configMode) {
     Environment environment = getScopeModel().modelEnvironment();
     List<Map<String, String>> configurationMaps = environment.getConfigurationMaps();
-    // 按优先级顺序找第一个命中子属性的 prefix
+  // 按优先级顺序找第一个命中子属性的 prefix
     String preferredPrefix = null;
     for (String prefix : prefixes) {
         if (ConfigurationUtils.hasSubProperties(configurationMaps, prefix)) {
@@ -344,7 +346,7 @@ protected void refreshWithPrefixes(List<String> prefixes, ConfigMode configMode)
 
 要点：
 
-- `getPrefixes()` 返回的优先级本身也分层，例如 `ServiceConfig` 含 `dubbo.service`、`dubbo.provider`、`dubbo.application`——同名属性按这个顺序挑**第一个命中**的 prefix 去覆盖（`AbstractConfig.java:744-753`）。这层「prefix 优先级」叠加在 `Environment` 的「七档来源优先级」之上，二者共同决定最终值。
+- `getPrefixes()` 返回的优先级本身也分层，例如 `ServiceConfig` 含 `dubbo.service`、`dubbo.provider`、`dubbo.application`——同名属性按这个顺序挑**第一个命中**的 prefix 去覆盖（`AbstractConfig.java`）。这层「prefix 优先级」叠加在 `Environment` 的「七档来源优先级」之上，二者共同决定最终值。
 - `environment.getConfigurationMaps()` 返回的正是 [Configuration Source and Priority](/docs/CS/Framework/Dubbo/config.md?id=configuration-source-and-priority) 里那七档（按高到低排列），所以 `-Ddubbo.service.xxx` 能覆盖 API `new ServiceConfig().setXxx()` 的原因就在这里：高优先级的 `SystemConfiguration` 子属性先被 `assignProperties` 写回字段。
 - `refresh()` 由 `ServiceConfig.export()` / `ReferenceConfig.get()` 在 `postProcessRefresh()` 钩子里触发（详见 [ServiceConfig](/docs/CS/Framework/Dubbo/ServiceConfig.md) 的 export 流程），确保暴露/引用前字段已被配置中心 / `-D` 刷新。
 
@@ -355,19 +357,19 @@ protected void refreshWithPrefixes(List<String> prefixes, ConfigMode configMode)
 七档优先级的真正落地在 `CompositeConfiguration.getInternalProperty()`，它是一个**短路遍历**，不是 map 合并：
 
 ```java
-// dubbo-common/src/main/java/org/apache/dubbo/common/config/CompositeConfiguration.java:78-95
+// dubbo-common/src/main/java/org/apache/dubbo/common/config/CompositeConfiguration.java
 public Object getInternalProperty(String key) {
-    for (Configuration config : configList) {          // :79 按加入顺序
+    for (Configuration config : configList) {  // 按加入顺序
         try {
-            Object value = config.getProperty(key);    // :81
+            Object value = config.getProperty(key);
             if (!ConfigurationUtils.isEmptyValue(value)) {
-                return value;                          // :83 命中即返回，后续源不再读
+                return value;  // 命中即返回，后续源不再读
             }
         } catch (Exception e) {
-            logger.error(...);                         // :85-92 单源异常被吞，继续下一档
+            logger.error(...);  // 单源异常被吞，继续下一档
         }
     }
-    return null;                                       // :94 全落空返回 null
+    return null;  // 全落空返回 null
 }
 ```
 
@@ -378,10 +380,10 @@ public Object getInternalProperty(String key) {
 - 单个配置源抛异常不会中断查找，只打一条 error 日志继续下一档。
 
 > [!WARNING]
-> `Environment.getConfiguration()`（`Environment.java:209-221`）只装了 **6 档**，**缺少 `AbstractConfig` 实例档**。运行期通过 `environment.getConfiguration()` 取 `dubbo.*` 时，注解 / API 显式设置的值不会出现在这里——只有 `getPrefixedConfiguration(config, prefix)` 与 `getConfigurationMaps(config, prefix)` 才是完整七档。
+> `Environment.getConfiguration()`（`Environment.java`）只装了 **6 档**，**缺少 `AbstractConfig` 实例档**。运行期通过 `environment.getConfiguration()` 取 `dubbo.*` 时，注解 / API 显式设置的值不会出现在这里——只有 `getPrefixedConfiguration(config, prefix)` 与 `getConfigurationMaps(config, prefix)` 才是完整七档。
 
 > [!TIP]
-> `addConfigurationFirst`（`CompositeConfiguration.java:69-71`）和 `dynamicIncluded`（`:41`）在 3.3.6 主代码里**没有任何调用点**，只有单元测试使用。想插队到 `SystemConfiguration` 之前，目前没有生产级入口。
+> `addConfigurationFirst`（`CompositeConfiguration.java`）和 `dynamicIncluded`在 3.3.6 主代码里**没有任何调用点**，只有单元测试使用。想插队到 `SystemConfiguration` 之前，目前没有生产级入口。
 
 ### ConfigValidator: Where Validation Actually Happens
 
@@ -391,13 +393,13 @@ public Object getInternalProperty(String key) {
 
 | 时机 | 调用链 | 校验对象 |
 | :--- | :--- | :--- |
-| 启动加载期 | `ConfigManager.loadConfigs()` → `refreshAll()` → `checkDefaultAndValidateConfigs()` → `getConfigValidator().validate(config)`（`AbstractConfigManager.java:626-630`） | `ApplicationConfig`、`ProtocolConfig`、`RegistryConfig`、`MonitorConfig`、`MetricsConfig`、`TracingConfig`、`SslConfig` |
-| refresh 尾部 | `AbstractConfig.refresh()` → `postProcessRefresh()` → `ConfigValidationUtils.validateServiceConfig(this)`（`ServiceConfig.java:542`） | `ServiceConfig` / `ReferenceConfig` 及其聚合的 registries、protocols |
+| 启动加载期 | `ConfigManager.loadConfigs()` → `refreshAll()` → `checkDefaultAndValidateConfigs()` → `getConfigValidator().validate(config)`（`AbstractConfigManager.java`） | `ApplicationConfig`、`ProtocolConfig`、`RegistryConfig`、`MonitorConfig`、`MetricsConfig`、`TracingConfig`、`SslConfig` |
+| refresh 尾部 | `AbstractConfig.refresh()` → `postProcessRefresh()` → `ConfigValidationUtils.validateServiceConfig(this)`（`ServiceConfig.java`） | `ServiceConfig` / `ReferenceConfig` 及其聚合的 registries、protocols |
 
 具体校验项（均在 `dubbo-config-api/.../config/utils/ConfigValidationUtils.java`）：
 
-- **`ApplicationConfig.name` 必填**：`isValid()` 就是 `!StringUtils.isEmpty(name)`（`ApplicationConfig.java:657-661`），不满足直接抛 `No application config found or it's not a valid config!`。
-- **端口**：`ProtocolConfig` **没有端口范围校验**（`validateProtocolConfig` 只 check name/host/contextpath/扩展点）。唯一的端口检查是 `ConfigManager` 里的**重复端口冲突**（`Duplicated port used by protocol configs`，`ConfigManager.java:340-353`）。**没有 `qos.port` 冲突检测**，qos 端口只是从 url parameter 取值。
+- **`ApplicationConfig.name` 必填**：`isValid()` 就是 `!StringUtils.isEmpty(name)`（`ApplicationConfig.java`），不满足直接抛 `No application config found or it's not a valid config!`。
+- **端口**：`ProtocolConfig` **没有端口范围校验**（`validateProtocolConfig` 只 check name/host/contextpath/扩展点）。唯一的端口检查是 `ConfigManager` 里的**重复端口冲突**（`Duplicated port used by protocol configs`，`ConfigManager.java`）。**没有 `qos.port` 冲突检测**，qos 端口只是从 url parameter 取值。
 - **`RegistryConfig.address`**：`validateRegistryConfig` **不校验 address**，空 address 会被兜成 `ANYHOST_VALUE`。真正的「必须有注册中心」报错在引用侧（`No such any registry to reference`）。
 - **格式校验**：`checkProperty(property, value, maxlength, pattern)`，长度上限 200，正则见 `PATTERN_NAME` 等。
 
@@ -408,34 +410,34 @@ public Object getInternalProperty(String key) {
 > `validateMetricsConfig` / `validateTracingConfig` / `validateSslConfig` / `validateConsumerConfig` 是**空实现**，这几类配置当前不做任何校验。
 
 > [!TIP]
-> `@Parameter.required()` **只在拼 URL 时生效**（`AbstractConfig.java:244-245`），`refresh()` / `assignProperties` 完全不校验它——`assignProperties` 只消费 `@Parameter.attribute()`（`AbstractConfig.java:799-802`）。所以一个字段标了 `required=true` 但没设值，启动不会失败，而是在 `appendParameters` 阶段抛 `xxx == null`。
+> `@Parameter.required()` **只在拼 URL 时生效**（`AbstractConfig.java`），`refresh()` / `assignProperties` 完全不校验它——`assignProperties` 只消费 `@Parameter.attribute()`（`AbstractConfig.java`）。所以一个字段标了 `required=true` 但没设值，启动不会失败，而是在 `appendParameters` 阶段抛 `xxx == null`。
 
 ## Environment Variable Key Normalization
 
-`EnvironmentConfiguration` 的归一化方向是「把 dubbo 的点分 key **反向大写化**去匹配 OS 环境变量」，共 5 次尝试（`EnvironmentConfiguration.java:33-51`）：
+`EnvironmentConfiguration` 的归一化方向是「把 dubbo 的点分 key **反向大写化**去匹配 OS 环境变量」，共 5 次尝试（`EnvironmentConfiguration.java`）：
 
 ```java
-String value = getenv().get(key);                                 // :37 原样直查
+String value = getenv().get(key);  // 原样直查
 if (value != null) return value;
-for (String candidateKey : generateCandidateEnvironmentKeys(key)) // :41 4 个候选
+for (String candidateKey : generateCandidateEnvironmentKeys(key)) // 4 个候选
     ...
-String osStyleKey = StringUtils.toOSStyleKey(key);                // :48 兜底
+String osStyleKey = StringUtils.toOSStyleKey(key);  // 兜底
 ```
 
-候选生成（`:53-74`，`LinkedHashSet` 去重保序）。以 `dubbo.protocol.port` 为例：
+候选生成（`LinkedHashSet` 去重保序）。以 `dubbo.protocol.port` 为例：
 
-| 次序 | 变换 | 结果 | 行号 |
-| :--- | :--- | :--- | :--- |
-| 1 | `.`→`_`、`-`→`_`、大写 | `DUBBO_PROTOCOL_PORT` | `:56-61` |
-| 2 | `.`→`_`、**删除** `-`、大写 | `DUBBO_PROTOCOL_PORT` | `:63-66` |
-| 3 | 仅 `.`→`_`、大写（保留 `-`） | `DUBBO_PROTOCOL_PORT` | `:68-69` |
-| 4 | 同 1 但**不**大写 | `dubbo_protocol_port` | `:71` |
-| 兜底 | `toOSStyleKey` | `DUBBO_PROTOCOL_PORT` | `:48` + `StringUtils.java:1059-1065` |
+| 次序 | 变换 | 结果 |
+| :--- | :--- | :--- |
+| 1 | `.`→`_`、`-`→`_`、大写 | `DUBBO_PROTOCOL_PORT` |
+| 2 | `.`→`_`、**删除** `-`、大写 | `DUBBO_PROTOCOL_PORT` |
+| 3 | 仅 `.`→`_`、大写（保留 `-`） | `DUBBO_PROTOCOL_PORT` |
+| 4 | 同 1 但**不**大写 | `dubbo_protocol_port` |
+| 兜底 | `toOSStyleKey` | `DUBBO_PROTOCOL_PORT` |
 
-兜底 `toOSStyleKey` 的规则（`StringUtils.java:1059-1065`）：`toUpperCase()` → 点转下划线 → **不以 `DUBBO_` 开头则补 `DUBBO_` 前缀**。它只处理点，**不处理连字符**。
+兜底 `toOSStyleKey` 的规则（`StringUtils.java`）：`toUpperCase()` → 点转下划线 → **不以 `DUBBO_` 开头则补 `DUBBO_` 前缀**。它只处理点，**不处理连字符**。
 
 > [!WARNING]
-> 候选 4 是**未大写**的 `dubbo_protocol_port`（`:71`），Linux 下小写环境变量同样能命中——「环境变量必须全大写」这个直觉在 Dubbo 里不成立。另外连字符有两条路径：候选 1/4 转成 `_`，候选 2 **直接删除**（`:63-65`），所以 `qos-enable` 同时匹配 `DUBBO_APPLICATION_QOS_ENABLE` 与 `DUBBO_APPLICATION_QOSENABLE`。
+> 候选 4 是**未大写**的 `dubbo_protocol_port`，Linux 下小写环境变量同样能命中——「环境变量必须全大写」这个直觉在 Dubbo 里不成立。另外连字符有两条路径：候选 1/4 转成 `_`，候选 2 **直接删除**，所以 `qos-enable` 同时匹配 `DUBBO_APPLICATION_QOS_ENABLE` 与 `DUBBO_APPLICATION_QOSENABLE`。
 
 > [!TIP]
 > 兜底会自动补 `DUBBO_` 前缀，因此 key `protocol.port` 也能命中 `DUBBO_PROTOCOL_PORT`；但反过来，自定义的非 `dubbo` 前缀配置在环境变量里必须写成 `DUBBO_<你的key>` 才能被兜底路径识别。

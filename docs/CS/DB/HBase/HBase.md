@@ -84,7 +84,7 @@ HBase 内核没有 SQL 与原生二级索引，这两件事由 Coprocessor（注
 
 ### Capability Matrix
 
-| | [HBase](/docs/CS/DB/HBase/HBase.mdase.md) | [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md) | [MongoDB](/docs/CS/DB/MongoDB/MongoDB.md) | [ClickHouse](/docs/CS/DB/ClickHouse.md) | [TiDB](/docs/CS/DB/TiDB/TiDB.md) |
+| | [HBase](/docs/CS/DB/HBase/HBase.md) | [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md) | [MongoDB](/docs/CS/DB/MongoDB/MongoDB.md) | [ClickHouse](/docs/CS/DB/ClickHouse.md) | [TiDB](/docs/CS/DB/TiDB/TiDB.md) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | 模型 | 宽表（列族）KV | 宽表（列族）KV | 文档 | 列式 OLAP | KV + SQL 关系模型 |
 | 一致性 | 单行强一致 | 可调一致性，默认最终 | 副本集可线性读 | 副本最终一致为主 | Raft 强一致 + MVCC |

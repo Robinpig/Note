@@ -1,29 +1,59 @@
+# Dubbo Registry: Service Discovery and Address Push
+
 ## Introduction
 
 Dubbo 提供的是一种 Client-Based 的服务发现机制，依赖第三方注册中心组件来协调服务发现过程，支持常用的注册中心如 Nacos、Consul、Zookeeper 等
 
 服务发现包含提供者、消费者和注册中心三个参与角色，其中，Dubbo 提供者实例注册 URL 地址到注册中心，注册中心负责对数据进行聚合，Dubbo 消费者从注册中心读取地址列表并订阅变更，每当地址列表发生变化，注册中心将最新的列表通知到所有订阅的消费者实例
 
-Dubbo 将注册中心抽象为以`Registry`为核心的注册中心组件，将这些组件引入到`Consumer`和`Provider`后，就可以执行注册中心的相关操作了，如注册服务、订阅服务变更事件和通知服务变更等
+```dot
+digraph RegistryDiscovery {
+  rankdir=TB;
+  node [shape=box, style=rounded];
+
+  subgraph cluster_provider {
+    label="Provider";
+    preg [label="注册应用名 + 实例\nServiceDiscovery.register"];
+    pmeta [label="上报接口元数据\nMetadataReport\nrevision"];
+  }
+
+  subgraph cluster_registry {
+    label="注册中心 + 元数据";
+    app [label="/services/<app>\n应用级实例列表"];
+    mapping [label="/dubbo/mapping/<iface>\n接口 → 应用名"];
+    meta [label="/dubbo/metadata/<app>/<rev>\n接口定义"];
+  }
+
+  subgraph cluster_consumer {
+    label="Consumer";
+    sub [label="订阅应用实例\nRegistryDirectory.notify"];
+    resolve [label="接口 → 应用名\nServiceNameMapping.get"];
+    merge [label="实例 + 元数据\n还原 URL → Invoker"];
+  }
+
+  preg -> app;
+  pmeta -> meta;
+  preg -> mapping [label="接口→应用名"];
+  app -> sub [label="地址推送"];
+  resolve -> mapping;
+  sub -> merge;
+  resolve -> merge;
+  meta -> merge [label="接口定义"];
+}
+```
+
+Dubbo 将注册中心抽象为以 `Registry` 为核心的注册中心组件，将这些组件引入到`Consumer`和`Provider`后，就可以执行注册中心的相关操作了，如注册服务、订阅服务变更事件和通知服务变更等
 
 - 首先，Dubbo 注册中心以应用粒度聚合实例数据，消费者按消费需求精准订阅，避免了大多数开源框架如 Istio、Spring Cloud 等全量订阅带来的性能瓶颈。
 - 其次，Dubbo SDK 在实现上对消费端地址列表处理过程做了大量优化，地址通知增加了异步、缓存、bitmap 等多种解析优化，避免了地址更新常出现的消费端进程资源波动。
 - 最后，在功能丰富度和易用性上，服务发现除了同步 ip、port 等端点基本信息到消费者外，Dubbo 还将服务端的 RPC/HTTP 服务及其配置的元数据信息同步到消费端，这让消费者、提供者两端的更细粒度的协作成为可能，Dubbo 基于此机制提供了很多差异化的治理能力
 
-Dubbo 目前支持的主流注册中心实现包括：
+Dubbo 3.3.6 **主仓库对接外部注册中心产品的实现只有 Nacos 与 ZooKeeper 两种**（`dubbo-registry-nacos` / `dubbo-registry-zookeeper`）；另外还有 `multicast`（组播发现，无中心节点）与 `multiple`（多注册中心聚合器）两个特殊模块。网上常见的「Redis / Consul / Etcd 也是内置实现」停留在 2.x——3.x 已把它们迁出到独立的 `org.apache.dubbo.extensions` 仓库。两个最容易记错的点：
 
-- Zookeeper
-- Nacos
-- Redis
-- Consul
-- Etcd
-- 更多实现
+- **应用级发现注册的是「应用名」，不是接口 URL**。接口 → 应用名的映射写进 `/dubbo/mapping/<interface>`，接口定义元数据写进元数据中心；消费者要先按接口查到应用名，再拉该应用的实例列表，最后用元数据还原出 Invoker（见上图）。
+- **同一份数据分两处存**：实例列表在注册中心（`/services`），接口元数据在元数据中心（`MetadataReport`），二者默认用同一个 Nacos/ZK 但不保证——这也是 3.x 比 2.x 多出 `Metadata` 专篇的原因（见 [Metadata](/docs/CS/Framework/Dubbo/Metadata.md)）。
 
-同时也支持 Kubernetes、Mesh 体系的服务发现
-
-Dubbo 扩展生态 还提供了 Consul、Eureka、Etcd 等注册中心扩展实现
-
-Dubbo 还支持在一个应用中指定多个注册中心，并将服务根据注册中心分组，这样做使得服务分组管理或服务迁移变得更容易
+同时也支持 Kubernetes、Mesh 体系的服务发现（能力边界见 [Mesh](/docs/CS/Framework/Dubbo/Mesh.md)）。Dubbo 还支持在一个应用中指定多个注册中心，并将服务根据注册中心分组，这样做使得服务分组管理或服务迁移变得更容易。
 
 对于部分注册中心类型（如 Zookeeper、Nacos 等），Dubbo 会默认同时将其用作元数据中心和配置中心（建议保持默认开启状态）
 
@@ -209,19 +239,19 @@ public interface Registry extends Node, RegistryService {
  */
 public abstract class AbstractRegistry implements Registry {
 
-    // URL address separator, used in file cache, service provider URL separation
+  // URL address separator, used in file cache, service provider URL separation
     private static final char URL_SEPARATOR = ' ';
-    // URL address separated regular expression for parsing the service provider URL list in the file cache
+  // URL address separated regular expression for parsing the service provider URL list in the file cache
     private static final String URL_SPLIT = "\\s+";
-    // Max times to retry to save properties to local cache file
+  // Max times to retry to save properties to local cache file
     private static final int MAX_RETRY_TIMES_SAVE_PROPERTIES = 3;
-    // Log output
+  // Log output
     protected final Logger logger = LoggerFactory.getLogger(getClass());
-    // Local disk cache, where the special key value.registries records the list of registry centers, and the others are the list of notified service providers
+  // Local disk cache, where the special key value.registries records the list of registry centers, and the others are the list of notified service providers
     private final Properties properties = new Properties();
-    // File cache timing writing
+  // File cache timing writing
     private final ExecutorService registryCacheExecutor = Executors.newFixedThreadPool(1, new NamedThreadFactory("DubboSaveRegistryCache", true));
-    // Is it synchronized to save the file
+  // Is it synchronized to save the file
     private boolean syncSaveFile;
     private final AtomicLong lastCacheChanged = new AtomicLong();
     private final AtomicInteger savePropertiesRetryTimes = new AtomicInteger();
@@ -229,13 +259,13 @@ public abstract class AbstractRegistry implements Registry {
     private final ConcurrentMap<URL, Set<NotifyListener>> subscribed = new ConcurrentHashMap<>();
     private final ConcurrentMap<URL, Map<String, List<URL>>> notified = new ConcurrentHashMap<>();
     private URL registryUrl;
-    // Local disk cache file
+  // Local disk cache file
     private File file;
 
     public AbstractRegistry(URL url) {
         setUrl(url);
         if (url.getParameter(REGISTRY__LOCAL_FILE_CACHE_ENABLED, true)) {
-            // Start file save timer
+  // Start file save timer
             syncSaveFile = url.getParameter(REGISTRY_FILESAVE_SYNC_KEY, false);
             String defaultFilename = System.getProperty("user.home") + "/.dubbo/dubbo-registry-" + url.getParameter(APPLICATION_KEY) + "-" + url.getAddress().replaceAll(":", "-") + ".cache";
             String filename = url.getParameter(FILE_KEY, defaultFilename);
@@ -249,8 +279,8 @@ public abstract class AbstractRegistry implements Registry {
                 }
             }
             this.file = file;
-            // When starting the subscription center,
-            // we need to read the local cache file for future Registry fault tolerance processing.
+  // When starting the subscription center,
+  // we need to read the local cache file for future Registry fault tolerance processing.
             loadProperties();
             notify(url.getBackupUrls());
         }
@@ -290,8 +320,8 @@ protected void notify(URL url, NotifyListener listener, List<URL> urls) {
     List<URL> categoryList = entry.getValue();
     categoryNotified.put(category, categoryList);
     listener.notify(categoryList);
-    // We will update our cache file after each notification.
-    // When our Registry has a subscribe failure due to network jitter, we can return at least the existing cache URL.
+  // We will update our cache file after each notification.
+  // When our Registry has a subscribe failure due to network jitter, we can return at least the existing cache URL.
     saveProperties(url);
   }
 }
@@ -312,9 +342,9 @@ protected void notify(URL url, NotifyListener listener, List<URL> urls) {
         try (InputStream in = Files.newInputStream(file.toPath())) {
             properties.load(in);
         } catch (IOException e) {
-            // 1-9 failed to read / save registry cache file.
+  // 1-9 failed to read / save registry cache file.
         } catch (Throwable e) {
-            // 1-9 failed to read / save registry cache file.
+  // 1-9 failed to read / save registry cache file.
         }
     }
 ```
@@ -371,7 +401,7 @@ public void doSaveProperties(long version) {
     if (file == null) {
         return;
     }
-    // Save
+  // Save
     try {
         File lockfile = new File(file.getAbsolutePath() + ".lock");
         if (!lockfile.exists()) {
@@ -383,7 +413,7 @@ public void doSaveProperties(long version) {
             if (lock == null) {
                 throw new IOException("Can not lock the registry cache file " + file.getAbsolutePath() + ", ignore and retry later, maybe multi java process use the file, please config: dubbo.registry.file=xxx.properties");
             }
-            // Save
+  // Save
             try {
                 if (!file.exists()) {
                     file.createNewFile();
@@ -433,14 +463,14 @@ public abstract class FailbackRegistry extends AbstractRegistry {
      */
     private final int retryPeriod;
 
-    // Timer for failure retry, regular check if there is a request for failure, and if there is, an unlimited retry
+  // Timer for failure retry, regular check if there is a request for failure, and if there is, an unlimited retry
     private final HashedWheelTimer retryTimer;
 
     public FailbackRegistry(URL url) {
         super(url);
         this.retryPeriod = url.getParameter(REGISTRY_RETRY_PERIOD_KEY, DEFAULT_REGISTRY_RETRY_PERIOD);
 
-        // since the retry task will not be very much. 128 ticks is enough.
+  // since the retry task will not be very much. 128 ticks is enough.
         retryTimer = new HashedWheelTimer(new NamedThreadFactory("DubboRegistryRetryTimer", true), retryPeriod, TimeUnit.MILLISECONDS, 128);
     }
 
@@ -470,7 +500,7 @@ public abstract class FailbackRegistry extends AbstractRegistry {
         FailedRegisteredTask newTask = new FailedRegisteredTask(url, this);
         oldOne = failedRegistered.putIfAbsent(url, newTask);
         if (oldOne == null) {
-            // never has a retry task. then start a new task for retry.
+  // never has a retry task. then start a new task for retry.
             retryTimer.newTimeout(newTask, retryPeriod, TimeUnit.MILLISECONDS);
         }
     }
@@ -490,7 +520,7 @@ public abstract class FailbackRegistry extends AbstractRegistry {
         FailedUnregisteredTask newTask = new FailedUnregisteredTask(url, this);
         oldOne = failedUnregistered.putIfAbsent(url, newTask);
         if (oldOne == null) {
-            // never has a retry task. then start a new task for retry.
+  // never has a retry task. then start a new task for retry.
             retryTimer.newTimeout(newTask, retryPeriod, TimeUnit.MILLISECONDS);
         }
     }
@@ -511,7 +541,7 @@ public abstract class FailbackRegistry extends AbstractRegistry {
         FailedSubscribedTask newTask = new FailedSubscribedTask(url, this, listener);
         oldOne = failedSubscribed.putIfAbsent(h, newTask);
         if (oldOne == null) {
-            // never has a retry task. then start a new task for retry.
+  // never has a retry task. then start a new task for retry.
             retryTimer.newTimeout(newTask, retryPeriod, TimeUnit.MILLISECONDS);
         }
     }
@@ -534,7 +564,7 @@ public abstract class FailbackRegistry extends AbstractRegistry {
         FailedUnsubscribedTask newTask = new FailedUnsubscribedTask(url, this, listener);
         oldOne = failedUnsubscribed.putIfAbsent(h, newTask);
         if (oldOne == null) {
-            // never has a retry task. then start a new task for retry.
+  // never has a retry task. then start a new task for retry.
             retryTimer.newTimeout(newTask, retryPeriod, TimeUnit.MILLISECONDS);
         }
     }
@@ -557,12 +587,12 @@ public abstract class FailbackRegistry extends AbstractRegistry {
         removeFailedRegistered(url);
         removeFailedUnregistered(url);
         try {
-            // Sending a registration request to the server side
+  // Sending a registration request to the server side
             doRegister(url);
         } catch (Exception e) {
             Throwable t = e;
 
-            // If the startup detection is opened, the Exception is thrown directly.
+  // If the startup detection is opened, the Exception is thrown directly.
             boolean check = getUrl().getParameter(Constants.CHECK_KEY, true)
                     && url.getParameter(Constants.CHECK_KEY, true)
                     && !CONSUMER_PROTOCOL.equals(url.getProtocol());
@@ -576,7 +606,7 @@ public abstract class FailbackRegistry extends AbstractRegistry {
                 logger.error("Failed to register " + url + ", waiting for retry, cause: " + t.getMessage(), t);
             }
 
-            // Record a failed registration request to a failed list, retry regularly
+  // Record a failed registration request to a failed list, retry regularly
             addFailedRegistered(url);
         }
     }
@@ -591,7 +621,7 @@ public abstract class FailbackRegistry extends AbstractRegistry {
         removeFailedRegistered(url);
         removeFailedUnregistered(url);
         try {
-            // Sending a registration request to the server side
+  // Sending a registration request to the server side
             doRegister(url);
         } catch (Exception e) {
             if (!(e instanceof SkipFailbackWrapperException)) {
@@ -606,12 +636,12 @@ public abstract class FailbackRegistry extends AbstractRegistry {
         removeFailedRegistered(url);
         removeFailedUnregistered(url);
         try {
-            // Sending a cancellation request to the server side
+  // Sending a cancellation request to the server side
             doUnregister(url);
         } catch (Exception e) {
             Throwable t = e;
 
-            // If the startup detection is opened, the Exception is thrown directly.
+  // If the startup detection is opened, the Exception is thrown directly.
             boolean check = getUrl().getParameter(Constants.CHECK_KEY, true)
                     && url.getParameter(Constants.CHECK_KEY, true)
                     && !CONSUMER_PROTOCOL.equals(url.getProtocol());
@@ -625,7 +655,7 @@ public abstract class FailbackRegistry extends AbstractRegistry {
                 logger.error("Failed to unregister " + url + ", waiting for retry, cause: " + t.getMessage(), t);
             }
 
-            // Record a failed registration request to a failed list, retry regularly
+  // Record a failed registration request to a failed list, retry regularly
             addFailedUnregistered(url);
         }
     }
@@ -636,7 +666,7 @@ public abstract class FailbackRegistry extends AbstractRegistry {
         removeFailedRegistered(url);
         removeFailedUnregistered(url);
         try {
-            // Sending a cancellation request to the server side
+  // Sending a cancellation request to the server side
             doUnregister(url);
         } catch (Exception e) {
             if (!(e instanceof SkipFailbackWrapperException)) {
@@ -650,7 +680,7 @@ public abstract class FailbackRegistry extends AbstractRegistry {
         super.subscribe(url, listener);
         removeFailedSubscribed(url, listener);
         try {
-            // Sending a subscription request to the server side
+  // Sending a subscription request to the server side
             doSubscribe(url, listener);
         } catch (Exception e) {
             Throwable t = e;
@@ -660,7 +690,7 @@ public abstract class FailbackRegistry extends AbstractRegistry {
                 notify(url, listener, urls);
                 logger.error("Failed to subscribe " + url + ", Using cached list: " + urls + " from cache file: " + getUrl().getParameter(FILE_KEY, System.getProperty("user.home") + "/dubbo-registry-" + url.getHost() + ".cache") + ", cause: " + t.getMessage(), t);
             } else {
-                // If the startup detection is opened, the Exception is thrown directly.
+  // If the startup detection is opened, the Exception is thrown directly.
                 boolean check = getUrl().getParameter(Constants.CHECK_KEY, true)
                         && url.getParameter(Constants.CHECK_KEY, true);
                 boolean skipFailback = t instanceof SkipFailbackWrapperException;
@@ -674,7 +704,7 @@ public abstract class FailbackRegistry extends AbstractRegistry {
                 }
             }
 
-            // Record a failed registration request to a failed list, retry regularly
+  // Record a failed registration request to a failed list, retry regularly
             addFailedSubscribed(url, listener);
         }
     }
@@ -684,12 +714,12 @@ public abstract class FailbackRegistry extends AbstractRegistry {
         super.unsubscribe(url, listener);
         removeFailedSubscribed(url, listener);
         try {
-            // Sending a canceling subscription request to the server side
+  // Sending a canceling subscription request to the server side
             doUnsubscribe(url, listener);
         } catch (Exception e) {
             Throwable t = e;
 
-            // If the startup detection is opened, the Exception is thrown directly.
+  // If the startup detection is opened, the Exception is thrown directly.
             boolean check = getUrl().getParameter(Constants.CHECK_KEY, true)
                     && url.getParameter(Constants.CHECK_KEY, true);
             boolean skipFailback = t instanceof SkipFailbackWrapperException;
@@ -702,7 +732,7 @@ public abstract class FailbackRegistry extends AbstractRegistry {
                 logger.error("Failed to unsubscribe " + url + ", waiting for retry, cause: " + t.getMessage(), t);
             }
 
-            // Record a failed registration request to a failed list, retry regularly
+  // Record a failed registration request to a failed list, retry regularly
             addFailedUnsubscribed(url, listener);
         }
     }
@@ -718,7 +748,7 @@ public abstract class FailbackRegistry extends AbstractRegistry {
         try {
             doNotify(url, listener, urls);
         } catch (Exception t) {
-            // Record a failed registration request to a failed list
+  // Record a failed registration request to a failed list
             logger.error("Failed to notify addresses for subscribe " + url + ", cause: " + t.getMessage(), t);
         }
     }
@@ -729,20 +759,20 @@ public abstract class FailbackRegistry extends AbstractRegistry {
 
     @Override
     protected void recover() throws Exception {
-        // register
+  // register
         Set<URL> recoverRegistered = new HashSet<URL>(getRegistered());
         if (!recoverRegistered.isEmpty()) {
             if (logger.isInfoEnabled()) {
                 logger.info("Recover register url " + recoverRegistered);
             }
             for (URL url : recoverRegistered) {
-                // remove fail registry or unRegistry task first.
+  // remove fail registry or unRegistry task first.
                 removeFailedRegistered(url);
                 removeFailedUnregistered(url);
                 addFailedRegistered(url);
             }
         }
-        // subscribe
+  // subscribe
         Map<URL, Set<NotifyListener>> recoverSubscribed = new HashMap<URL, Set<NotifyListener>>(getSubscribed());
         if (!recoverSubscribed.isEmpty()) {
             if (logger.isInfoEnabled()) {
@@ -751,7 +781,7 @@ public abstract class FailbackRegistry extends AbstractRegistry {
             for (Map.Entry<URL, Set<NotifyListener>> entry : recoverSubscribed.entrySet()) {
                 URL url = entry.getKey();
                 for (NotifyListener listener : entry.getValue()) {
-                    // First remove other tasks to ensure that addFailedSubscribed can succeed.
+  // First remove other tasks to ensure that addFailedSubscribed can succeed.
                     removeFailedSubscribed(url, listener);
                     addFailedSubscribed(url, listener);
                 }
@@ -765,7 +795,7 @@ public abstract class FailbackRegistry extends AbstractRegistry {
         retryTimer.stop();
     }
 
-    // ==== Template method ====
+  // ==== Template method ====
 
     public abstract void doRegister(URL url);
 
@@ -830,12 +860,12 @@ public void register(URL url) {
     removeFailedRegistered(url);
     removeFailedUnregistered(url);
     try {
-        // Sending a registration request to the server side
+  // Sending a registration request to the server side
         doRegister(url);
     } catch (Exception e) {
         Throwable t = e;
 
-        // If the startup detection is opened, the Exception is thrown directly.
+  // If the startup detection is opened, the Exception is thrown directly.
         boolean check = getUrl().getParameter(Constants.CHECK_KEY, true)
                 && url.getParameter(Constants.CHECK_KEY, true)
                 && !CONSUMER_PROTOCOL.equals(url.getProtocol());
@@ -847,7 +877,7 @@ public void register(URL url) {
             throw new IllegalStateException("Failed to register " + url + " to registry " + getUrl().getAddress() + ", cause: " + t.getMessage(), t);
         } else {}
 
-        // Record a failed registration request to a failed list, retry regularly
+  // Record a failed registration request to a failed list, retry regularly
         addFailedRegistered(url);
     }
 }
@@ -860,7 +890,7 @@ private void addFailedRegistered(URL url) {
     FailedRegisteredTask newTask = new FailedRegisteredTask(url, this);
     oldOne = failedRegistered.putIfAbsent(url, newTask);
     if (oldOne == null) {
-        // never has a retry task. then start a new task for retry.
+  // never has a retry task. then start a new task for retry.
         retryTimer.newTimeout(newTask, retryPeriod, TimeUnit.MILLISECONDS);
     }
 }
@@ -890,12 +920,12 @@ public void unregister(URL url) {
     removeFailedRegistered(url);
     removeFailedUnregistered(url);
     try {
-        // Sending a cancellation request to the server side
+  // Sending a cancellation request to the server side
         doUnregister(url);
     } catch (Exception e) {
         Throwable t = e;
 
-        // If the startup detection is opened, the Exception is thrown directly.
+  // If the startup detection is opened, the Exception is thrown directly.
         boolean check = getUrl().getParameter(Constants.CHECK_KEY, true)
                 && url.getParameter(Constants.CHECK_KEY, true)
                 && !CONSUMER_PROTOCOL.equals(url.getProtocol());
@@ -907,7 +937,7 @@ public void unregister(URL url) {
             throw new IllegalStateException("Failed to unregister " + url + " to registry " + getUrl().getAddress() + ", cause: " + t.getMessage(), t);
         } else {}
 
-        // Record a failed registration request to a failed list, retry regularly
+  // Record a failed registration request to a failed list, retry regularly
         addFailedUnregistered(url);
     }
 }
@@ -920,7 +950,7 @@ private void addFailedUnregistered(URL url) {
     FailedUnregisteredTask newTask = new FailedUnregisteredTask(url, this);
     oldOne = failedUnregistered.putIfAbsent(url, newTask);
     if (oldOne == null) {
-        // never has a retry task. then start a new task for retry.
+  // never has a retry task. then start a new task for retry.
         retryTimer.newTimeout(newTask, retryPeriod, TimeUnit.MILLISECONDS);
     }
 }
@@ -950,7 +980,7 @@ public void subscribe(URL url, NotifyListener listener) {
     super.subscribe(url, listener);
     removeFailedSubscribed(url, listener);
     try {
-        // Sending a subscription request to the server side
+  // Sending a subscription request to the server side
         doSubscribe(url, listener);
     } catch (Exception e) {
         Throwable t = e;
@@ -959,7 +989,7 @@ public void subscribe(URL url, NotifyListener listener) {
         if (CollectionUtils.isNotEmpty(urls)) {
             notify(url, listener, urls);
         } else {
-            // If the startup detection is opened, the Exception is thrown directly.
+  // If the startup detection is opened, the Exception is thrown directly.
             boolean check = getUrl().getParameter(Constants.CHECK_KEY, true)
                     && url.getParameter(Constants.CHECK_KEY, true);
             boolean skipFailback = t instanceof SkipFailbackWrapperException;
@@ -971,7 +1001,7 @@ public void subscribe(URL url, NotifyListener listener) {
             } else {}
         }
 
-        // Record a failed registration request to a failed list, retry regularly
+  // Record a failed registration request to a failed list, retry regularly
         addFailedSubscribed(url, listener);
     }
 }
@@ -1000,12 +1030,12 @@ public void unsubscribe(URL url, NotifyListener listener) {
     super.unsubscribe(url, listener);
     removeFailedSubscribed(url, listener);
     try {
-        // Sending a canceling subscription request to the server side
+  // Sending a canceling subscription request to the server side
         doUnsubscribe(url, listener);
     } catch (Exception e) {
         Throwable t = e;
 
-        // If the startup detection is opened, the Exception is thrown directly.
+  // If the startup detection is opened, the Exception is thrown directly.
         boolean check = getUrl().getParameter(Constants.CHECK_KEY, true)
                 && url.getParameter(Constants.CHECK_KEY, true);
         boolean skipFailback = t instanceof SkipFailbackWrapperException;
@@ -1016,7 +1046,7 @@ public void unsubscribe(URL url, NotifyListener listener) {
             throw new IllegalStateException("Failed to unsubscribe " + url + " to registry " + getUrl().getAddress() + ", cause: " + t.getMessage(), t);
         } else {}
 
-        // Record a failed registration request to a failed list, retry regularly
+  // Record a failed registration request to a failed list, retry regularly
         addFailedUnsubscribed(url, listener);
     }
 }
@@ -1054,7 +1084,7 @@ public class NacosRegistryFactory extends AbstractRegistryFactory {
         String namespace = url.getParameter(CONFIG_NAMESPACE_KEY);
         url = URL.valueOf(url.toServiceStringWithoutResolving());
         if (StringUtils.isNotEmpty(namespace) && !CommonConstants.DUBBO.equals(namespace)) {
-            // ignore "dubbo" namespace, make the behavior equivalent to configcenter
+  // ignore "dubbo" namespace, make the behavior equivalent to configcenter
             url = url.addParameter(CONFIG_NAMESPACE_KEY, namespace);
         }
         return url.toFullString();
@@ -1064,7 +1094,7 @@ public class NacosRegistryFactory extends AbstractRegistryFactory {
     protected Registry createRegistry(URL url) {
         URL nacosURL = url;
         if (CommonConstants.DUBBO.equals(url.getParameter(CONFIG_NAMESPACE_KEY))) {
-            // ignore "dubbo" namespace, make the behavior equivalent to configcenter
+  // ignore "dubbo" namespace, make the behavior equivalent to configcenter
             nacosURL = url.removeParameter(CONFIG_NAMESPACE_KEY);
         }
         return new NacosRegistry(nacosURL, createNamingService(nacosURL));
@@ -1160,7 +1190,7 @@ public class ZookeeperRegistry extends FailbackRegistry {
 
     private final ZookeeperClient zkClient;
 
-  	// 1. get ZkClient 2. add StateListener 
+  // 1. get ZkClient 2. add StateListener 
     public ZookeeperRegistry(URL url, ZookeeperTransporter zookeeperTransporter) {
         super(url);
         if (url.isAnyHost()) {
@@ -1285,7 +1315,7 @@ public void doSubscribe(final URL url, final NotifyListener listener) {
                 }
             }
             notify(url, listener, urls);
-            // tells the listener to run only after the sync notification of main thread finishes.
+  // tells the listener to run only after the sync notification of main thread finishes.
             latch.countDown();
         }
     } catch (Throwable e) {
@@ -1406,7 +1436,7 @@ private List<URL> toUrlsWithEmpty(URL consumer, String path, List<String> provid
  * re-register watcher is only a side effect and is not mandate.
  */
 private void fetchLatestAddresses() {
-    // subscribe
+  // subscribe
     Map<URL, Set<NotifyListener>> recoverSubscribed = new HashMap<URL, Set<NotifyListener>>(getSubscribed());
     if (!recoverSubscribed.isEmpty()) {
         if (logger.isInfoEnabled()) {
@@ -1647,7 +1677,7 @@ private class Notifier extends Thread {
                             }
                         } catch (Throwable t) { // Retry another server
                             logger.warn("");
-                            // If you only have a single redis, you need to take a rest to avoid overtaking a lot of CPU resources
+  // If you only have a single redis, you need to take a rest to avoid overtaking a lot of CPU resources
                             sleep(reconnectPeriod);
                         }
                     } catch (Throwable t) {
@@ -1660,7 +1690,7 @@ private class Notifier extends Thread {
         }
     }
 
-  	// running = false && redisClient.disconnect();
+  // running = false && redisClient.disconnect();
     public void shutdown() {...}
 
 }
@@ -1795,15 +1825,15 @@ Connecting the registry needs to support the contract:
 // AbstractRegistryFactory. (SPI, Singleton, ThreadSafe)
 public abstract class AbstractRegistryFactory implements RegistryFactory {
 
-    // The lock for the acquisition process of the registry
+  // The lock for the acquisition process of the registry
     protected static final ReentrantLock LOCK = new ReentrantLock();
 
-    // Registry Collection Map<RegistryAddress, Registry>
+  // Registry Collection Map<RegistryAddress, Registry>
     protected static final Map<String, Registry> REGISTRIES = new HashMap<>();
 
     private static final AtomicBoolean destroyed = new AtomicBoolean(false);
 
-    // Get all registries
+  // Get all registries
     public static Collection<Registry> getRegistries() {
         return Collections.unmodifiableCollection(new LinkedList<>(REGISTRIES.values()));
     }
@@ -1812,7 +1842,7 @@ public abstract class AbstractRegistryFactory implements RegistryFactory {
         return REGISTRIES.get(key);
     }
 
-    // get getServiceDiscovery from REGISTRIES & instanceof ServiceDiscoveryRegistry
+  // get getServiceDiscovery from REGISTRIES & instanceof ServiceDiscoveryRegistry
     public static List<ServiceDiscovery> getServiceDiscoveries() {
         return AbstractRegistryFactory.getRegistries()
                 .stream()
@@ -1841,11 +1871,11 @@ public abstract class AbstractRegistryFactory implements RegistryFactory {
                 .removeParameters(EXPORT_KEY, REFER_KEY)
                 .build();
         String key = createRegistryCacheKey(url);
-        // Lock the registry access process to ensure a single instance of the registry
+  // Lock the registry access process to ensure a single instance of the registry
         LOCK.lock();
         try {
-            // double check
-            // fix https://github.com/apache/dubbo/issues/7265.
+  // double check
+  // fix https://github.com/apache/dubbo/issues/7265.
             defaultNopRegistry = getDefaultNopRegistryIfDestroyed();
             if (null != defaultNopRegistry) {
                 return defaultNopRegistry;
@@ -1855,7 +1885,7 @@ public abstract class AbstractRegistryFactory implements RegistryFactory {
             if (registry != null) {
                 return registry;
             }
-            //create registry by spi/ioc
+  //create registry by spi/ioc
             registry = createRegistry(url);
             if (registry == null) {
                 throw new IllegalStateException("Can not create registry " + url);
@@ -1863,7 +1893,7 @@ public abstract class AbstractRegistryFactory implements RegistryFactory {
             REGISTRIES.put(key, registry);
             return registry;
         } finally {
-            // Release the lock
+  // Release the lock
             LOCK.unlock();
         }
     }
@@ -1923,10 +1953,10 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
     private static final ConsumerConfigurationListener CONSUMER_CONFIGURATION_LISTENER = new ConsumerConfigurationListener();
     private ReferenceConfigurationListener referenceConfigurationListener;
 
-    // Map<url, Invoker> cache service url to invoker mapping.
-    // The initial value is null and the midway may be assigned to null, please use the local variable reference
+  // Map<url, Invoker> cache service url to invoker mapping.
+  // The initial value is null and the midway may be assigned to null, please use the local variable reference
     protected volatile Map<URL, Invoker<T>> urlInvokerMap;
-    // The initial value is null and the midway may be assigned to null, please use the local variable reference
+  // The initial value is null and the midway may be assigned to null, please use the local variable reference
     protected volatile Set<URL> cachedInvokerUrls;
 
     public RegistryDirectory(Class<T> serviceType, URL url) {
@@ -1963,7 +1993,7 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
         List<URL> routerURLs = categoryUrls.getOrDefault(ROUTERS_CATEGORY, Collections.emptyList());
         toRouters(routerURLs).ifPresent(this::addRouters);
 
-        // providers
+  // providers
         List<URL> providerURLs = categoryUrls.getOrDefault(PROVIDERS_CATEGORY, Collections.emptyList());
         /**
          * 3.x added for extend URL address
@@ -1989,9 +2019,9 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
         return "";
     }
 
-    // RefreshOverrideAndInvoker will be executed by registryCenter and configCenter, so it should be synchronized.
+  // RefreshOverrideAndInvoker will be executed by registryCenter and configCenter, so it should be synchronized.
     private synchronized void refreshOverrideAndInvoker(List<URL> urls) {
-        // mock zookeeper://xxx?mock=return null
+  // mock zookeeper://xxx?mock=return null
         overrideDirectoryUrl();
         refreshInvoker(urls);
     }
@@ -2044,30 +2074,30 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
              *
              */
             if (CollectionUtils.isEmptyMap(newUrlInvokerMap)) {
-                logger.error(new IllegalStateException("urls to invokers error .invokerUrls.size :" + invokerUrls.size() + ", invoker.size :0. urls :" + invokerUrls
+                logger.error(new IllegalStateException("urls to invokers error .invokerUrls.size :" + invokerUrls.size() + ", invoker.size . urls :" + invokerUrls
                         .toString()));
                 return;
             }
 
             List<Invoker<T>> newInvokers = Collections.unmodifiableList(new ArrayList<>(newUrlInvokerMap.values()));
-            // pre-route and build cache, notice that route cache should build on original Invoker list.
-            // toMergeMethodInvokerMap() will wrap some invokers having different groups, those wrapped invokers not should be routed.
+  // pre-route and build cache, notice that route cache should build on original Invoker list.
+  // toMergeMethodInvokerMap() will wrap some invokers having different groups, those wrapped invokers not should be routed.
             routerChain.setInvokers(newInvokers);
             this.invokers = multiGroup ? toMergeInvokerList(newInvokers) : newInvokers;
             this.urlInvokerMap = newUrlInvokerMap;
 
-            // Close the unused Invoker
+  // Close the unused Invoker
             destroyUnusedInvokers(oldUrlInvokerMap, newUrlInvokerMap);
 
         }
 
-        // notify invokers refreshed
+  // notify invokers refreshed
         this.invokersChanged();
     }
 
     private List<Invoker<T>> toMergeInvokerList(List<Invoker<T>> invokers) {
         List<Invoker<T>> mergedInvokers = new ArrayList<>();
-        // group by invoker#url#group
+  // group by invoker#url#group
         Map<String, List<Invoker<T>>> groupMap =
                 invokers.stream().collect(Collectors.groupingBy(x -> x.getUrl().getParameter(GROUP_KEY, "")));
 
@@ -2129,7 +2159,7 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
         Set<URL> keys = new HashSet<>();
         String queryProtocols = this.queryMap.get(PROTOCOL_KEY);
         for (URL providerUrl : urls) {
-            // If protocol is configured at the reference side, only the matching protocol is selected
+  // If protocol is configured at the reference side, only the matching protocol is selected
             if (queryProtocols != null && queryProtocols.length() > 0) {
                 boolean accept = false;
                 String[] acceptProtocols = queryProtocols.split(",");
@@ -2159,7 +2189,7 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
                 continue;
             }
             keys.add(url);
-            // Cache key is url that does not merge with consumer side parameters, regardless of how the consumer combines parameters, if the server url changes, then refer again
+  // Cache key is url that does not merge with consumer side parameters, regardless of how the consumer combines parameters, if the server url changes, then refer again
             Map<URL, Invoker<T>> localUrlInvokerMap = this.urlInvokerMap; // local reference
             Invoker<T> invoker = localUrlInvokerMap == null ? null : localUrlInvokerMap.get(url);
             if (invoker == null) { // Not in the cache, refer again
@@ -2200,12 +2230,12 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
 
         providerUrl = providerUrl.addParameter(Constants.CHECK_KEY, String.valueOf(false)); // Do not check whether the connection is successful or not, always create Invoker!
 
-        // The combination of directoryUrl and override is at the end of notify, which can't be handled here
+  // The combination of directoryUrl and override is at the end of notify, which can't be handled here
 //        this.overrideDirectoryUrl = this.overrideDirectoryUrl.addParametersIfAbsent(providerUrl.getParameters()); // Merge the provider side parameters
 
         if ((providerUrl.getPath() == null || providerUrl.getPath()
                 .length() == 0) && DUBBO_PROTOCOL.equals(providerUrl.getProtocol())) { // Compatible version 1.0
-            //fix by tony.chenl DUBBO-44
+  //fix by tony.chenl DUBBO-44
             String path = directoryUrl.getParameter(INTERFACE_KEY);
             if (path != null) {
                 int i = path.indexOf('/');
@@ -2223,13 +2253,13 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
     }
 
     private URL overrideWithConfigurator(URL providerUrl) {
-        // override url with configurator from "override://" URL for dubbo 2.6 and before
+  // override url with configurator from "override://" URL for dubbo 2.6 and before
         providerUrl = overrideWithConfigurators(this.configurators, providerUrl);
 
-        // override url with configurator from configurator from "app-name.configurators"
+  // override url with configurator from configurator from "app-name.configurators"
         providerUrl = overrideWithConfigurators(CONSUMER_CONFIGURATION_LISTENER.getConfigurators(), providerUrl);
 
-        // override url with configurator from configurators from "service-name.configurators"
+  // override url with configurator from configurators from "service-name.configurators"
         if (referenceConfigurationListener != null) {
             providerUrl = overrideWithConfigurators(referenceConfigurationListener.getConfigurators(), providerUrl);
         }
@@ -2278,7 +2308,7 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
             destroyAllInvokers();
             return;
         }
-        // check deleted invoker
+  // check deleted invoker
         if (oldUrlInvokerMap != null) {
             for (URL key : oldUrlInvokerMap.keySet()) {
                 if (null != key && !newUrlInvokerMap.containsKey(key)) {
@@ -2337,7 +2367,7 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
     }
 
     private void overrideDirectoryUrl() {
-        // merge override parameters
+  // merge override parameters
         this.overrideDirectoryUrl = directoryUrl;
         List<Configurator> localConfigurators = this.configurators; // local reference
         doOverrideUrl(localConfigurators);
@@ -2391,7 +2421,7 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
 
         @Override
         protected void notifyOverrides() {
-            // to notify configurator/router changes
+  // to notify configurator/router changes
             directory.refreshOverrideAndInvoker(Collections.emptyList());
         }
     }
@@ -2438,77 +2468,77 @@ AbstractRegistry                 (本地磁盘缓存 + NotifyListener 集合)
 
 ### FailbackRegistry: Template Method + Retry Queue
 
-`FailbackRegistry`（`dubbo-registry-api/.../support/FailbackRegistry.java:50`）把「注册 / 订阅」拆成**模板方法**：公共方法先调抽象 `doRegister(url)` / `doSubscribe(url, listener)`，子类只实现 `do*`（zk / nacos 各写各的落地）；一旦 `do*` 抛异常，公共方法不向上炸，而是把 URL 收进失败集合、并起一个 `HashedWheelTimer` 定时重试。
+`FailbackRegistry`（`dubbo-registry-api/.../support/FailbackRegistry.java`）把「注册 / 订阅」拆成**模板方法**：公共方法先调抽象 `doRegister(url)` / `doSubscribe(url, listener)`，子类只实现 `do*`（zk / nacos 各写各的落地）；一旦 `do*` 抛异常，公共方法不向上炸，而是把 URL 收进失败集合、并起一个 `HashedWheelTimer` 定时重试。
 
 ```java
 // FailbackRegistry.java
-private final ConcurrentMap<URL, FailedRegisteredTask> failedRegistered = new ConcurrentHashMap<>(); // :54
+private final ConcurrentMap<URL, FailedRegisteredTask> failedRegistered = new ConcurrentHashMap<>();
 ...
-retryTimer = new HashedWheelTimer(                                              // :75
+retryTimer = new HashedWheelTimer(
     new NamedThreadFactory("DubboRegistryRetryTimer", true),
     retryPeriod, retryPeriod, TimeUnit.MILLISECONDS);
 ...
-private void addFailedRegistered(URL url) { ... }                               // :97
+private void addFailedRegistered(URL url) { ... }
 ```
 
 `failedRegistered` / `failedSubscribed` / `failedUnregistered` / `failedUnsubscribed` 四个 `ConcurrentMap` 各管一类失败操作；每个 URL 对应一个 `FailedRegisteredTask`（等定时器到点调 `doRetry` → 再调一次 `doRegister`，成功后 `removeFailedRegistered` 清理）。这正是「注册中心短暂不可用时不会丢注册、恢复后自动补发」的实现基础——但它**只兜底瞬时失败，不保证顺序**，且重试默认按固定周期无限进行（超时上限由 `retryPeriod` 与注册中心自身 TTL 决定）。
 
 ### ZookeeperRegistry: Ephemeral Nodes + Multi-Category Subscribe
 
-`doRegister`（`ZookeeperRegistry.java:169`）只做一件事——把 URL 编码后写成 **zk 临时节点**：
+`doRegister`（`ZookeeperRegistry.java`）只做一件事——把 URL 编码后写成 **zk 临时节点**：
 
 ```java
-// ZookeeperRegistry.java:169-172
+// ZookeeperRegistry.java
 public void doRegister(URL url) {
     zkClient.create(toUrlPath(url), url.getParameter(DYNAMIC_KEY, true), true);
-    //                           ↑ 节点路径        ↑ 节点数据(是否持久)    ↑ ephemeral=true → 临时节点
+  //                           ↑ 节点路径        ↑ 节点数据(是否持久)    ↑ ephemeral=true → 临时节点
 }
 ```
 
-节点路径由 `toUrlPath`（`ZookeeperRegistry.java:370`）拼成：
+节点路径由 `toUrlPath`（`ZookeeperRegistry.java`）拼成：
 
 ```java
-// ZookeeperRegistry.java:366-371
-private String toCategoryPath(URL url) {            // /dubbo/{interface}/providers|configurators|routers
+// ZookeeperRegistry.java
+private String toCategoryPath(URL url) {  // /dubbo/{interface}/providers|configurators|routers
     return toServicePath(url) + PATH_SEPARATOR + url.getParameter(CATEGORY_KEY, DEFAULT_CATEGORY);
 }
-private String toUrlPath(URL url) {                 // .../providers/URL.encode(url.toFullString())
+private String toUrlPath(URL url) {  // .../providers/URL.encode(url.toFullString())
     return toCategoryPath(url) + PATH_SEPARATOR + URL.encode(url.toFullString());
 }
 ```
 
 所以一个 provider 注册后的真实形态是：`/dubbo/<interface>/providers/<url-encoded-full-string>`，**临时节点**——provider 进程一掉线，zk 会话超时后节点自动消失，consumer 立刻收到子节点变更通知。`dynamic=false` 时写的是持久节点（运维手动留的「死」节点，provider 下线不自动清）。
 
-`doSubscribe`（`ZookeeperRegistry.java:191`）是「**一次订阅监听三个 category 路径**」：
+`doSubscribe`（`ZookeeperRegistry.java`）是「**一次订阅监听三个 category 路径**」：
 
 ```java
-// ZookeeperRegistry.java:191 / 254 / 268 / 275
-for (String path : toCategoriesPath(url)) {                 // providers + configurators + routers 三条
-    zkClient.addChildListener(path, zkListener);            // 给每条 category 挂子节点监听
+// ZookeeperRegistry.java / 254 / 268 / 275
+for (String path : toCategoriesPath(url)) {  // providers + configurators + routers 三条
+    zkClient.addChildListener(path, zkListener);  // 给每条 category 挂子节点监听
 }
 ...
 List<String> children = zkClient.addChildListener(path, zkListener);
 ...
-notify(url, listener, urls);                                // 把子节点(已 URL 解码)转 List<URL> 回调 NotifyListener
+notify(url, listener, urls);  // 把子节点(已 URL 解码)转 List<URL> 回调 NotifyListener
 ```
 
 注意 `toCategoriesPath` 默认就是 `providers` / `configurators` / `routers` 三个维度——consumer 订阅一次，能同时收到「可用实例列表 + 动态配置 + 路由规则」三类变更，这就是 Dubbo「配置与实例统一在注册中心」的具体落地。
 
 ### NacosRegistry: Instance Registration by Service Name
 
-Nacos 不走「路径树」，走「**服务名 → 实例**」模型。`doRegister`（`NacosRegistry.java:180`）构造 `serviceName`（约定 `{group}@@{interface}` 这类组合，含 `provider:`/`consumer:` 前缀语义）后调 `namingService.registerInstance`：
+Nacos 不走「路径树」，走「**服务名 → 实例**」模型。`doRegister`（`NacosRegistry.java`）构造 `serviceName`（约定 `{group}@@{interface}` 这类组合，含 `provider:`/`consumer:` 前缀语义）后调 `namingService.registerInstance`：
 
 ```java
-// NacosRegistry.java:205
+// NacosRegistry.java
 namingService.registerInstance(service, getUrl().getGroup(Constants.DEFAULT_GROUP), instance);
 // instance 的 ip/port/metadata 来自 URL
 ```
 
-`doSubscribe`（`NacosRegistry.java:249`）则调 `namingService.getAllInstances` / `subscribe`（`:656`）拉实例并转成 `URL` 回调。差异一句话：**Zookeeper 靠「节点增删」做推送、临时节点感知掉线；Nacos 靠「服务发现实例心跳 + 订阅推送」做推送，实例上下线由 Nacos Server 侧 TTL 判定**。
+`doSubscribe`（`NacosRegistry.java`）则调 `namingService.getAllInstances` / `subscribe`拉实例并转成 `URL` 回调。差异一句话：**Zookeeper 靠「节点增删」做推送、临时节点感知掉线；Nacos 靠「服务发现实例心跳 + 订阅推送」做推送，实例上下线由 Nacos Server 侧 TTL 判定**。
 
 ### AbstractRegistry: Local Disk Cache
 
-`AbstractRegistry`（`FailbackRegistry` 的父类）还埋了一条「**本地缓存恢复**」机制：每次收到订阅结果都会 `saveProperties(url)`（`AbstractRegistry.java:589`），把 `interface → List<URL>` 落盘到 `${user.home}/.dubbo/dubbo-registry-<app>.cache`；由 `registryCacheExecutor`（`AbstractRegistry.java:105`）调度、`savePropertiesRetryTimes`（`AbstractRegistry.java:107`）控制失败重试上限。注册中心全挂、连不上时，consumer 能从这个缓存文件把「上次已知的提供者列表」读回来兜底启动——这是 Dubbo「注册中心不是强依赖」的关键设计。
+`AbstractRegistry`（`FailbackRegistry` 的父类）还埋了一条「**本地缓存恢复**」机制：每次收到订阅结果都会 `saveProperties(url)`（`AbstractRegistry.java`），把 `interface → List<URL>` 落盘到 `${user.home}/.dubbo/dubbo-registry-<app>.cache`；由 `registryCacheExecutor`（`AbstractRegistry.java`）调度、`savePropertiesRetryTimes`（`AbstractRegistry.java`）控制失败重试上限。注册中心全挂、连不上时，consumer 能从这个缓存文件把「上次已知的提供者列表」读回来兜底启动——这是 Dubbo「注册中心不是强依赖」的关键设计。
 
 
 ## RegistryProtocol
@@ -2517,26 +2547,26 @@ namingService.registerInstance(service, getUrl().getGroup(Constants.DEFAULT_GROU
 
 ### export: register provider and subscribe override rules
 
-`RegistryProtocol.export(Invoker)` (`dubbo-registry-api/.../integration/RegistryProtocol.java:272`) runs the following steps:
+`RegistryProtocol.export(Invoker)` (`dubbo-registry-api/.../integration/RegistryProtocol.java`) runs the following steps:
 
 1. `getProviderUrl(originInvoker)` extracts the provider URL; `getRegistryUrl` extracts the registry URL.
-2. Build `overrideSubscribeUrl = getSubscribedOverrideUrl(providerUrl)` and an `OverrideListener`; the provider URL is rewritten by `overrideUrlWithConfig` (`:338`), which applies `ProviderConfigurationListener` and `ServiceConfigurationListener` (dynamic configuration override) **before** local export.
-3. `doLocalExport(originInvoker, providerUrl)` (`:349`) calls the underlying `protocol.export(...)` to open the server port; returns an `ExporterChangeableWrapper`.
+2. Build `overrideSubscribeUrl = getSubscribedOverrideUrl(providerUrl)` and an `OverrideListener`; the provider URL is rewritten by `overrideUrlWithConfig` (), which applies `ProviderConfigurationListener` and `ServiceConfigurationListener` (dynamic configuration override) **before** local export.
+3. `doLocalExport(originInvoker, providerUrl)` () calls the underlying `protocol.export(...)` to open the server port; returns an `ExporterChangeableWrapper`.
 4. `getRegistry(registryUrl)` resolves the `Registry`; `customizeURL` produces `registeredProviderUrl`.
-5. Guarded by `REGISTER_KEY` (default `true`, both provider and registry params must agree), `register(registry, registeredProviderUrl)` (`:240`) wraps `registry.register(...)` in a `MetricsEventBus.post(RegistryEvent...)` plus `ApplicationDeployer.increaseServiceRefreshCount()`.
+5. Guarded by `REGISTER_KEY` (default `true`, both provider and registry params must agree), `register(registry, registeredProviderUrl)` () wraps `registry.register(...)` in a `MetricsEventBus.post(RegistryEvent...)` plus `ApplicationDeployer.increaseServiceRefreshCount()`.
 6. `registerStatedUrl` records a `ProviderModel.RegisterStatedURL`.
 7. For 2.6.x compatibility only: if `ENABLE_26X_CONFIGURATION_LISTEN` (default `true`) and `!registry.isServiceDiscovery()`, it still `registry.subscribe(overrideSubscribeUrl, overrideSubscribeListener)` (deprecated path).
 8. `notifyExport` fires `RegistryProtocolListener.onExport`.
 
 ### refer: subscribe consumer and join cluster
 
-`RegistryProtocol.refer(type, url)` (`:~540`) handles `type == RegistryService` by proxying the registry itself; for multi-group (`group="a,b"` or `"*"`) it uses `MERGEABLE_CLUSTER`. Otherwise `doRefer` (`:578`) → `getMigrationInvoker` (`:601`, returns `ServiceDiscoveryMigrationInvoker`) → `doCreateInvoker` (`:647`):
+`RegistryProtocol.refer(type, url)` (`:~540`) handles `type == RegistryService` by proxying the registry itself; for multi-group (`group="a,b"` or `"*"`) it uses `MERGEABLE_CLUSTER`. Otherwise `doRefer` () → `getMigrationInvoker` (, returns `ServiceDiscoveryMigrationInvoker`) → `doCreateInvoker` ():
 
 - `directory.setRegistry(registry)` / `directory.setProtocol(protocol)`.
 - Build a `ServiceConfigURL` consumer URL (protocol `consumer`).
 - If `directory.isShouldRegister()`, `registry.register(directory.getRegisteredConsumerUrl())` (consumer self-registration).
 - `directory.buildRouterChain(urlToRegistry)`.
-- `directory.subscribe(toSubscribeUrl(urlToRegistry))` — `toSubscribeUrl` (`:687`) adds `CATEGORY_KEY = ALL_CATEGORIES`.
+- `directory.subscribe(toSubscribeUrl(urlToRegistry))` — `toSubscribeUrl` () adds `CATEGORY_KEY = ALL_CATEGORIES`.
 - `cluster.join(directory, true)` returns the `ClusterInvoker`.
 
 The `OverrideListener` / `ServiceConfigurationListener` chain is what lets config-center rules (configurators) re-derive the provider URL at runtime without re-export.
@@ -2547,25 +2577,25 @@ The `OverrideListener` / `ServiceConfigurationListener` chain is what lets confi
 
 ### ServiceDiscovery / ServiceInstance / InstanceAddressURL
 
-`ServiceDiscovery` (`ServiceDiscovery.java:34`) `extends RegistryService, Prioritized`. Core methods: `register()` / `update()` / `unregister()`, `Set<String> getServices()`, `List<ServiceInstance> getInstances(String serviceName)`, `MetadataInfo getLocalMetadata()` / `getRemoteMetadata(String revision)` / `getRemoteMetadata(String revision, List<ServiceInstance> instances)`, `ServiceInstance getLocalInstance()`.
+`ServiceDiscovery` (`ServiceDiscovery.java`) `extends RegistryService, Prioritized`. Core methods: `register()` / `update()` / `unregister()`, `Set<String> getServices()`, `List<ServiceInstance> getInstances(String serviceName)`, `MetadataInfo getLocalMetadata()` / `getRemoteMetadata(String revision)` / `getRemoteMetadata(String revision, List<ServiceInstance> instances)`, `ServiceInstance getLocalInstance()`.
 
-`ServiceInstance` (`ServiceInstance.java:34`, `Serializable`) carries `getServiceName()`, `getHost()`, `getPort()`, `Map<String,String> getMetadata()` (holds `EXPORTED_SERVICES_REVISION_PROPERTY_NAME`, revision, etc.), `getExtendParams()`, `getAllParams()`.
+`ServiceInstance` (`ServiceInstance.java`, `Serializable`) carries `getServiceName()`, `getHost()`, `getPort()`, `Map<String,String> getMetadata()` (holds `EXPORTED_SERVICES_REVISION_PROPERTY_NAME`, revision, etc.), `getExtendParams()`, `getAllParams()`.
 
-`InstanceAddressURL extends URL` (`InstanceAddressURL.java:48`) wraps a `ServiceInstance` + `MetadataInfo`. Its `getServiceInterface()` / `getGroup()` / `getVersion()` resolve from `RpcContext` rather than the URL itself — so **one instance URL can serve many interfaces**, each described by `MetadataInfo.services`. This is the bridge from an app-level address to interface-level RPC. How the interface name is translated to an app name is via `ServiceNameMapping` (see [Metadata](/docs/CS/Framework/Dubbo/Metadata.md?id=mapping-path-local-cache-vs-remote-node)).
+`InstanceAddressURL extends URL` (`InstanceAddressURL.java`) wraps a `ServiceInstance` + `MetadataInfo`. Its `getServiceInterface()` / `getGroup()` / `getVersion()` resolve from `RpcContext` rather than the URL itself — so **one instance URL can serve many interfaces**, each described by `MetadataInfo.services`. This is the bridge from an app-level address to interface-level RPC. How the interface name is translated to an app name is via `ServiceNameMapping` (see [Metadata](/docs/CS/Framework/Dubbo/Metadata.md?id=mapping-path-local-cache-vs-remote-node)).
 
 ### ZookeeperServiceDiscovery node layout
 
-`ZookeeperServiceDiscovery` (`dubbo-registry-zookeeper/.../ZookeeperServiceDiscovery.java:63`) `extends AbstractServiceDiscovery`, with `DEFAULT_GROUP = "/services"` (`:67`); root path comes from `getRootPath(registryURL)` (default `/dubbo`, derived from the `group` parameter). It uses Curator's `ServiceDiscovery` (curator-x-discovery) to write each instance as an **ephemeral** node under:
+`ZookeeperServiceDiscovery` (`dubbo-registry-zookeeper/.../ZookeeperServiceDiscovery.java`) `extends AbstractServiceDiscovery`, with `DEFAULT_GROUP = "/services"` (); root path comes from `getRootPath(registryURL)` (default `/dubbo`, derived from the `group` parameter). It uses Curator's `ServiceDiscovery` (curator-x-discovery) to write each instance as an **ephemeral** node under:
 
 ```
 /<root>/services/<applicationName>/<instanceId>
 ```
 
-`doRegister(ServiceInstance)` (`:101`) → `serviceDiscovery.registerService(build(instance))`; `doUpdate` (`:117`) updates metadata then `serviceDiscovery.updateService`; `getInstances(serviceName)` (`:150`) reads them back.
+`doRegister(ServiceInstance)` () → `serviceDiscovery.registerService(build(instance))`; `doUpdate` () updates metadata then `serviceDiscovery.updateService`; `getInstances(serviceName)` () reads them back.
 
 ### ServiceDiscoveryRegistry
 
-`ServiceDiscoveryRegistry` (`dubbo-registry-api/.../client/ServiceDiscoveryRegistry.java:75`) `extends FailbackRegistry` and holds a `ServiceDiscovery serviceDiscovery` (`:79`). It is produced by `ServiceDiscoveryRegistryFactory`, registered under SPI key `service-discovery-registry` in `dubbo-registry-api/.../META-INF/dubbo/internal/org.apache.dubbo.registry.RegistryFactory`. It delegates interface-level address operations to an underlying delegate registry and uses `ServiceDiscovery` for app-level instance data. Address changes flow through `ServiceInstancesChangedListener.onEvent` → `ServiceDiscoveryRegistryDirectory` rebuilds Invokers from `InstanceAddressURL`s.
+`ServiceDiscoveryRegistry` (`dubbo-registry-api/.../client/ServiceDiscoveryRegistry.java`) `extends FailbackRegistry` and holds a `ServiceDiscovery serviceDiscovery` (). It is produced by `ServiceDiscoveryRegistryFactory`, registered under SPI key `service-discovery-registry` in `dubbo-registry-api/.../META-INF/dubbo/internal/org.apache.dubbo.registry.RegistryFactory`. It delegates interface-level address operations to an underlying delegate registry and uses `ServiceDiscovery` for app-level instance data. Address changes flow through `ServiceInstancesChangedListener.onEvent` → `ServiceDiscoveryRegistryDirectory` rebuilds Invokers from `InstanceAddressURL`s.
 
 > Note: interface-level nodes (`/dubbo/<service>/providers/...`) and app-level nodes (`/dubbo/services/<app>/<instanceId>`) **coexist** under `register-mode=all` (the default). They are not mutually exclusive.
 

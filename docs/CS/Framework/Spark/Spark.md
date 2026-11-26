@@ -10,7 +10,10 @@ Apache Spark 是一个**统一的大规模数据分析引擎**：批处理、SQL
 Spark supports applications with working sets while providing similar scalability and fault tolerance properties to MapReduce. Spark 用 Scala 实现，跑在 JVM 上，对外提供类似函数式集合操作的编程接口。
 
 > [!NOTE]
-> 本页是 Spark 子树的**枢纽页**，只做全貌与导航，各机制细节见子页。当前稳定版为 4.x 系列（4.2.0 于 2026-07 发布）；4.0 起要求 JDK 17、默认 Scala 2.13，并移除了 Mesos 支持，详见 [Deploy](/docs/CS/Framework/Spark/Deploy.md)。
+> 本页是 Spark 子树的**枢纽页**，只做全貌与导航，各机制细节见子页。源码级内容的版本基线为 **Spark 4.3.0**（tag `v4.3.0`，commit `98bc0212`，2026-10-27 提交、10-30 发布），本子树所有源码片段均取自该 tag，不混用其它版本。4.0 起要求 JDK 17、默认 Scala 2.13，并移除了 Mesos 支持，详见 [Deploy](/docs/CS/Framework/Spark/Deploy.md)。
+
+> [!WARNING]
+> 4.3.0 引入 `PipelinedShuffleDependency` 与双轨 ShuffleManager，经典教材里"下游 Stage 必须等上游 shuffle 完全物化后才能启动"的结论**不再普遍成立**：Real-Time Mode 下 producer / consumer 可并发、边产边读。但要注意分寸——**宽依赖仍然切分 Stage，Stage 边界没有消失**，改变的是两个已切分 Stage 的相对运行时刻，以及"完成"的语义被拆成"执行可并发、对外完成保持原子"。这是本子树最重要的版本差异，详见 [Scheduler](/docs/CS/Framework/Spark/Scheduler.md) 与 [Shuffle](/docs/CS/Framework/Spark/Shuffle.md)。
 
 ## Programming Model
 
@@ -72,6 +75,12 @@ Spark 的流处理走**微批（micro-batch）**：以固定时间间隔（几�
 与 [Flink](/docs/CS/Framework/Flink/Flink.md) 的模型差异：Flink 的基本数据模型是数据流与事件序列，逐事件流水式处理，可做到亚秒级延迟；Spark 是"攒一批 → 调度 → 算完 → 攒下一批"，吞吐优势明显而延迟更高。选型上，延迟敏感且要求事件时间正确性选 Flink；以批与 SQL 为主、能容忍秒级延迟选 Spark。
 
 微批与"批是有界的流"是统一批流的两种相反路线，四种计算模式与三种投递语义的横向对比见 [Processing Model](/docs/CS/BigData/Processing_Model.md)，这套取舍在架构层的投射见 [Lambda and Kappa Architecture](/docs/CS/BigData/Lambda_Kappa.md)。
+
+## Source-Level Reading Path
+
+理解 Spark 的执行内核，从数据的抽象开始，一路走到调度、搬运与执行。[RDD](/docs/CS/Framework/Spark/RDD.md) 定义了五属性的数据抽象与依赖分类，是所有上层机制的共同底座；正是依赖的宽窄决定了 [Scheduler](/docs/CS/Framework/Spark/Scheduler.md) 在哪里切分 Stage——DAGScheduler 从结果 RDD 反向遍历，遇 `ShuffleDependency` 断开成 `ShuffleMapStage`。被切开的 Stage 之间靠 [Shuffle](/docs/CS/Framework/Spark/Shuffle.md) 搬运数据，其 writer 选择与 spill 协议决定了作业的主要开销，而缓冲区的内存来自 [Memory](/docs/CS/Framework/Spark/Memory.md) 的统一内存池。写到 DataFrame / SQL 这一层，[SQL](/docs/CS/Framework/Spark/SQL.md) 的 Catalyst 与 AQE 在 RDD 之上做全局优化；[Streaming](/docs/CS/Framework/Spark/Streaming.md) 则是把无限表增量执行，其 4.3 的 Real-Time Mode 正是把上述 pipelined shuffle 机制落地的第一个用户。最后 [Deploy](/docs/CS/Framework/Spark/Deploy.md) 回答 Driver 与 Executor 由谁分配。
+
+这条链路在 4.3.0 有一处结构性变化值得沿着读：shuffle 不再是单一实现。[Dependency.scala](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/Dependency.scala) 里 `PipelinedShuffleDependency` 作为 `ShuffleDependency` 的子类出现，`SparkEnv.shuffleManagerFor` 按依赖类型把阻塞式与增量式 shuffle 分流——理解这一点，才能读懂为什么 Streaming 页里 Real-Time Mode 能做到毫秒级延迟。
 
 ## Links
 

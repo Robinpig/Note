@@ -1,77 +1,124 @@
-# TCC (Seata v2.7.0)
-
-> 源码驱动笔记。基座：apache/seata @ v2.7.0（tag `v2.7.0`，blobless + sparse-checkout 落盘 `tcc` / `spring` / `rm` / `core` / `server`）。类名可在 `tcc/src/main/java/org/apache/seata/rm/tcc/`、`spring/seata-spring/src/main/java/org/apache/seata/rm/fence/`、`core/src/main/java/org/apache/seata/core/protocol/transaction/` 下核对。
+# TCC
 
 ## Introduction
 
-TCC 是**业务编码型**两阶段：Try（资源检查/锁定）→ Confirm（确认）/ Cancel（补偿）。与 AT（自动 `undo_log`）、XA（数据库 XA）不同，TCC 不依赖 `undo_log`、不占全局锁，补偿逻辑完全由业务提供，因此性能与一致性上限最高，但侵入性最强（需手写三个方法）。Seata 的 TCC 接入由 `tcc` 模块负责拦截与二阶段反射调用，而**防悬挂 / 空回滚 / 幂等**由 `spring` 模块的 **Common Fence** 机制保障。
+TCC 是**业务编码型**两阶段：Try（资源检查/锁定）→ Confirm（确认）/ Cancel（补偿）。与 AT（自动 undo_log）、XA（数据库 XA）不同，TCC 不依赖 undo_log、不占全局锁，补偿逻辑完全由业务提供，性能与一致性上限最高，但侵入性最强（需手写三个方法）。Seata 的 TCC 由 `tcc` 模块负责拦截与二阶段反射调用，**防悬挂 / 空回滚 / 幂等**由 Common Fence 机制保障。
 
-## 注解与拦截
+> 版本基线：apache/seata **v2.7.0**。以下片段均取自该 tag。
 
-`@TwoPhaseBusinessAction`（`tcc/.../api/TwoPhaseBusinessAction.java`）声明一个 TCC 动作：
+## Annotation and Interception
+
+`@TwoPhaseBusinessAction` 声明一个 TCC 动作，关键属性：
 
 | 属性 | 默认值 | 含义 |
 | :--- | :--- | :--- |
-| `name()`（`:54`） | — | 动作名（actionName），TC 侧分支标识 |
-| `commitMethod()`（`:61`） | `"commit"` | 二阶段 Confirm 方法名 |
-| `rollbackMethod()`（`:68`） | `"rollback"` | 二阶段 Cancel 方法名 |
+| `name()` | — | 动作名（actionName），TC 侧分支标识 |
+| `commitMethod()` | `"commit"` | 二阶段 Confirm 方法名 |
+| `rollbackMethod()` | `"rollback"` | 二阶段 Cancel 方法名 |
+| `useTCCFence()` | **`false`** | 是否启用 Fence（幂等/空回滚/防悬挂）——**默认关闭** |
 
-拦截链路：
-
-- `TccActionInterceptorParser`（`tcc/.../interceptor/parser/`）扫描 `@TwoPhaseBusinessAction` 方法，织入拦截器。
-- `TccActionInterceptorHandler`（`tcc/.../interceptor/TccActionInterceptorHandler.java:48`，`extends AbstractProxyInvocationHandler`）在 Try 方法调用前 `createTwoPhaseBusinessActionParam(annotation)`（`:149`）从注解提取 `name/commitMethod/rollbackMethod`，并向 TC 注册 `BranchType.TCC` 分支。
-- `TCCResourceManager`（`tcc/.../TCCResourceManager.java`）实现 `ResourceManager`，二阶段由 `RMHandlerTCC`（`tcc/.../rm/tcc/RMHandlerTCC.java`）接收 `BranchCommitRequest` / `BranchRollbackRequest`。
-
-> 注：`TccActionInterceptorHandler` 引用的 `TwoPhaseBusinessActionParam` 来自 `org.apache.seata.integration.tx.api.interceptor`（**`integration-tx-api` 模块，本仓库未落盘**）。该模块是注解/参数/拦截 API 的归属层，补拉后可闭环「注解 → 拦截」的上游链路。
-
-## 二阶段：反射调用业务方法
-
-TC 决策后：
-
-```
-TC --BranchCommitRequest(BranchType.TCC)--> RMHandlerTCC
-  --> DefaultResourceManager.branchCommit(BranchType.TCC, ...)   // DefaultResourceManager.java:82
-  --> TCCResourceManager.branchCommit --> 反射调用 bean.commitMethod(args)
-TC --BranchRollbackRequest--> ... --> 反射调用 bean.rollbackMethod(args)
+```java
+/**
+ * whether to use TCC fence (idempotent,non_rollback,suspend)
+ */
+boolean useTCCFence() default false;
 ```
 
-Confirm/Cancel 方法名取自一阶段注册时缓存的 `TwoPhaseBusinessActionParam`，由 reflection 在业务 bean 上调用，参数回传原始 `args`。
+`TccActionInterceptorHandler` 在 Try 调用前从注解提取参数并向 TC 注册 `BranchType.TCC` 分支，并把开关写进上下文：`businessActionContextMap.put(Constants.USE_COMMON_FENCE, businessAction.useTCCFence())`。
 
-## Common Fence：防悬挂 / 空回滚 / 幂等
+## Phase 2: Reflective Invocation
 
-这是 TCC 正确性的关键，实现在 **`spring` 模块**而非 `tcc` 模块：
+TC 决策后 `RMHandlerTCC` 收 `BranchCommitRequest`/`BranchRollbackRequest` → `DefaultResourceManager.branchCommit(BranchType.TCC, ...)` → `TCCResourceManager.branchCommit/branchRollback`。未开启 Fence 时直接反射调用业务方法；开启时改由 Fence 在同本地事务内调用：
 
-- `SpringFenceHandler`（`spring/seata-spring/.../rm/fence/SpringFenceHandler.java:61`，`implements FenceHandler`）是 Spring 环境下的 Fence 落地实现。
-- 底层通用逻辑在 `org.apache.seata.integration.tx.api.fence.DefaultCommonFenceHandler`（`integration-tx-api`，未落盘），`SpringFenceHandler` 通过 `DefaultCommonFenceHandler.get().setFenceHandler(...)`（`:89`）注入自身。
+```java
+// add idempotent and anti hanging
+if (Boolean.TRUE.equals(businessActionContext.getActionContext(Constants.USE_COMMON_FENCE))) {
+    try {
+        result = DefaultCommonFenceHandler.get()
+                .commitFence(commitMethod, targetTCCBean, xid, branchId, args);
+    } catch (SkipCallbackWrapperException | UndeclaredThrowableException e) {
+        throw e.getCause();
+    }
+} else {
+    ret = commitMethod.invoke(targetTCCBean, args);
+    // ... 解析 TwoPhaseResult / boolean
+}
+return result ? BranchStatus.PhaseTwo_Committed : BranchStatus.PhaseTwo_CommitFailed_Retryable;
+```
 
-核心方法：
+## Common Fence: Anti-Hanging / Empty Rollback / Idempotency
 
-| 方法 | 阶段 | 关键逻辑 |
-| :--- | :--- | :--- |
-| `prepareFence(xid, branchId, actionName, callback)`（`:117`） | Try | 在**本地事务**内插入 `common_fence_log` 记录，状态 `STATUS_TRIED`，再执行 Try 回调 |
-| `commitFence(commitMethod, bean, xid, branchId, args)`（`:162`） | Confirm | 查 `CommonFenceDO`（`:168`）：`null` → 抛异常（空回滚保护）；`STATUS_COMMITTED` → 幂等返回；`STATUS_ROLLBACKED` / `STATUS_SUSPENDED` → 拒绝（防悬挂） |
-| `rollbackFence(...)` | Cancel | 类似：查状态，已 `ROLLBACKED` 幂等；已 `COMMITTED` 冲突报错 |
+**纠偏**：v2.7.0 已没有 `TCCFenceHandler` 类和 `prepareTCCFenceMethod` 等旧命名。真实实现是 `SpringFenceHandler implements FenceHandler`（在 `spring` 模块），由 `DefaultCommonFenceHandler`（在 `integration-tx-api` 模块）单例代理。表名是 **`tcc_fence_log`**，4 个状态：
 
-`CommonFenceDO` 记录 `(xid, branchId, actionName, status)`；状态枚举 `CommonFenceConstant.STATUS_TRIED / COMMITTED / ROLLBACKED / SUSPENDED`。存储经 `CommonFenceStore` / `CommonFenceStoreDataBaseDAO`（`:31`）。
+```java
+public static final int STATUS_TRIED = 1;
+public static final int STATUS_COMMITTED = 2;
+public static final int STATUS_ROLLBACKED = 3;
+public static final int STATUS_SUSPENDED = 4;
+```
+
+DDL 的 `PRIMARY KEY (xid, branch_id)` 提供唯一约束，查询用 `for update`：
+
+```sql
+CREATE TABLE IF NOT EXISTS `tcc_fence_log`
+(
+    `xid`           VARCHAR(128)  NOT NULL COMMENT 'global id',
+    `branch_id`     BIGINT        NOT NULL COMMENT 'branch id',
+    `action_name`   VARCHAR(64)   NOT NULL COMMENT 'action name',
+    `status`        TINYINT       NOT NULL COMMENT 'status(tried:1;committed:2;rollbacked:3;suspended:4)',
+    ...
+    PRIMARY KEY (`xid`, `branch_id`),
+    ...
+) ENGINE = InnoDB
+```
 
 三个经典问题的源码落点：
 
-- **空回滚**：Cancel 先于 Try 到达（Try 网络超时）。`commitFence/rollbackFence` 查 `CommonFenceDO` 为 `null` → 说明 Try 未执行 → 直接插入 `STATUS_SUSPENDED` 占位并返回成功，不再执行业务 Cancel。
-- **防悬挂**：Try 在 Cancel 之后才到达。`prepareFence` 插入 `STATUS_TRIED` 前会校验是否已有 `SUSPENDED` 记录，若有则跳过 Try，避免资源被长期锁定。
-- **幂等**：Confirm/Cancel 重复下发时，记录已是 `COMMITTED` / `ROLLBACKED` → 直接返回成功，不重复执行业务方法。
+- **Try（`prepareFence`）**：本地事务内插 `STATUS_TRIED` 再执行 Try 回调；唯一键冲突（已有记录）说明此前已 Cancel 过 → 抛 `SkipCallbackWrapperException` **跳过 Try**（防悬挂）：
+```java
+boolean result = insertCommonFenceLog(conn, xid, branchId, actionName, CommonFenceConstant.STATUS_TRIED);
+if (result) {
+    return targetCallback.execute();
+} else {
+    throw new CommonFenceException(... FrameworkErrorCode.InsertRecordError);
+}
+```
+- **空回滚（`rollbackFence`）**：Cancel 先于 Try 到达、查记录为 `null` → 插 `STATUS_SUSPENDED` 占位并**直接返回成功**，不执行业务 Cancel，从而阻止迟到的 Try：
+```java
+if (commonFenceDO == null) {
+    boolean result = insertCommonFenceLog(conn, xid, branchId, actionName, CommonFenceConstant.STATUS_SUSPENDED);
+    if (!result) { throw new CommonFenceException(...); }
+    return true;
+}
+```
+- **幂等**：Confirm/Cancel 重复下发时，状态已是 `COMMITTED`/`ROLLBACKED`/`SUSPENDED` → 直接返回成功（`commitFence` 里 `STATUS_COMMITTED` return true，`STATUS_ROLLBACKED`/`SUSPENDED` return false 拒绝）。
 
-## 源码打假 / 设计点
+状态 CAS 与业务方法在**同一本地事务**——`updateCommonFenceDO(..., oldStatus)` 成功后才 `method.invoke`，业务失败则 `setRollbackOnly`：
 
-- **TCC 没有 `undo_log`、没有全局锁**：AT 的 Compensation 靠 `undo_log` 自动生成，TCC 的 Compensation 是业务手写的 `rollbackMethod`，RM 仅做反射分发。这意味着 TCC 不依赖 `lockKeys`，隔离完全由业务在 Try 阶段自行实现（如预扣、冻结）。
-- **Fence 是「本地事务 + 唯一记录」的原子保证**：`prepareFence` 把「插 fence 记录」与「执行业务 Try」放在同一本地事务，利用 `(xid, branchId)` 唯一约束天然防重，是空回滚/防悬挂/幂等的统一基石。
-- **Common Fence 不局限 TCC**：`FenceHandler` 抽象与 `CommonFenceDO` 是通用的，SAGA 也可复用同一套防悬挂机制（由 `CompensationBusinessAction` 等注解触发）。
-- **`integration-tx-api` 缺失**：本仓库当前 sparse-checkout 未包含该模块，Fence 的 `DefaultCommonFenceHandler` 与 `@GlobalTransactional` 注解本体需补拉后核对，本文的 Fence 调用链以 `SpringFenceHandler` 为可见边界。
+```java
+boolean result = COMMON_FENCE_DAO.updateCommonFenceDO(conn, xid, branchId, status, CommonFenceConstant.STATUS_TRIED);
+if (result) {
+    Object ret = method.invoke(targetTCCBean, args);
+    if (!result) { transactionStatus.setRollbackOnly(); }
+}
+```
+
+## Corrections
+
+- **TCC 没有 undo_log、没有全局锁**：Compensation 是业务手写的 `rollbackMethod`，RM 仅做反射分发；TCC 不依赖 lockKeys，隔离由业务在 Try 阶段自行实现（预扣、冻结）。
+- **Fence 是"本地事务 + 唯一记录"的原子保证**：`prepareFence` 把插记录与执行 Try 放同一本地事务，`(xid, branchId)` 唯一约束天然防重。
+- **Fence 默认关闭**：`useTCCFence() default false`，必须显式开启；不要以为 TCC 天然幂等。
+- **类名/表名以 v2.7.0 为准**：`DefaultCommonFenceHandler` + `SpringFenceHandler` + `tcc_fence_log`，不是旧资料的 `TCCFenceHandler` / `common_fence_log`。
+- **Common Fence 不局限 TCC**：`FenceHandler` 与 `CommonFenceDO` 是通用的，Saga 也可复用（由 `@CompensationBusinessAction` 等触发）。
 
 ## Links
-
 - [Seata](/docs/CS/Framework/Seata/Seata.md)
 - [Architecture](/docs/CS/Framework/Seata/Architecture.md)
 - [Transaction Flow](/docs/CS/Framework/Seata/Transaction_Flow.md)
 - [TC Coordinator](/docs/CS/Framework/Seata/TC_Coordinator.md)
 - [AT and Undo Log](/docs/CS/Framework/Seata/AT_UndoLog.md)
 - [XA](/docs/CS/Framework/Seata/XA.md)
+
+## References
+- Apache Seata source (v2.7.0): https://github.com/apache/seata/tree/v2.7.0
+- Seata TCC docs: https://seata.io/en-us/docs/user/tcc/tcc_mode.html

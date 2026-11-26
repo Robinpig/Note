@@ -150,8 +150,8 @@ These source changes are not included in the published 20261018 artifacts.
 
 ## Links
 
-- [Silo（专题枢纽）](/docs/CS/Distributed/Silo.md)
-- [Architecture（模块身份与 replace 机制）](/docs/CS/Distributed/Silo/Architecture.md)
+- [Silo（专题枢纽）](/docs/CS/Distributed/Silo/Silo.md)
+- [Architecture（模块身份与 replace 机制）](/docs/CS/Distributed/Silo/Silo.md?id=architecture)
 - [Compatibility Guard（CI 门禁的协议面守卫）](/docs/CS/Distributed/Silo/Compatibility_Guard.md)
 - [Security Advisories（公告账本与 backport 机制）](/docs/CS/Distributed/Silo/Security_Advisories.md)
 - [Deployment and Migration（升级与迁移操作手册）](/docs/CS/Distributed/Silo/Deployment_and_Migration.md)

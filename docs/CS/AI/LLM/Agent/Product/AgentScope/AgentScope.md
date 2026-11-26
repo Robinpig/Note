@@ -4,13 +4,18 @@ AgentScope 是阿里巴巴开源的 Python Agent 框架，从 v2.0 开始面向�
 
 这个定位把 AgentScope 放在了 Framework 与 Harness 之间：它提供 LangChain 级别的跨厂商抽象，又把权限、上下文压缩、运行时状态注入这些通常由 Harness 层处理的能力直接做进了核心 Agent 类。再往上，它还附带一套开箱即用的 Agent Service（FastAPI 后端 + 预构建 Web UI），把单个 Agent 包装成多租户、多会话的在线服务。
 
-本笔记以 **v2.0.8** 为基准
+> 版本基线：v2.0.11（2026-10-27 发布的最新正式版，tag `v2.0.11`；`src/agentscope/_version.py` 为 `__version__ = "2.0.11"`）
 
-本笔记采用「枢纽 + 分册」结构：主干保留架构叙事与跨模块分析，七个专题已拆为独立分册（均基于 v2.0.8 源码逐文件核实，统一放在 `AgentScope/` 子目录）。各分册由哪里接手、按什么顺序读，见下文 [How to Read the Subsystem Notes](#how-to-read-the-subsystem-notes)。
+```python
+# src/agentscope/_version.py
+__version__ = "2.0.11"
+```
+
+本笔记采用「枢纽 + 分册」结构：主干保留架构叙事与跨模块分析，十二个专题分册统一放在 `AgentScope/` 子目录，**全部按 v2.0.11 源码逐文件重核**。其中七册沿用 v2.0.8 时期的结构，五册是本次全量升级新增，专门承接 v2.0.9~v2.0.11 才出现的子系统。旧基线里被证伪的结论集中列在 [Corrections](/docs/CS/AI/LLM/Agent/Product/AgentScope/AgentScope.md?id=corrections-v208-baseline-to-v2011)。各分册由哪里接手、按什么顺序读，见下文 [How to Read the Subsystem Notes](#how-to-read-the-subsystem-notes)。
 
 ## Quickstart: From Zero to a Running Agent
 
-这一节给一个**最小可运行**的纵向切片，把「装包 → 造模型 → 造 Agent → 跑对话 → 流式渲染 → 拿结构化结果」六个动作串起来。所有 API 取自 v2.0.8 的公开符号：`agentscope.agent.Agent` / `agentscope.model.*` / `agentscope.tool.Toolkit` / `agentscope.message.UserMsg` / `agentscope.console.launch_console` / `agentscope.event`。
+这一节给一个**最小可运行**的纵向切片，把「装包 → 造模型 → 造 Agent → 跑对话 → 流式渲染 → 拿结构化结果」六个动作串起来。所有 API 取自 v2.0.11 的公开符号：`agentscope.agent.Agent` / `agentscope.model.*` / `agentscope.tool.Toolkit` / `agentscope.message.UserMsg` / `agentscope.console.launch_console` / `agentscope.event`。
 
 ### Installation
 
@@ -172,19 +177,23 @@ AgentScope v2.0 的核心架构可以概括为三层：
 
 ## How to Read the Subsystem Notes
 
-七个分册按「**装配 → 边界 → 编排 → 服务化**」四条线组织，大致对应上面三层表里的 Infrastructure 与 Service 两层。只想把框架用起来的读者读完 Quickstart 与 Architecture Overview 即可；要改框架行为、或判断某个能力该不该自己补，按下面四条线找对应分册。
+十三个分册按「**装配 → 边界 → 编排 → 服务化 → 记忆 → 新版扩张**」六条线组织，大致对应上面三层表里的 Infrastructure 与 Service 两层，再加一层横跨短期/长期/服务层的记忆子系统，以及一层 v2.0.9 起长出来的新能力。只想把框架用起来的读者读完 Quickstart 与 Architecture Overview 即可；要改框架行为、或判断某个能力该不该自己补，按下面六条线找对应分册。
 
-**装配线：一个 Agent 身上挂什么。**[Tool 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Tool.md) 讲工具体系——内置 13 个工具自己不做任何 I/O、全部委托 `BackendBase`，`ToolBase` 之下的三种实现（手写类 / `FunctionTool` / `MCPTool`）统一走中间件洋葱链，模型拿到的永远是同一套 JSON schema。[Middleware 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Middleware.md) 讲最值得细看的一层：`MiddlewareBase` 的 7 个 hook 与 `is_implemented()` 分派、内置中间件家族（预算 / TTS / 追踪 / 长期记忆三实现），以及权限 DSL 的完整细节（5 模式 × 4 行为、引擎 6 步判定、`bypass_immune` 安全 ASK）。[Model 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Model.md) 讲模型层——「统一 `Msg` 序列 → 厂商 JSON」的翻译为什么收拢在 formatter、10 个厂商子模块的卡片清单，以及 retry 包着的直通调用线。
+**装配线：一个 Agent 身上挂什么。**[Tool 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Tool.md) 讲工具体系——内置 14 个工具（含外部工具 `AskUser`）、全部委托 `BackendBase`，`ToolBase` 之下的三种实现（手写类 / `FunctionTool` / `MCPTool`）统一走中间件洋葱链，模型拿到的永远是同一套 JSON schema。[Middleware 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Middleware.md) 讲最值得细看的一层：`MiddlewareBase` 的 7 个 hook 与 `is_implemented()` 分派、内置中间件家族（预算 / TTS / 追踪 / 长期记忆三实现），以及权限 DSL 的完整细节（5 模式 × 4 行为、引擎 6 步判定、`bypass_immune` 安全 ASK）。[Model 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Model.md) 讲模型层——「统一 `Msg` 序列 → 厂商 JSON」的翻译为什么收拢在 formatter、11 个厂商子模块（10 家厂商）的卡片清单，以及 retry 包着的直通调用线。
 
 **边界线：Agent 伸手能碰到什么。**[RAG 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/RAG.md) 讲自带的那套完整 RAG（`rag/`，纯算法层、可完全独立使用）：Parser → Section → Chunk → embed → VectorStore 的数据流、`Chunk` 比 `Section` 多出的两个字段为什么服务检索期，以及它与服务层托管版（`app/rag/knowledge_base_manager/`）的边界。
 
-**编排线：一串 Agent 怎么跑。**[Pipeline 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Pipeline.md) 讲 AgentScope 的「事件织物」：`PipelineProtocol` 只暴露 `reply_stream()` 一个方法、强类型事件系统（`EventType` 28 值）、支撑类型（`ReplyFinishedReason` / `ErrorInfo` / Hook 类型），以及 `Msg` 的状态机式增量重建——尤其是 DataBlock 的 base64 拼接陷阱。[Realtime 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Realtime.md) 讲另一个完全不继承 `Agent` 的类：双向语音会话、无 request/reply 边界，turn-taking 状态机夹在实时模型与 transport 之间。
+**编排线：一串 Agent 怎么跑。**[Pipeline 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Pipeline.md) 讲 AgentScope 的「事件织物」：`PipelineProtocol` 只暴露 `reply_stream()` 一个方法、强类型事件系统（`EventType` 28 值）、支撑类型（`ReplyFinishedReason` / `ErrorInfo` / Hook 类型），以及 `Msg` 的状态机式增量重建——尤其是 DataBlock 按 `block_id` 的分片合并。[Realtime 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Realtime.md) 讲另一个完全不继承 `Agent` 的类：双向语音会话、无 request/reply 边界，turn-taking 状态机夹在实时模型与 transport 之间。
 
-**服务化线：怎么上线。**[App 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/App.md) 讲 v2.0.8 起成为正式包的 Agent Service：`create_app` 工厂与 15 个路由、`lifespan` 的 AsyncExitStack 生命周期、Redis + 异步 SQLAlchemy 双存储后端、Hub 抽象（GitHub MCP + ClawHub Skill）、Workspace 隔离策略与跨 owner 资源访问策略。
+**服务化线：怎么上线。**[App 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/App.md) 讲 v2.0.8 起成为正式包的 Agent Service：`create_app` 工厂与 v2.0.11 的 17 个路由、`lifespan` 的 AsyncExitStack 生命周期、Redis + 异步 SQLAlchemy 双存储后端、Hub 抽象、Workspace 隔离策略与跨 owner 资源访问策略。
+
+**记忆线：什么被记住、存在哪、怎么回来。**[Memory 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Memory.md) 先拆穿一个直觉——框架里**没有一个叫 `Memory` 的类**，顶层也没有 `memory/` 包：短期层是 `AgentState.context` / `summary` 加五维结构化压缩与四维运行时注入，长期层是三套中间件各自的后端，服务化层是 `SessionRecord.state` 落 DB `payload`；workspace 的 `context.jsonl` 是**只写归档**，不是恢复路径。三套长期记忆中间件的逐文件事实仍归 Middleware 分册，这里负责讲清四层之间的边界与命名陷阱。
+
+**新版扩张线：v2.0.9~v2.0.11 长出来的东西。**[AgentLoop 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/AgentLoop.md) 把主循环、三动作状态机、事件重建与「两个五态枚举」按 3942 行的真源码重讲一遍，并记下 v2.0.11 新增的外部执行契约。[SOP 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/SOP.md) 讲存储过程式的流程硬约束：引擎状态机、两套提交路径、nudge 预算与 attempt 预算的分工。[Classifier 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Classifier.md) 讲概率化分类与 `ModelRouterMiddleware` 的逐 reply 选模。[VoiceStack 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/VoiceStack.md) 讲 ASR / TTS / Realtime 三栈、模型卡机制、WebRTC transport 与打包陷阱，RealtimeAgent 的 turn-taking 状态机仍归 [Realtime 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Realtime.md)。[TUI 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/TUI.md) 讲终端三类启动器、增量 widget 渲染与两套独立的 HITL 实现。读这五册之前建议先看 [Version Evolution](/docs/CS/AI/LLM/Agent/Product/AgentScope/AgentScope.md?id=version-evolution-v208-to-v2011)，那里逐 tag 标清了每个模块究竟是哪一版进来的。
 
 ## The Unified Agent Class
 
-`Agent` 类（`agent/_agent.py`，约 2500 行）是整个框架的心脏。构造函数接收四大配置对象：
+`Agent` 类（`agent/_agent.py`，v2.0.11 实为 **3942 行**；v2.0.8 已是 3908 行，旧笔记的「约 2500 行」从一开始就不准）是整个框架的心脏。但真正的 ReAct 主循环 `_reply_impl()` 只有 270 行，其余三千多行是事件转换、压缩、权限、HITL 与工具执行的辅助面。构造函数接收四大配置对象：
 
 ```python
 Agent(
@@ -200,7 +209,72 @@ Agent(
 )
 ```
 
-四个 Config 是 Pydantic BaseModel，字段默认值覆盖了绝大多数场景。`_validate_configs()` 在构造时检查一个核心不变量：`reserve_ratio < trigger_ratio`、`context_buffer_ratio < trigger_ratio`——确保压缩阈值、缓冲区间距、保留区三者不重叠。
+构造函数的真实签名（`agent/_agent.py`）里，四个 Config 与 `offloader` 都是可选参数：
+
+```python
+# agent/_agent.py
+class Agent:
+    """The agent class."""
+
+    def __init__(
+        self,
+        name: str,
+        system_prompt: str,
+        model: ChatModelBase,
+        toolkit: Toolkit | None = None,
+        middlewares: list[MiddlewareBase] | None = None,
+        state: AgentState | None = None,
+        offloader: Offloader | None = None,
+        # The agent configurations
+        model_config: ModelConfig | None = None,
+        context_config: ContextConfig | None = None,
+        react_config: ReActConfig | None = None,
+        injection_config: InjectionConfig | None = None,
+    ) -> None:
+```
+
+四个 Config 是 Pydantic BaseModel，字段默认值覆盖了绝大多数场景。`_validate_configs()` 在构造时检查一个核心不变量：`reserve_ratio < trigger_ratio`、`context_buffer_ratio < trigger_ratio`——确保压缩阈值、缓冲区间距、保留区三者不重叠（`agent/_agent.py`）：
+
+```python
+# agent/_agent.py
+    def _validate_configs(self) -> None:
+        """Validate the config combinations that a single config class cannot
+        check by itself.
+
+        Raises:
+            `ValueError`:
+                If the reserved/buffer ratios don't leave room ahead of the
+                context compression threshold.
+        """
+        if (
+            self.context_config.reserve_ratio
+            >= self.context_config.trigger_ratio
+        ):
+            raise ValueError(
+                "The 'reserve_ratio' of the context config must be smaller "
+                "than its 'trigger_ratio', got "
+                f"{self.context_config.reserve_ratio} and "
+                f"{self.context_config.trigger_ratio}.",
+            )
+
+        # The buffer is only consumed by the runtime state injection and
+        # the compression tool, so it's checked only when one of them is on
+        if (
+            self.injection_config.inject_runtime_state
+            or self.context_config.compression_tool_enabled
+        ) and (
+            self.context_config.context_buffer_ratio
+            >= self.context_config.trigger_ratio
+        ):
+            raise ValueError(
+                "The 'context_buffer_ratio' of the context config must be "
+                "smaller than its 'trigger_ratio', so that the context "
+                "length is injected and the compression tool takes effect "
+                "before the hard compression, got "
+                f"{self.context_config.context_buffer_ratio} and "
+                f"{self.context_config.trigger_ratio}.",
+            )
+```
 
 Agent 的两个公开方法是 `reply()` 和 `reply_stream()`，后者返回 `AsyncGenerator[AgentEvent | Msg]`。内部统一走 `_reply()` → 中间件链 → `_reply_impl()` 主循环。
 
@@ -241,11 +315,92 @@ REPLY_START → MODEL_CALL_START → TEXT_BLOCK_START → TEXT_BLOCK_DELTA* → 
 
 HITL 交互的核心设计：Agent 在遇到需要确认的工具调用时，**不抛出异常也不返回结果**，而是 yield `RequireUserConfirmEvent` 后停在 await 点。调用方（Web UI、Console、上游 Agent）决定后把结果作为下一次 `reply()` 的输入传回来——同一个 Agent 实例、同一条上下文、循环从断点继续。
 
-事件类型枚举（`EventType` 28 值）、`Msg.append_event` 状态机与 DataBlock base64 增量拼接陷阱的完整清单见 [Pipeline 分册（事件与类型）](/docs/CS/AI/LLM/Agent/Product/AgentScope/Pipeline.md)。
+事件类型枚举（`EventType` 28 值，v2.0.8→v2.0.11 **零新增**）、`Msg.append_event` 状态机的完整清单见 [Pipeline 分册（事件与类型）](/docs/CS/AI/LLM/Agent/Product/AgentScope/Pipeline.md)。注意旧笔记记的「DataBlock base64 增量拼接陷阱」在 v2.0.11 应改称**分片合并规则**：decode → 拼接 → encode 在 v2.0.8 就已实现，v2.0.11 的精化是按 `event.block_id` 定位**同 id** 的 DataBlock，找不到就 append 新块，避免多个 DataBlock 并存于同一条 Msg 时串台（`message/_base.py`）：
+
+```python
+# message/_base.py
+                    # Merge same-id Base64 chunks like
+                    # ToolResponse.append_chunk.
+                    merge_target: DataBlock | None = None
+                    for output_block in block.output:
+                        if (
+                            isinstance(output_block, DataBlock)
+                            and output_block.id == event.block_id
+                            and isinstance(output_block.source, Base64Source)
+                        ):
+                            merge_target = output_block
+                            break
+                    if merge_target is not None and isinstance(
+                        src,
+                        Base64Source,
+                    ):
+                        existing = base64.b64decode(merge_target.source.data)
+                        incoming = base64.b64decode(src.data)
+                        merge_target.source.data = base64.b64encode(
+                            existing + incoming,
+                        ).decode("ascii")
+                        merge_target.source.media_type = (
+                            src.media_type or merge_target.source.media_type
+                        )
+                    else:
+                        block.output.append(
+                            DataBlock(id=event.block_id, source=src),
+                        )
+```
+
+生产端也真的传 `block_id=block.id`（`agent/_agent.py`）：
+
+```python
+# agent/_agent.py
+            elif isinstance(block, DataBlock):
+                if isinstance(block.source, Base64Source):
+                    yield ToolResultDataDeltaEvent(
+                        reply_id=self.state.reply_id,
+                        tool_call_id=tool_call_id,
+                        # Keep the block id so replay groups one payload.
+                        block_id=block.id,
+                        media_type=block.source.media_type,
+                        data=block.source.data,
+                    )
+```
 
 ## ReAct Loop: The Core
 
-`_reply_impl()` 是约 300 行的主循环，核心逻辑在一个 `while True` 里：
+`_reply_impl()` 是约 300 行的主循环，核心逻辑在一个 `while True` 里。真实的函数签名与循环头如下（`agent/_agent.py`）：
+
+```python
+# agent/_agent.py
+    async def _reply_impl(  # pylint: disable=too-many-branches
+        self,
+        inputs: Msg
+        | list[Msg]
+        | UserConfirmResultEvent
+        | UserInterruptEvent
+        | ExternalExecutionResultEvent
+        | None = None,
+        structured_schema: Type[BaseModel] | None = None,
+    ) -> AsyncGenerator[AgentEvent | Msg, None]:
+        """Core reply logic."""
+```
+
+```python
+# agent/_agent.py
+            while True:
+                # =============================================================
+                # Step 3.1: Decide the next action based on the current state
+                # =============================================================
+                next_action = self._next_action(final_msg)
+
+                match next_action:
+                    case Exit(exit_msg=exit_msg, exit_events=exit_events):
+                        if not exit_events:
+                            # Parked on HITL: the reply is not finished, so
+                            # the continuation protocol doesn't apply
+                            yield exit_msg
+                            return
+```
+
+下面是把三种动作摊开后的**简化骨架**（非逐字源码，中文注释为说明）：
 
 ```python
 while True:
@@ -296,14 +451,98 @@ while True:
 
 ### HITL State Machine
 
-Agent 的 ToolCall 有完整的生命周期：
+旧版笔记把 HITL 画成一条状态链，其实**混淆了两个各 5 态的枚举**（v2.0.11 与 v2.0.8 都是如此）：
 
+| 枚举 | 五态 | 位置 |
+| :--- | :--- | :--- |
+| `ToolCallState` | `PENDING / ASKING / ALLOWED / SUBMITTED / FINISHED` | `message/_block.py` |
+| `ToolResultState` | `SUCCESS / ERROR / INTERRUPTED / DENIED / RUNNING` | `message/_block.py` |
+
+两个枚举的真实定义（`message/_block.py`）：
+
+```python
+# message/_block.py
+class ToolCallState(StrEnum):
+    """The state of the tool call."""
+
+    PENDING = "pending"
+    ASKING = "asking"
+    ALLOWED = "allowed"
+    SUBMITTED = "submitted"
+    FINISHED = "finished"
 ```
-PENDING → ASKING → ALLOWED → FINISHED
-                 → DENIED
-                 → SUBMITTED → FINISHED
-                 → INTERRUPTED（用户中断）
-                 → ERROR（执行失败）
+
+```python
+# message/_block.py
+class ToolResultState(StrEnum):
+    """The tool result state."""
+
+    SUCCESS = "success"
+    ERROR = "error"
+    INTERRUPTED = "interrupted"
+    DENIED = "denied"
+    RUNNING = "running"
+```
+
+`DENIED`、`INTERRUPTED`、`ERROR` 是**结果**的状态，不是调用的状态；完整转移图写在 `ToolCallBlock` 的 docstring（`message/_block.py`）：
+
+```python
+# message/_block.py
+    state: ToolCallState = ToolCallState.PENDING
+    """The tool call state
+    - 'pending': the initial state when the tool call hasn't been processed
+     by the permission system
+    - 'asking': the tool call is asking and waiting for user confirmation
+    - 'allowed': allowed by the permission system/user and waits for execution
+    - 'submitted': the tool call has been submitted for external execution
+     and is waiting for results event
+
+    Transitions
+    -----------
+    pending
+      ├── permission DENY / input validation failed ──► finished
+      ├── permission ASK ──────────────────────────── ► asking
+      │       ├── user denied ───────────────────────► finished
+      │       └── user approved ─────────────────────► allowed
+      └── permission ALLOW ────────────────────────── ► allowed
+
+    allowed
+      ├── local tool  ── (execute) ─────────────────► finished
+      └── external tool ──────────────────────────── ► submitted
+
+    submitted
+      └── ExternalExecutionResultEvent received ─────► finished
+    """
+```
+
+v2.0.11 还把主动中断统一收敛成抛 `asyncio.CancelledError`，由 except / finally 一处产出 INTERRUPTED（`agent/_agent.py`）：
+
+```python
+# agent/_agent.py
+        except asyncio.CancelledError:
+            # Handle the CancelledError within the _reply_impl for the
+            # agent middlewares
+            end_event = ReplyEndEvent(
+                session_id=self.state.session_id,
+                reply_id=self.state.reply_id,
+                finished_reason=ReplyFinishedReason.INTERRUPTED,
+            )
+
+            if self.react_config.interruption_raise_cancelled_error:
+                raise
+
+        finally:
+            if end_event is not None:
+                interrupted_end = (
+                    end_event.finished_reason
+                    == ReplyFinishedReason.INTERRUPTED
+                )
+                if interrupted_end:
+                    # Handle the context when interruption
+                    async for _ in self._close_unfinished_tool_calls():
+                        yield _
+
+                yield end_event
 ```
 
 `_check_incoming_event()` 确保状态一致性——如果 Agent 正在等待 2 个工具的确认，只传回来 1 个结果会报错；传回来的工具 id 不在等待列表里也会报错。
@@ -325,14 +564,18 @@ PENDING → ASKING → ALLOWED → FINISHED
 **Transformer Pattern（1 个，串行管道）**：
 - `on_system_prompt` —— 把 system_prompt 字符串改一下返回，每个 middleware 拿上一个的输出当输入
 
-Onion hook 的签名统一是：
+Onion hook 的签名统一是下面这样（`middleware/_base.py` 中 `on_reply` 的原样定义，其余 5 个 hook 参数一致）：
+
 ```python
-async def on_xxx(self, agent, input_kwargs, next_handler):
-    # before: agent=agent（可读写 agent 状态）
-    async for item in next_handler(**input_kwargs):
-        # after: yield 前可修改事件
-        yield item
+    async def on_reply(
+        self,
+        agent: "Agent",
+        input_kwargs: dict,
+        next_handler: Callable[..., AsyncGenerator],
+    ) -> AsyncGenerator:
 ```
+
+基类默认实现直接 `raise RuntimeError(...)`；`is_implemented()` 用 `base_method is not sub_method` 比对基类与子类的方法对象，因此「实现了哪些 hook」是运行时探测出来的，无需显式注册。
 
 中间件链内部用递归构造执行器（`execute_chain`），和 Koa/Express 的洋葱模型写法一模一样。
 
@@ -430,10 +673,29 @@ ContextConfig(
 `WorkspaceBase`（`workspace/_base.py`）自己**不定义任何文件读写方法**，全部委托 `BackendBase`（`tool/_builtin/_backend.py`）。后者只有三个抽象方法：
 
 ```python
-async def exec_shell(self, command: str, ...) -> ...     # _backend.py:294
-async def read_file(self, path: str) -> bytes            # :331
-async def write_file(self, path: str, content: bytes)    # :344
+# tool/_builtin/_backend.py
+    # ── abstract primitives ────────────────────────────────────────
+
+    @abstractmethod
+    async def exec_shell(
+        self,
+        command: list[str],
+        *,
+        cwd: str | None = None,
+        timeout: float | None = None,
+    ) -> ExecResult:
+        # ...（以下为该方法的 docstring，省略；抽象方法无实现体）
+
+    @abstractmethod
+    async def read_file(self, path: str) -> bytes:
+        # ...（以下为该方法的 docstring，省略）
+
+    @abstractmethod
+    async def write_file(self, path: str, data: bytes) -> None:
+        # ...（以下为该方法的 docstring，省略）
 ```
+
+（三段签名连续摘自 `BackendBase`，中间的 docstring 已用注释标出省略；`exec_shell` 收的是参数列表而非命令行字符串。）
 
 其余十来个能力（`file_exists` / `is_dir` / `list_dir` / `scandir` / `stat` / `stat_mtime` / `delete_path` / `getcwd` / `expanduser` / `write_stream` / `read_stream`）全部是**基于 `exec_shell` 的默认实现**，`LocalBackend` 才覆盖成原生系统调用。
 
@@ -470,7 +732,32 @@ async def write_file(self, path: str, content: bytes)    # :344
 
 ### Offloading: Where Compressed Context Actually Goes
 
-`Offloader`（`workspace/_offload_protocol.py`）是个 **Protocol**，只有三个方法——`offload_data_block` / `offload_context` / `offload_tool_result`。`WorkspaceBase` 是它的默认实现，而 Agent 只依赖这个 Protocol（`agent/_agent.py:195`）。换句话说 offloader 是可替换的，不必是 workspace。
+`Offloader`（`workspace/_offload_protocol.py`）是个 **Protocol**，只有三个方法——`offload_data_block` / `offload_context` / `offload_tool_result`。`WorkspaceBase` 是它的默认实现，而 Agent 只依赖这个 Protocol（`agent/_agent.py`）。换句话说 offloader 是可替换的，不必是 workspace。
+
+```python
+# workspace/_offload_protocol.py
+class Offloader(Protocol):
+    """The offloader protocol."""
+
+    async def offload_data_block(self, block: DataBlock) -> DataBlock:
+        # ...（以下为该方法的 docstring，省略）
+
+    async def offload_context(
+        self,
+        session_id: str,
+        msgs: list[Msg],
+    ) -> str:
+        # ...（以下为该方法的 docstring，省略）
+
+    async def offload_tool_result(
+        self,
+        session_id: str,
+        tool_result: ToolResultBlock,
+    ) -> str:
+        # ...（以下为该方法的 docstring，省略）
+```
+
+（节选自 `workspace/_offload_protocol.py`，三个方法的 docstring 已用注释标出省略。）
 
 workspace 布局是固定的（`_utils.py`）：
 
@@ -484,11 +771,55 @@ ${workdir}/
 
 三条落盘路径：
 
-- **上下文压缩**——`offload_context()` 把消息**追加**写进 `sessions/<session_id>/context.jsonl`，一行一条 JSONL。写之前会把 inline base64 的 DataBlock 先抽到 `data/` 再改写成 `file://` URL 块，保证单行体积有界
+- **上下文压缩**——`offload_context()` 把消息**追加**写进 `sessions/<session_id>/context.jsonl`，一行一条 JSONL。写之前会把 inline base64 的 DataBlock 先抽到 `data/` 再改写成 **`workspace://`** URL 块（`workspace/_base.py`，旧笔记写的 `file://` 已失效），保证单行体积有界：
+
+```python
+# workspace/_base.py
+        # A ``workspace://`` reference (workspace-relative path). Unlike a
+        # node-local ``file://`` path it is portable: a serving endpoint
+        # resolves the actual workspace from the request's session
+        # context and reads the relative path. See docs TODO (frontend
+        # ``workspace://`` rendering).
+        return DataBlock(
+            id=block.id,
+            name=block.name,
+            source=URLSource(
+                url=AnyUrl(f"workspace:///{rel}"),
+                media_type=block.source.media_type,
+            ),
+        )
+```
 - **超长工具结果**——`offload_tool_result()` 写 `sessions/<session_id>/tool_result-<id>.txt`；同名冲突时后缀 `(1)` `(2)`，绝不覆盖旧内容
 - **多模态数据**——`offload_data_block()` 写 `data/<sha256(base64)>.<ext>`，同内容短路复用
 
-关键点：**没有自动回读 API**。卸载后只在原位留下 `<system-reminder>offloaded to /path</system-reminder>`，让 Agent 自己用 Read / Grep 去取。这个设计把「要不要找回上下文」的决策权留给了模型——大部分被卸载的内容确实不该再读回来。
+关键点：**这三份 workspace 文件没有自动回读 API**（`context.jsonl` 全仓只写不读，唯一的 `read_file` 是 `offload_context()` 自己为拼接追加而读）。卸载后只在原位留下 `<system-reminder>offloaded to /path</system-reminder>`，让 Agent 自己用 Read / Grep 去取——决策权留给模型。但别把它和**跨进程会话恢复**混为一谈：后者走 `SessionRecord.state: AgentState` 落 SQL/Redis 的 JSON `payload` 列（`app/storage/_model/_session.py`、`app/_service/_chat.py`），两套持久化互不相通。完整展开见 [Memory 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Memory.md)。
+
+会话恢复一侧确实把持久化的 state 直接灌回 Agent（`app/_service/_chat.py`）：
+
+```python
+# app/_service/_chat.py
+                agent_state = session_record.state
+                agent_state.session_id = session_id
+                chat_config = agent_record.data.chat_config
+                agent = self._agent_cls(
+                    name=agent_record.data.name,
+                    system_prompt=system_prompt,
+                    model=model,
+                    toolkit=toolkit,
+                    model_config=ModelConfig(fallback_model=fallback_model),
+                    context_config=chat_config.context_config,
+                    react_config=chat_config.react_config,
+                    state=agent_state,
+                    middlewares=middlewares,
+                    offloader=workspace,
+                )
+```
+
+```python
+# app/storage/_model/_session.py
+    state: AgentState = Field(default_factory=AgentState)
+    """Mutable runtime state, updated after each chat turn."""
+```
 
 注意别混淆：**Application 层还有一个后台工具卸载**（`app/middleware/_tool_offload_middleware.py`），默认 10s 超时后不取消任务，转交给 `BackgroundTaskManager`，跑完通过 HintBlock 投递 session inbox 并唤醒 Agent。那个是「任务后台化」，这个是「上下文磁盘化」，两回事。
 
@@ -498,38 +829,81 @@ ${workdir}/
 > RAG 子系统的完整事实（`_document`/`_parser`/`_chunker`/`_knowledge` 算法层、`RAGMiddleware` 双模式、与服务层 `knowledge_base_manager` 的边界）已拆到：[RAG 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/RAG.md)。
 ## Skill Loading
 
-Skill 的数据结构极简（`skill/_base.py` 的 dataclass，六个字段：`name` / `description` / `dir` / `markdown` / `updated_at`），加载逻辑也就没什么花样：
+Skill 的数据结构极简（`skill/_base.py` 的 dataclass，**5 个**字段：`name` / `description` / `dir` / `markdown` / `updated_at`；旧笔记写「六个」是误记），加载逻辑也就没什么花样：
+
+```python
+# skill/_base.py
+@dataclass
+class Skill:
+    """The agent skill class"""
+
+    name: str
+    """The name of the skill."""
+    description: str
+    """The description of the skill."""
+    dir: str
+    """The directory of the agent skill."""
+    markdown: str
+    """The markdown content of the agent skill."""
+    updated_at: float
+    """The last updated time of the skill."""
+```
 
 - **目录约定**：每个 skill 根目录下必须有 `SKILL.md`，除此之外**不读任何东西**（没有 scripts 子目录机制）
 - frontmatter 用 `frontmatter.loads()` 解析，取 `name` 与 `description`，两者任一缺失就 warn 并跳过整个 skill
 - 缓存键是 skill 根目录，失效判据是 mtime **精确相等**
 - 发现阶段用 `asyncio.to_thread(os.walk)` 避开阻塞，加载阶段 `asyncio.gather(..., return_exceptions=True)` 并发读文件；所有失败路径都吞异常返回空列表
 
-值得记的是 **Jinja2 渲染的时机不在 `skill/` 包里**——skill 正文进入 `Toolkit` 后，要在生成 system prompt 时才渲染（`tool/_toolkit.py:466`）：
+值得记的是 **Jinja2 渲染的时机不在 `skill/` 包里**——skill 正文进入 `Toolkit` 后，要在生成 system prompt 时才渲染（`tool/_toolkit.py`）：
 
 ```python
-template = Template(self.skill_instruction_template)
-return template.render(
-    skills=skills.values(),
-    skill_viewer=self.builtin_skill_viewer.tool.name,
-)
+# tool/_toolkit.py
+        # If no skills were collected, return None
+        if len(skills) == 0:
+            return None
+
+        # Generate the skill instruction prompt with the template
+        template = Template(self.skill_instruction_template)
+
+        return template.render(
+            skills=skills.values(),
+            skill_viewer=self.builtin_skill_viewer.tool.name,
+        )
 ```
 
 加载时只做 YAML frontmatter 解析，字符串渲染推迟到最后组装 prompt 那一刻。这样同一个 loader 可以被多种渲染方式复用。
 
 ## Formatter Layer
 
-模型适配真正的复杂点不在「怎么发 HTTP 请求」，而在「怎么把统一的 `Msg` 序列翻译成某家 API 认得的 JSON」。AgentScope 用一整包 formatter 来收拢这件事——`formatter/` 目录下 11 个非 `__init__` 的 `.py` = 1 个 `FormatterBase` 抽象基类 + 10 个厂商 formatter；每家厂商一个 `XxxFormatter` 类，OpenAI 较特殊拆成 `OpenAIChatFormatter` 与 `OpenAIResponseFormatter` 两族（对应 Chat Completions 与 Responses 两套 API），故厂商实为 10 家（Anthropic / DashScope / DeepSeek / Gemini / Moonshot / Ollama / OpenAI / Volcengine / xAI，OpenAI 计两族）。
+模型适配真正的复杂点不在「怎么发 HTTP 请求」，而在「怎么把统一的 `Msg` 序列翻译成某家 API 认得的 JSON」。AgentScope 用一整包 formatter 来收拢这件事——v2.0.11 的 `formatter/` 目录下 **12 个**非 `__init__` 的 `.py` = 1 个 `FormatterBase` 抽象基类 + **11 个厂商 formatter 文件**；OpenAI 较特殊拆成 `OpenAIChatFormatter` 与 `OpenAIResponseFormatter` 两族（对应 Chat Completions 与 Responses 两套 API），另有 v2.0.9 新增的 `_minimax_formatter.py`，故厂商实为 **10 家**（Anthropic / DashScope / DeepSeek / Gemini / MiniMax / Moonshot / Ollama / OpenAI / Volcengine / xAI）。`model/` 下对应 11 个厂商子模块、`credential/_factory.py` 注册 10 个 Credential 类：
+
+```python
+# credential/_factory.py
+    _classes: list[Type[CredentialBase]] = [
+        AnthropicCredential,
+        DashScopeCredential,
+        DeepSeekCredential,
+        GeminiCredential,
+        MiniMaxCredential,
+        MoonshotCredential,
+        OllamaCredential,
+        OpenAICredential,
+        XAICredential,
+        VolcengineCredential,
+    ]
+```
 
 `FormatterBase`（`formatter/_formatter_base.py`）的抽象面窄得出人意料——**只有一个抽象方法**：
 
 ```python
-# formatter/_formatter_base.py:46
-@abstractmethod
-async def format(self, *args, **kwargs) -> list[dict[str, Any]]:
+# formatter/_formatter_base.py
+    @abstractmethod
+    async def format(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        """Format the Msg objects to a list of dictionaries that satisfy the
+        API requirements."""
 ```
 
-没有独立的 system prompt / memory / tool schema 抽象方法。基类只提供几个共享工具：`convert_tool_result_to_string()`（把工具结果里支持的媒体用 block.id 作 identifier 写进 `<system-reminder>`，并把它作为「提升」出来的 user 消息返回）、`_convert_unsupported_data_block_to_string()`（不支持的媒体 base64 落临时文件、URL 保持 URL）、`_group_messages()`（把 Msg 流切成 tool_sequence / agent_message 两组）。
+仅就 `FormatterBase` 而言，没有独立的 system prompt / memory / tool schema 抽象方法（框架层的 `MiddlewareBase.on_system_prompt` 是另一套机制，三套长期记忆中间件都实现它）。基类只提供几个共享工具：`convert_tool_result_to_string()`（把工具结果里支持的媒体用 block.id 作 identifier 写进 `<system-reminder>`，并把它作为「提升」出来的 user 消息返回）、`_convert_unsupported_data_block_to_string()`（不支持的媒体 base64 落临时文件、URL 保持 URL）、`_group_messages()`（把 Msg 流切成 tool_sequence / agent_message 两组）。
 
 值得一提的是：**仓库里没有任何 LangChain 兼容层**，全树搜不到 `langchain` 字样。
 
@@ -556,7 +930,22 @@ async def format(self, *args, **kwargs) -> list[dict[str, Any]]:
 
 ### Exception Model
 
-异常只有 7 个类，但分类逻辑很清晰（`exception/_base.py`）：
+异常只有 7 个类，但分类逻辑很清晰。v2.0.8 全挤在 `exception/_base.py`，v2.0.11 已**拆成三个文件**（`exception/__init__.py`）：`_base.py` 放 2 个基类、`_tool.py` 放 4 个工具异常、`_model.py` 放 1 个。数量没变，路径变了：
+
+```python
+# exception/__init__.py
+from ._base import (
+    AgentOrientedException,
+    DeveloperOrientedException,
+)
+from ._model import StructuredOutputError
+from ._tool import (
+    ToolInterruptedError,
+    ToolNotFoundError,
+    ToolJSONDecodeError,
+    ToolGroupInactiveError,
+)
+```
 
 ```python
 class AgentOrientedException(Exception):
@@ -572,7 +961,27 @@ class AgentOrientedException(Exception):
 
 ### A2A Agent and Task Model
 
-`agent/_a2a_agent.py` 的 `A2AAgent` 是把远端 [A2A](/docs/CS/AI/LLM/Protocol/A2A.md) Agent 包装成本地 Agent 形态的适配器——它持有独立的 `A2AAgentState`（含协议层的 `context_id` / `task_id`，与 `AgentState` **没有继承关系**），把 `a2a.types.Part` 转成 `Msg` 的 content block，并发 `ReplyStartEvent` 等本地事件流。用途是让远端 Agent 能混进本地 Pipeline 编排。
+`agent/_a2a_agent.py` 的 `A2AAgent` 是把远端 [A2A](/docs/CS/AI/LLM/Protocol/A2A.md) Agent 包装成本地 Agent 形态的适配器——它持有独立的 `A2AAgentState`（含协议层的 `context_id` / `task_id`，与 `AgentState` **没有继承关系**），把 `a2a.types.Part` 转成 `Msg` 的 content block，并发 `ReplyStartEvent` 等本地事件流。用途是让远端 Agent 能混进本地 Pipeline 编排。注意 v2.0.11 里 `A2AAgentState` 已迁到 `state/_a2a_state.py`（`_a2a_agent.py` 从 `..state` 导入），旧笔记写的路径已失效。
+
+```python
+# agent/_a2a_agent.py
+from ..state import A2AAgentState
+```
+
+```python
+# state/_a2a_state.py
+class A2AAgentState(BaseModel):
+    """The A2A agent state."""
+
+    session_id: str = Field(default_factory=_generate_id)
+    """The session id of the agent, used to group its streamed events."""
+
+    context_id: str | None = None
+    """The context_id of the A2A protocol."""
+
+    task_id: str | None = None
+    """The current task id of the agent."""
+```
 
 Plan 机制的数据模型在 `state/_task.py`：一个带 DAG 依赖的通用 Task（`blocks` / `blocked_by` 双向列表、`state` 三值 `pending / in_progress / completed`），没有 Plan / Injection 之分。这也解释了为什么 `TaskUpdate` 支持 `add_blocks` / `add_blocked_by` 这类字段。
 
@@ -585,16 +994,76 @@ Plan 机制的数据模型在 `state/_task.py`：一个带 DAG 依赖的通用 T
 
 `PipelineProtocol` 与 `Agent` 共用 `reply_stream()` 接口——Pipeline 是「固化逻辑的多 Agent 编排器」，按预设顺序把消息喂给一串 Agent；`GoalPipeline` 在此基础上加 executor/verifier 循环与目标检查。事件类型枚举（`EventType` 28 值）、`Msg.append_event` 状态机、DataBlock base64 增量拼接陷阱，以及 Types 系统（`ReplyFinishedReason` / `ErrorType` / `AgentHookTypes`）的完整事实见 [Pipeline 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Pipeline.md)。
 
-Agent Service（`src/agentscope/app/`）到 v2.0.8 已是正式包：2MB、约 200 文件的应用层，按职责分 `_router/` `_service/` `_manager/` `_tool/` `storage/` `rag/` `hub/` `workspace_manager/` 八目录，外加 Feishu / Discord / DingTalk 频道适配与 GitHub MCP Hub、ClawHub Skill Hub。依赖按组分包（`agentscope[service]` / `[storage-sql]` / `[workspace-docker]` / `[tools]`），连内置 Grep 工具都锁 `ripgrep>=14.1,<15`（15.x 缺 Windows / glibc<2.39 / musl / aarch64 的 wheel，远程沙箱走镜像内安装）。存储层有两套后端（`AsyncSQLAlchemyStorage` + `RedisStorage`），**路由器注册 15 个而非 16 个**——`_router/_schema` 是 Pydantic 模型集合不是路由。完整事实见 [App 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/App.md)。
+Agent Service（`src/agentscope/app/`）到 v2.0.8 已是正式包，v2.0.11 为 **209 文件 / 1.83 MB**、**12 个一级子目录**（`_manager/` `_router/` `_service/` `_tool/` `access/` `channel/` `hub/` `message_bus/` `middleware/` `rag/` `storage/` `workspace_manager/`；旧笔记的「八目录」本就漏了 `access/` `channel/` `message_bus/` `middleware/`）。依赖按组分包（`agentscope[service]` / `[storage-sql]` / `[workspace-docker]` / `[tools]`，v2.0.11 另有 `[realtime]` / `[realtime-local]` / `[tui]`），连内置 Grep 工具都锁 `ripgrep>=14.1,<15`（`pyproject.toml`）。存储层仍是两套后端（`AsyncSQLAlchemyStorage` + `RedisStorage`），**`create_app` 注册 17 个 router**（`app/_app.py`；v2.0.8 是 15 个，新增 `sop_router` 与 `realtime_router`）——`_router/_schema` 是 Pydantic 模型集合不是路由。完整事实见 [App 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/App.md)。
+
+```toml
+# pyproject.toml
+tools = [
+    "ripgrep>=14.1,<15",
+]
+```
+
+```python
+# app/_app.py
+    # Built-in routers
+    for router in (
+        agent_router,
+        chat_router,
+        credential_router,
+        health_router,
+        hub_router,
+        knowledge_base_router,
+        mcp_router,
+        schedule_router,
+        session_router,
+        skill_router,
+        sop_router,
+        workspace_router,
+        model_router,
+        realtime_router,
+        tts_model_router,
+        embedding_model_router,
+        channel_router,
+    ):
+        app.include_router(router)
+```
 
 ### Hub Subsystem: Registry as Assembly
 
-Agent Service 不直接 hardcode MCP server 或 skill 的来源，而是把它们抽象成 **Hub**——一个「从远端注册中心发现并装载」的抽象（`app/hub/_base.py`）。v2.0.8 含两类：
+Agent Service 不直接 hardcode MCP server 或 skill 的来源，而是把它们抽象成 **Hub**——一个「从远端注册中心发现并装载」的抽象（`app/hub/_base.py`）。v2.0.11 含两类：
 
-- **MCPHubBase** —— 发现并装载 MCP server；首实现 `GitHubHub`（`hub/_mcp/_github_hub.py`），从 GitHub 上的 MCP 注册中心拉取 server 清单并装载。
-- **SkillHubBase** —— 发现并装载 skill；首实现 `ClawHub`（`hub/_skill/_claw_hub.py`）。
+- **MCPHubBase**（`app/hub/_mcp/_base.py`）—— 发现并装载 MCP server；首实现类名是 `GitHubMCPHub`（`app/hub/_mcp/_github_hub.py`），旧笔记写的 `GitHubHub` 不准确。
+- **SkillHubBase**（`app/hub/_skill/_base.py`）—— 发现并装载 skill；首实现类名是 `ClawSkillHub`（`app/hub/_skill/_claw_hub.py`），旧笔记写的 `ClawHub` 不准确。
 
 `hub_id` 受 `HUB_ID_PATTERN = [a-zA-Z0-9_-]+` 约束，`create_app` 的 `_index_hubs` 按 id 建索引，重复 id 直接 `ValueError`——同一 kind 的 hub 必须 id 唯一，否则路由无法唯一定址。`hub` router 把「发现 / 装载 / 列出」能力暴露成 HTTP 端点。完整事实（生命周期、索引、与 workspace 网关的关系）见 [App 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/App.md)。
+
+```python
+# app/hub/_base.py
+# A hub id is a path segment in the hub routes.
+HUB_ID_PATTERN = re.compile(r"[a-zA-Z0-9_-]+")
+```
+
+```python
+# app/hub/_base.py
+        if not HUB_ID_PATTERN.fullmatch(hub_id):
+            raise ValueError(
+                f"Hub id {hub_id!r} must match [a-zA-Z0-9_-]+ so it is "
+                f"usable as a route path segment.",
+            )
+```
+
+```python
+# app/_app.py
+    indexed: dict[str, HubBase] = {}
+    for hub in hubs or []:
+        if hub.hub_id in indexed:
+            raise ValueError(
+                f"Duplicate {kind} hub id {hub.hub_id!r}: hub ids must be "
+                f"unique so routes address exactly one hub.",
+            )
+        indexed[hub.hub_id] = hub
+    return indexed
+```
 
 ## Comparison
 
@@ -608,7 +1077,7 @@ AgentScope 属于和 LangChain 同层的 Framework，但架构选择不同：
 | 中间件 | 7 hook 自动检测，onion + transformer 双通道 | Callback 机制（on_chain_start / on_tool_start 等），不区分 hook 位置 |
 | 权限 | 核心组件，5 种 mode + 三级规则 + safety ASK | 无内置权限层，靠自定义 chain |
 | 事件驱动 | 原生 AgentEvent 流式输出，ReplyStart → ReplyEnd 完整生命周期 | Callback 体系 + streaming 分开 |
-| 上下文压缩 | 内置结构化压缩 + runtime injection + 主动 CompressContext 工具 | 需要自己实现 Memory 类（ConversationSummaryMemory 等） |
+| 上下文压缩 | 内置结构化压缩 + runtime injection + 主动 CompressContext 工具；**另有三套长期记忆中间件**（见 [Memory 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Memory.md)） | 需要自己实现 Memory 类（ConversationSummaryMemory 等） |
 | 服务化 | 内置 FastAPI + Web UI + 多租户 | 无，靠自研或 LangSmith |
 
 AgentScope 的选择是**把 Harness 层的能力直接做进 Framework 核心**——权限、压缩、运行时状态注入、offloader 都是 `Agent` 类的内置机制，不需要额外组件。这和本库 [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md) 里说的「Runtime / Framework / Harness 三层」对照来看，AgentScope v2.0 实际上是**把 Framework 和 Harness 两层合并了**，而把 Runtime（图式状态、持久化、人工协作断点恢复）留给 Pipeline 和 Agent Service 层补全。
@@ -716,13 +1185,13 @@ AgentScope 的选择是**把 Harness 层的能力直接做进 Framework 核心**
 ```
 
 这张图里可以看到几个核心事实：
-- **AgentState 是所有组件的共享数据总线**——context、summary、reply_context、permission_context、tool_context、tasks_context、middle_context 七块数据，被 Agent / PermissionEngine / Toolkit / 所有 Middleware 共同读写
+- **AgentState 是所有组件的共享数据总线**——**8 个字段**（`session_id` / `summary` / `context` / `reply_context` / `permission_context` / `tool_context` / `tasks_context` / `middle_context`），被 Agent / PermissionEngine / Toolkit / 所有 Middleware 共同读写。分层与持久化见 [Memory 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Memory.md)
 - **中间件在六个不同层级切入**——on_reply 包整个循环、on_reasoning 包模型调用、on_model_call 包底层 API、on_check_permission 包权限判定、on_acting 包工具执行（只包纯 I/O 层）、on_compress_context 包压缩
 - **HITL 暂停是轻量的**——yield `RequireUserConfirmEvent` 后直接停在 `_reply_impl` 的 await 点，没有任何 cleanup 或状态保存；下次回来同一条 Agent 实例、同一个 state、循环从断点继续
 
 ### AgentState: The Unifying Data Container
 
-`AgentState` 是一个**纯 Pydantic BaseModel**，六个字段全部是子 context：
+`AgentState` 是一个**纯 Pydantic BaseModel**，**8 个字段**，其中只有 5 个是子 context 模型（`reply` / `permission` / `tool` / `tasks` / `middle`，`middle_context` 还是裸 dict），另外三个是 `session_id` / `summary` / `context`：
 
 ```python
 class AgentState(BaseModel):
@@ -739,9 +1208,49 @@ class AgentState(BaseModel):
 **设计动机**：把所有需要跨回复、跨 HITL 断点保留的状态，装进一个可序列化的模型，而不是散落在 Agent 实例的各个属性里。AgentScope 的 FastAPI 服务需要把 Agent 持久化到 SQL（会话暂停、进程重启后恢复），一个 BaseModel 直接 `.model_dump()` + Alembic migration 就搞定了。
 
 **关键取舍**：
-- **不是分离的 Store/Repository**——AgentScope 没有 `ContextStore` / `PermissionStore` 这类类，六个子 context 就是直接嵌在一个模型里。好处是引用透明（`state.context`、`state.permission_context`），坏处是 state 对象会越来越大；但 AgentScope 的压缩机制（`trigger_ratio=0.8` 就动手）和 tool result truncation（`tool_result_limit=50000`）就是为了限制 state 的体量
+- **不是分离的 Store/Repository**——AgentScope 没有 `ContextStore` / `PermissionStore` 这类类，各个子 context 直接嵌在一个模型里。好处是引用透明（`state.context`、`state.permission_context`），坏处是 state 对象会越来越大；但 AgentScope 的压缩机制（`trigger_ratio=0.8` 就动手）和 tool result truncation（`tool_result_limit=50000`）就是为了限制 state 的体量
 - **middle_context 的 key 设计**——每个 middleware 实例用 `get_middleware_key()`（默认类名）注册自己的状态，budget middleware 在里面存 per-reply 的 token 计数。同一个 middleware 实例可以安全地被多个 Agent 共享（因为状态全在 state 里，不在实例里）
-- **read_file_cache 的 LRU**——`ToolContext.read_file_cache` 是一个 list，文件工具重复读同一个文件时先查 cache（按 mtime 判过期），修改后 `_clear_unreserved_read_cache()` 只清压缩掉的路径。这个 cache 减少了模型决策后再次 `Read` 同一个文件的开销——典型场景是 Agent 读完 main.py → 让模型推理 → 又要读 main.py 的某行
+- **read_file_cache 的 LRU**——`ToolContext.read_file_cache` 是一个 list（`state/_state.py`），带 `max_cache_files=100` / `max_cache_bytes=25000` 双上限，重复读同一文件时先查 cache（按 mtime 判过期），命中移到末尾、超出则 `pop(0)` 驱逐。`_clear_unreserved_read_cache()` 是**按保留消息里仍引用的路径反向保留、清掉其余**，不是「只清压缩掉的路径」。这个 cache 减少了模型决策后再次 `Read` 同一个文件的开销——典型场景是 Agent 读完 main.py → 让模型推理 → 又要读 main.py 的某行
+
+```python
+# state/_state.py
+class ToolContext(BaseModel):
+    """The tool context, e.g. tool cache"""
+
+    max_cache_files: int = Field(default=100, gt=1)
+    """The maximum number of cached files."""
+    max_cache_bytes: float = Field(default=25000, gt=10000)
+    """The maximum size of the accumulated read file cache."""
+    read_file_cache: list[ReadCacheEntry] = Field(default_factory=list)
+    """The cache for Read/Write/Edit file tools."""
+```
+
+```python
+# state/_state.py
+        # Find the cache entry
+        for entry in self.read_file_cache:
+            if entry.file_path == file_path:
+                if mtime is None:
+                    try:
+                        mtime = await aiofiles.os.path.getmtime(file_path)
+                    except Exception:
+                        mtime = None
+
+                # Concurrent calls may have reordered or dropped the entry
+                # while awaiting, so locate it again by the object itself.
+                if entry not in self.read_file_cache:
+                    return None
+
+                self.read_file_cache.remove(entry)
+                if mtime != entry.updated_at:
+                    # Cache is outdated, or the file no longer exists
+                    return None
+
+                # Move the entry to the most recent position
+                self.read_file_cache.append(entry)
+                return entry
+        return None
+```
 
 ### Dual Middleware: Agent-Level + Tool-Level
 
@@ -947,71 +1456,88 @@ session_id = uuid5(
 
 这个边界设计意味着：Core Agent 层可以独立演进（比如加一个新的 middleware hook、换一种压缩算法），只要不破坏 `Agent.reply_stream()` 和 `AgentState` 的结构，Service 层不需要改一行代码。
 
-## Version Delta: v2.0.8 → v2.0.10
+## Version Evolution: v2.0.8 to v2.0.11
 
-本章记的内容超出 v2.0.8——本地树上另有 `v2.0.9`（9 月中旬）和 `v2.0.10`（2026-10-12）两个 tag。这两个版本加的东西不只是补丁，**出现了三个新子系统**，值得单独看，因为它们能说明这个项目在往哪走。
+旧笔记把这一节写成「v2.0.8 → v2.0.10」，并把 `tui/`、Team Pipeline、SOP、MiniMax、三家 Realtime 适配器都归给 v2.0.10。逐 tag `git cat-file -e` 核对后，**版本归属整段要改**。下表是本机 v2.0.11 树的实测结果：
 
-### SOP: Stored Procedures For Agent Workflows
+| 模块 | v2.0.8 | v2.0.9 | v2.0.10 | v2.0.11 |
+| :--- | :---: | :---: | :---: | :---: |
+| `tui/`（Textual） | — | ✅ | ✅ | ✅ |
+| `pipeline/_team_pipeline.py` | — | ✅ | ✅ | ✅ |
+| `sop/` 与 `formatter/_minimax_formatter.py` | — | ✅ | ✅ | ✅ |
+| `realtime/_openai`、`_gemini`、`_xai` 适配器 | — | ✅ | ✅ | ✅ |
+| `app/_service/_webrtc_session.py`（WebRTC） | — | — | ✅ | ✅ |
+| `asr/` 整包 | — | — | — | ✅ |
+| `tts/`、`realtime/_dashscope`、`console/` | ✅ | ✅ | ✅ | ✅ |
 
-新增的 `sop/` 包是最大的一块。源码给的类比很直白——`app/_service/_sop.py` 首句写着「Running a **stored procedure**, one ChatService turn per step half」，把流程定义类比数据库的存储过程：**定义是代码，可以跑无数次；运行实例是纯数据，属于某一次具体的执行**。
+三段节奏很清楚：
 
-数据模型：
+- **v2.0.9 是结构性大改**（`app/` + `pipeline/` 45 文件、+4237/−68）：SOP、Classifier、TeamPipeline、TUI、MiniMax 与三家 Realtime 适配器都在这一版进来。
+- **v2.0.10 是服务化补齐**（48 文件、+2160/−258）：WebRTC transport/session、`RealtimeService`、`/realtime` 路由、`realtime-local` extra；同时**删掉**了 v2.0.9 才引入的 `TruncationSupport` 枚举，改用 `supports_text_input` / `supports_history_replay` 等布尔能力位。
+- **v2.0.11 是收敛版**：`app/` + `pipeline/` 只有 10 文件、+78/−26，全是 Starlette 的 `HTTP_422_UNPROCESSABLE_ENTITY` → `HTTP_422_UNPROCESSABLE_CONTENT` 常量改名、`ttl_secs=0` 单行修复、Node 版本与 `model_class`。真正的新东西在别处：`asr/` 整包（8 文件、+447 行）与三张 realtime 模型卡。
 
-- `SOPPhase` —— `PENDING / RUNNING / AWAITING / COMPLETED / FAILED`，**一个 step 和整个 run 共用同一套枚举**（「a run is only ever as far along as its steps let it be」）。`AWAITING` 就是 parked 状态——有人在外部回答之前它不会前进，这和 Agent 的 HITL 是同一套世界观
-- `VerificationResult` —— `passed` + `message`（说明缺什么而不是说「不对」）+ `verifier`（模型 / 人 / 外部系统都可以是裁判）。注释强调只记录**已定论**的裁决，没发生过的裁决不算裁决
-- `SOPStepRunState` —— `model_config = ConfigDict(extra="allow")`，允许子类加字段且能穿过 storage 往返
+全树 `git diff --shortstat v2.0.8..v2.0.11` 是 502 文件、+52995/−3030，但那个数字含 docs / examples / tests。**按 tag 逐段看，最新一版反而是改动最小的一版**——照旧笔记的口径外推「v2.0.11 大改」会严重误判。
 
-`SOPStepBase` 的契约只有一条：**一次 `reply_stream()` 调用算一次尝试**，要么 parked 要么在 state 上留下裁决。`max_attempts=3` 由引擎执行而非步骤自查。
+四个重点方向各自的完整展开已经拆到独立分册：主循环与状态机归 [AgentLoop 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/AgentLoop.md)，流程硬约束归 [SOP 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/SOP.md)，概率分类与逐 reply 选模归 [Classifier 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Classifier.md)，语音三栈与 WebRTC 归 [VoiceStack 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/VoiceStack.md)，终端客户端归 [TUI 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/TUI.md)。
 
-最有意思的是 `app/middleware/_sop_step_middleware.py`——它解决的是「Agent 忘了交卷怎么办」：
+## Corrections: v2.0.8 Baseline to v2.0.11
 
-> A reply-end with nothing submitted is **swallowed with a nudge**, and failed after `max_nudges` so it costs an attempt instead of hanging.
+本次重核把旧笔记里所有可证伪的断言逐条对照了 v2.0.11 源码。下表只列**失效或需要精化**的项；完全成立的部分（BackendBase 三原语、7 个 middleware hook、5 种权限模式、ContextConfig 八个默认值、RAG 四层算法、28 个 EventType、六种 ContentBlock）不再重复。
 
-也就是复用前面说的「吞掉 `ReplyEndEvent`」能力，但这里不是为了漫无目的地让 ReAct 多跑一轮，而是带着明确目标——必须调用 `SubmitHandover` 或 `SubmitVerdict` 才算结束。`SubmitHandover` 的参数说明也写得很有实践感：
+### Core Agent Layer
 
-> 后面的步骤看不到这段对话和你的工具输出，所以任何他们需要的东西都必须写在这里。唯一例外是共享 workspace 时的文件——说路径，别描述内容。
+| 旧结论 | v2.0.11 事实 | 依据 |
+| :--- | :--- | :--- |
+| `agent/_agent.py` 约 2500 行 | **3942 行**，且 v2.0.8 已是 3908 行——旧基线本身即误 | `agent/_agent.py` |
+| `_reply_impl()` 约 300 行 | 共 270 行，主循环是 `while True` | `agent/_agent.py` |
+| AgentState 六/七个子 context | **8 字段**（含 `middle_context`），v2.0.8→v2.0.11 只改了注释拼写 | `state/_state.py` |
+| HITL 一条 `PENDING→…→ERROR` 状态链 | 两个各 5 态的枚举：`ToolCallState` 与 `ToolResultState`，`DENIED/INTERRUPTED/ERROR` 属后者 | `message/_block.py` |
+| DataBlock base64 增量拼接「陷阱」 | 术语应改：decode→concat→re-encode 在 v2.0.8 已实现；v2.0.11 **按 `event.block_id` 定位同 id 分片**，找不到则 append 新块，解决多 DataBlock 串台 | `message/_base.py`、`agent/_agent.py` |
+| 异常 7 类全在 `exception/_base.py` | 数量仍 7，但拆成 `_base.py` / `_tool.py` / `_model.py` 三文件 | `exception/__init__.py` |
+| `A2AAgentState` 在 `agent/_a2a_agent.py` | 迁到 `state/_a2a_state.py` | `agent/_a2a_agent.py` |
 
-这实际上是**用中间件约束替代 prompt 恳求**。对比本库 [Skill](/docs/CS/AI/LLM/Agent/Theory/Skill.md) 里说的 soft instruction，SOP 走的是硬约束路线。
+### Model and Tool Layer
 
-### Classifier and Model Router
+| 旧结论 | v2.0.11 事实 | 依据 |
+| :--- | :--- | :--- |
+| formatter 11 个 py = 1 基类 + 10 家 | **12 个 py = 1 基类 + 11 个厂商 formatter 文件**；OpenAI 占两族，故厂商实为 10 家（新增 MiniMax） | `formatter/__init__.py` |
+| 10 个模型厂商子模块 | 11 个（`model/_minimax/`） | `model/__init__.py` |
+| CredentialFactory 静态注册 9 个类 | 10 个类，改为 `_classes` 列表 + 惰性 `_get_adapter()`，并新增 `register_credential()` | `credential/_factory.py` |
+| `credential/_kimi.py` 是 0 字节空文件；没有 `_typesafe.py` | 前者已不存在，后者已存在 | `credential/` 清单 |
+| Skill 六个字段 | **5 个**：`name/description/dir/markdown/updated_at` | `skill/_base.py` |
+| 内置 13 个工具；没有 `metadata_schema` / `check_external_result()` | 14 个（新增 `AskUser`）；两个契约都已落地 | `tool/_builtin/_ask_user.py`、`tool/_base.py` |
 
-`classifier/` 包加了一个新抽象：`ClassifierModelBase`——「返回**带类型的概率化决策**」的模型，输入是共享 state + 一批具名 question，输出 `ClassifierResponse`。目前两家实现：OpenAI 与 jev。
+### Realtime and Service Layer
 
-配套的 `middleware/_model_router.py`（`ModelRouterMiddleware`）把它接进了 Agent：**每个 reply 用分类器挑一个 chat model**。`on_reply` hook 里临时把 `agent.model` 换成选中的候选，路由 **once per reply 且 HITL 恢复后保持不变**；分类失败或选到未知候选时保持 Agent 自己的模型。
+| 旧结论 | v2.0.11 事实 | 依据 |
+| :--- | :--- | :--- |
+| Realtime 只有 DashScope 一家 | **4 家 / 5 类**（DashScope 两类 + Gemini / OpenAI / xAI） | `realtime/__init__.py` |
+| 能力差异靠 `TruncationSupport` 三值枚举吸收 | 枚举 v2.0.9 引入、**v2.0.10 已删除**，改为 `supports_text_input` / `supports_history_replay` 等布尔位 | `realtime/_base.py` |
+| barge-in 五步含 `model.truncate()` | 三步：`clear_audio()` + `cancel_response()` + `_finish_reply(INTERRUPTED)` | `agent/_realtime/_agent.py` |
+| 没有 WebRTC transport | `WebRTCAudioTransport(TransportBase)` 在 app 层跨包实现 | `app/_service/_webrtc_audio_transport.py` |
+| `pipeline/` 只导出 2 个名字 | 4 个（含 `TeamPipeline` / `TeamMember`），且 Team Pipeline 是 **v2.0.9** 引入 | `pipeline/__init__.py` |
+| `create_app` 注册 15 个路由；app 八目录 | **17 个 router**（+sop、+realtime）、**12 个一级子目录**、209 文件 1.83 MB | `app/_app.py` |
+| Hub 实现叫 `GitHubHub` / `ClawHub` | `GitHubMCPHub` / `ClawSkillHub` | `app/hub/_mcp/_github_hub.py`、`app/hub/_skill/_claw_hub.py` |
+| `open_reply_stream` 拉最近 1000 条再订阅 | 先订阅（5s 超时），再按**持久化 checkpoint `since`** 回放最多 1000 条；且函数体无 `yield`，是 `return _read(...)` | `app/channel/_stream.py` |
+| lifespan 的 enter 顺序含 ChatService / SessionService | 二者 inline 构造、**不进 AsyncExitStack**；v2.0.11 真正在 stack 上新增的是 `SOPService` | `app/_lifespan.py` |
+| App 分册称 SOP / Classifier / AskUser / TUI「本树不存在」 | v2.0.11 全部存在，SOP 核心在顶层 `src/agentscope/sop/` | `sop/__init__.py`、`classifier/__init__.py` |
 
-这是把以往放在 A2A 网关或应用层做的「大小模型分流」下沉到了单个 Agent 内部。
+### Version Attribution
 
-### AskUser Tool and External Execution Contract
+| 旧结论 | v2.0.11 事实 |
+| :--- | :--- |
+| `tui/`、Team Pipeline、SOP、MiniMax、三家 Realtime 适配器是 v2.0.10 新增 | 全部是 **v2.0.9** 引入（`git cat-file -e` 逐 tag 核对） |
+| WebRTC 与三家 Realtime 适配器同批 | WebRTC 是 **v2.0.10**；`asr/` 是 **v2.0.11**；`tts/` 整包 v2.0.8 已有 |
 
-`tool/_builtin/_ask_user.py` 是 v2.0.8 完全没有的新内置工具：`is_external_tool=True`、`is_read_only=True`、1–4 题每题 2–4 选项，`check_permissions` 恒 ALLOW。
-
-它暴露的是前面 Tool System 那节提到的那个缺口——`ToolBase` 以前只有 `input_schema`（告诉模型怎么调），没有「外部执行方必须回填什么」的契约。v2.0.10 补上了另一半：`metadata_schema` + `check_external_result()`，用 jsonschema 校验回填的 metadata，不合规的结果会被 parked 且允许重发。
-
-外部工具的行为本身就值得一记：Agent 把状态置 `SUBMITTED` 后 yield `RequireExternalExecutionEvent` 并**立即 return**，本轮推理到此中断；外部系统填完再把 `ExternalExecutionResultEvent` 灌回来。这就是 AgentScope 版的「工具调用可以跨进程、跨人、跨天」。
-
-### TUI: Terminal Is A First-Class Client
-
-`src/agentscope/tui/`（v2.0.10 新增，基于 **Textual**，`agentscope[tui]` extra）把终端提升为一等客户端。这不是 demo：
-
-- `launch_tui(agent)` —— 每次提交起一个 `reply_stream()`，用 `_reply_lock` 串行化避免并发回复改坏同一上下文
-- `launch_realtime_ui(agent, transport)` —— `on_mount` 起**单个** `reply_stream(transport)` 跑满整个会话；文本输入是否可用取决于 `agent.model.supports_text_input`
-- **HITL 在终端里的四个选项**：`allow` / `always`（仅在 `suggested_rules` 非空时出现，标签形如 `Always allow with {tool_name} {rule_content}`）/ `deny` / `interrupt`；`Ctrl+C` 中断
-- 事件到 widget 的渲染是全增量的（`replace(block)` / `apply(message)`），不是整体重绘
-
-值得注意的是它和 Agent 层**完全解耦**——TUI 里的 `_publish()` 只用 `Msg.append_event()` 按 reply_id 归并，这一节前面设计的事件重建能力在这里收到了回报。
-
-### Smaller Deltas
-
-- **`pipeline/_team_pipeline.py`** —— Team Pipeline 独立成文件（Leader 委派 Worker）
-- **Realtime 厂商扩到四家** —— 新增 Gemini / OpenAI / xAI 适配器 + WebRTC transport（`app/_service/_webrtc_*`）；注意 Gemini 和 OpenAI 有能力差异仍在靠 `TruncationSupport` 枚举吸收
-- **`model/_minimax/`** + `formatter/_minimax_formatter.py` + `credential/_minimax.py` —— 新增 MiniMax 厂商，完整地补齐了 model / formatter / credential 三层（这也是观察这套分层的好例子：每加一家厂商要动三个地方）
-- **`credential/_typesafe.py`** —— 新增
-- **`realtime` extra 拆分** —— 从 `["websockets>=13", "sounddevice"]` 拆成 `realtime` + `realtime-local`，前者不再逼着装 PortAudio
+> [!NOTE]
+>
+> 判断这类框架笔记是否过时，最可靠的做法不是看 release notes 的「新特性」列表，而是拿本地 tag 做 `git cat-file -e <tag>:<path>` 逐个探测。文档里的「新增」常按发布节奏归组，与代码实际落地的版本差一个 tag。
 
 
 ## Links
 
 - [Agent 目录](/docs/CS/AI/LLM/Agent/README.md)
+- [AgentLoop](/docs/CS/AI/LLM/Agent/Product/AgentScope/AgentLoop.md) / [SOP](/docs/CS/AI/LLM/Agent/Product/AgentScope/SOP.md) / [Classifier](/docs/CS/AI/LLM/Agent/Product/AgentScope/Classifier.md) / [VoiceStack](/docs/CS/AI/LLM/Agent/Product/AgentScope/VoiceStack.md) / [TUI](/docs/CS/AI/LLM/Agent/Product/AgentScope/TUI.md) / [Memory](/docs/CS/AI/LLM/Agent/Product/AgentScope/Memory.md)
 - [AgentScopeJava](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/AgentScopeJava.md) / [OpenCode](/docs/CS/AI/LLM/Agent/Product/OpenCode/OpenCode.md) / [Pi](/docs/CS/AI/LLM/Agent/Product/Pi/Pi.md) / [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw/OpenClaw.md)
 - [LLM 应用开发框架](/docs/CS/AI/LangTools.md)
 - [Agent Theory](/docs/CS/AI/LLM/Agent/Theory/Agent.md) / [Permission](/docs/CS/AI/LLM/Agent/Theory/Permission.md) / [Compaction](/docs/CS/AI/LLM/Agent/Theory/Compaction.md)
@@ -1019,6 +1545,8 @@ session_id = uuid5(
 ## References
 
 - [AgentScope GitHub](https://github.com/agentscope-ai/agentscope)
+- [AgentScope v2.0.11 release notes (2026-10-27)](https://github.com/agentscope-ai/agentscope/releases/tag/v2.0.11)
+- [AgentScope v2.0.11 源码树](https://github.com/agentscope-ai/agentscope/tree/v2.0.11/src/agentscope)
 - [AgentScope 文档](https://docs.agentscope.io/)
 - [AgentScope: A Flexible yet Robust Multi-Agent Platform (arxiv 2402.14034)](https://arxiv.org/abs/2402.14034)
 - [AgentScope 1.0: A Developer-Centric Framework for Building Agentic Applications (arxiv 2508.16279)](https://arxiv.org/abs/2508.16279)

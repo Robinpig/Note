@@ -96,6 +96,7 @@ public synchronized void start() {
 ## Links
 
 - [Eureka](/docs/CS/Framework/eureka/Eureka.md)
+- [Shortcomings](/docs/CS/Framework/eureka/shortcomings.md?id=coarse-grained-self-preservation)
 - [Registry](/docs/CS/Framework/eureka/registry.md)
 - [Cache](/docs/CS/Framework/eureka/cache.md)
 - [Server](/docs/CS/Framework/eureka/Server.md)

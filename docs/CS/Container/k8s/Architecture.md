@@ -78,7 +78,7 @@ filter chain 的精确顺序在 `DefaultBuildHandlerChain`（`staging/src/k8s.io
 > [!TIP]
 > **APF 排在 Authorization 之前**，这是很多人记反的地方。原因很直接：给请求分流只需要 user（来自认证）和 RequestInfo（来自上一层），完全不需要鉴权结果。换句话说，被拒的请求也曾经占用过队列席位——这是刻意的，否则任意用户都能用非法请求挤爆排队。APF 自身的分类、席位估算、公平排队与并发借贷机制见 [APF](/docs/CS/Container/k8s/APF.md)。
 
-进入 REST handler 之后是 `decode → managedFields 合并 → mutating admission → BeforeCreate 策略校验 → 存储`。落库由 etcd 事务完成，详见 [apiserver](/docs/CS/Container/k8s/apiserver.md?id=write-path)。
+进入 REST handler 之后是 `decode → managedFields 合并 → mutating admission → BeforeCreate 策略校验 → 存储`。落库由 etcd 事务完成，详见 [apiserver](/docs/CS/Container/k8s/apiserver.md?id=the-create-pipeline-from-bytes-to-an-object)。
 
 这条链路还有一个**反向的孪生兄弟**：删除。它走的入口相同、admission 相同、最后同样落到 etcd 事务，但语义完全不对称——一次 `DELETE` 通常不删任何东西，只写一个 `metadata.deletionTimestamp`，然后由 GC controller 与 kubelet 接力完成。完整过程见 [删除与级联](/docs/CS/Container/k8s/Deletion.md)。
 
@@ -98,7 +98,7 @@ apiserver watch/list
 
 关键在于**队列里只有 `namespace/name` 这样一个字符串，没有对象**。worker 取出 key 之后必须重新从 lister 读最新状态。这一点决定了整套系统的容错性质：丢失中间事件完全无害，只要最后一次事件被看到，系统就收敛到正确状态。
 
-详细的去重机制、RealFIFO 与 DeltaFIFO 的差异、resync 的真实语义见 [client-go](/docs/CS/Container/k8s/client-go.md?id=informer)。
+详细的去重机制、RealFIFO 与 DeltaFIFO 的差异、resync 的真实语义见 [client-go](/docs/CS/Container/k8s/client-go.md?id=informer-architecture)。
 
 ## Chain 3: Scheduling
 

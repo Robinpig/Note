@@ -25,7 +25,7 @@
 无目录结构，只有 Key（路径）+ Value（对象），走 HTTP REST 接口。
 
 - 特点：S3 协议已成事实标准；天然适合海量小对象；横向扩展极强；非 POSIX，不适合随机写。
-- 代表：Amazon S3、[MinIO](/docs/CS/Distributed/MinIO.md)（社区版已停更，社区维护 fork 见 [Silo](/docs/CS/Distributed/Silo.md)）、Ceph RGW、OpenStack Swift。
+- 代表：Amazon S3、[MinIO](/docs/CS/Distributed/MinIO.md)（社区版已停更，社区维护 fork 见 [Silo](/docs/CS/Distributed/Silo/Silo.md)）、Ceph RGW、OpenStack Swift。
 - 典型场景：图片 / 视频 / 附件 / 静态资源、数据湖（Iceberg / Delta / Hudi，非 Hadoop 架构）、备份归档、云原生 S3 存储。
 
 ### Block Storage

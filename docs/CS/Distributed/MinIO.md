@@ -17,7 +17,7 @@ MinIO 是一个用 Go 编写、高性能、S3 兼容的对象存储。它把对�
 > | 2026-04-25 | 仓库正式归档（只读） |
 > | 2026-09-11~14 | `minio/minio` 与 `minio/mc` 从 Docker Hub 删除，匿名拉取返回 401/404 |
 >
-> 后果：任何社区版部署都运行在**永不再补丁**的软件上——`CVE-2026-39414`（S3 Select 内存耗尽，2026-04-09 披露，高危）影响**每一个**社区版本，仅 AIStor 修复。仍在运行的集群靠缓存镜像或 `quay.io/minio/minio` 的旧副本续命，但无保留承诺。新选型应评估 **Ceph RGW / SeaweedFS / Garage / RustFS（Apache-2.0）/ [PGSTY Silo](/docs/CS/Distributed/Silo.md)（AGPLv3 社区 fork，恢复控制台并 backport 修复）**。本笔记的架构与运维内容对 AIStor 与 Silo fork 同样适用（磁盘格式 `xl.meta`、纠删集模型、S3 行为保持一致）。具体版本与许可证以你部署的那一版的精确 tag 为准。
+> 后果：任何社区版部署都运行在**永不再补丁**的软件上——`CVE-2026-39414`（S3 Select 内存耗尽，2026-04-09 披露，高危）影响**每一个**社区版本，仅 AIStor 修复。仍在运行的集群靠缓存镜像或 `quay.io/minio/minio` 的旧副本续命，但无保留承诺。新选型应评估 **Ceph RGW / SeaweedFS / Garage / RustFS（Apache-2.0）/ [PGSTY Silo](/docs/CS/Distributed/Silo/Silo.md)（AGPLv3 社区 fork，恢复控制台并 backport 修复）**。本笔记的架构与运维内容对 AIStor 与 Silo fork 同样适用（磁盘格式 `xl.meta`、纠删集模型、S3 行为保持一致）。具体版本与许可证以你部署的那一版的精确 tag 为准。
 
 ## Architecture
 
@@ -137,7 +137,7 @@ minio server http://node{1...4}/data{1...4} --console-address ":9001"
 
 MinIO 社区版停更后，**PGSTY Silo**（`pgsty/silo`，Pigsty / 冯若航维护的 AGPL-3.0 drop-in fork）把上游删掉的控制台、停发的二进制、未修的 CVE 全部找了回来：磁盘格式 `xl.meta` 兼容、保留 S3 API 与 `MINIO_*` 环境变量，迁移只需换镜像或换 systemd 服务名，**无需数据迁移、无需改应用代码**。
 
-Silo 与 MinIO 共用同一套存储引擎与纠删码架构，因此本笔记的 Architecture / S3 Compatibility / Deployment Modes 各节对 Silo 同样适用；fork 特有的背景时间线、三项恢复细节、CVE backport 账本、发布工程、兼容性与迁移步骤、选型对照，已拆为独立笔记 [Silo](/docs/CS/Distributed/Silo.md)，此处不重复展开。
+Silo 与 MinIO 共用同一套存储引擎与纠删码架构，因此本笔记的 Architecture / S3 Compatibility / Deployment Modes 各节对 Silo 同样适用；fork 特有的背景时间线、三项恢复细节、CVE backport 账本、发布工程、兼容性与迁移步骤、选型对照，已拆为独立笔记 [Silo](/docs/CS/Distributed/Silo/Silo.md)，此处不重复展开。对象引擎的源码级拆解（三层对象层、SipHash 放置、quorum 反推、Reed-Solomon 编解码、读写路径、bitrot 与自愈）见 [Object Engine](/docs/CS/Distributed/Silo/Object_Engine.md)。
 
 ## Relation to Other Topics
 
@@ -148,6 +148,7 @@ Silo 与 MinIO 共用同一套存储引擎与纠删码架构，因此本笔记�
 
 ## Links
 
+- [Object Engine（Silo 存储引擎源码深潜）](/docs/CS/Distributed/Silo/Object_Engine.md)
 - [Distributed Storage](/docs/CS/Distributed/Distributed_Storage.md)
 - [Ceph（RGW 对照）](/docs/CS/Distributed/Ceph.md)
 - [Haystack（海量小对象 lineage）](/docs/CS/Distributed/Haystack.md)

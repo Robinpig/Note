@@ -60,7 +60,7 @@ sw8: 1-TRACEID-SEGMENTID-3-PARENT_SERVICE-PARENT_INSTANCE-PARENT_ENDPOINT-IPPORT
 
 - [SkyWalking](/docs/CS/Distributed/Tracing/SkyWalking.md) — 枢纽页
 - [SkyWalking Data Model](/docs/CS/Distributed/Tracing/SkyWalking/Data_Model.md) — ContextCarrier / ContextSnapshot
-- [SkyWalking Internals](/docs/CS/Distributed/Tracing/SkyWalking/Internals.md) — sw8 的 inject / extract 实现与两级采样
+- [SkyWalking Agent 机理](/docs/CS/Distributed/Tracing/SkyWalking/Agent.md) — sw8 的 inject / extract 实现与两级采样
 - [SkyWalking OAP Backend and Storage](/docs/CS/Distributed/Tracing/SkyWalking/Collector_and_Storage.md) — receiver 模块与 Kafka 通道
 - [Java Agent](/docs/CS/Java/JDK/Agent.md) — Java 探针字节码增强
 - [Zipkin Transport](/docs/CS/Distributed/Tracing/Zipkin/Transport.md) — B3 传播对照

@@ -1,8 +1,9 @@
 ## Introduction
 
+> [!NOTE]
+> 本文源码片段基于 **Kubernetes v1.37.2**（`pkg/controller/replicaset/replica_set.go`）逐字核对。ReplicaSet 控制器与 Job 控制器共享同一套骨架（informer + workqueue + ControllerExpectations），`NewBaseController` 同时服务 ReplicaSet 与 ReplicationController（历史上的 RC 控制器已被合并）。
 
-
-```c
+```go
 func newReplicaSetControllerDescriptor() *ControllerDescriptor {
     return &ControllerDescriptor{
         name:     names.ReplicaSetController,
@@ -13,7 +14,7 @@ func newReplicaSetControllerDescriptor() *ControllerDescriptor {
 ```
 
 
-```c
+```go
 func startReplicaSetController(ctx context.Context, controllerContext ControllerContext, controllerName string) (controller.Interface, bool, error) {
     go replicaset.NewReplicaSetController(
         ctx,
@@ -27,7 +28,7 @@ func startReplicaSetController(ctx context.Context, controllerContext Controller
 ```
 
 
-```c
+```go
 func NewReplicaSetController(ctx context.Context, rsInformer appsinformers.ReplicaSetInformer, podInformer coreinformers.PodInformer, kubeClient clientset.Interface, burstReplicas int) *ReplicaSetController {
     logger := klog.FromContext(ctx)
     eventBroadcaster := record.NewBroadcaster(record.WithContext(ctx))
@@ -48,7 +49,7 @@ func NewReplicaSetController(ctx context.Context, rsInformer appsinformers.Repli
 ```
 
 
-```c
+```go
 // NewBaseController is the implementation of NewReplicaSetController with additional injected
 // parameters so that it can also serve as the implementation of NewReplicationController.
 func NewBaseController(logger klog.Logger, rsInformer appsinformers.ReplicaSetInformer, podInformer coreinformers.PodInformer, kubeClient clientset.Interface, burstReplicas int,
@@ -121,7 +122,7 @@ func NewBaseController(logger klog.Logger, rsInformer appsinformers.ReplicaSetIn
 
 
 
-```c
+```go
 // Run begins watching and syncing.
 func (rsc *ReplicaSetController) Run(ctx context.Context, workers int) {
     defer utilruntime.HandleCrash()
@@ -150,14 +151,13 @@ func (rsc *ReplicaSetController) Run(ctx context.Context, workers int) {
 }
 ```
 
-- 总体来看， ReplicaSet 的逻辑并不难，理解起来也很简单，跟 job 控制器差不多。
-- ReplicaSet 控制器启动后监听 ReplicaSet 增删改事件，和其他控制器一样，它监听到事件后并没有直接做操作，而是加入到队列里面，通过队列来实现多线程操作。
-- 在入列的时候，更新事件会检查 ReplicaSet 副本数和 uid 是否相同，删除事件会做一个删除期望记录的操作。
-- ReplicaSet 控制器也引入了 pod 控制器，用来创建/删除/更新 pod 信息，这个 pod 控制器是再 controller_util 里面对 Clientset 操作 Pod 接口的再封装。
-- 跟其他控制器一样，监听到 pod 事件时， 先判断 pod 是否处于删除状态，再判断 pod 是否属于 ReplicaSet 对象的，是的话，将 pod 的父对象加入队列，更新 ReplicaSet 对象的状态什么的。
-- 我们注意到 NewUIDTrackingControllerExpectations 这个东西，这个在 job 控制的源码里面看到过 ControllerExpectations 的很类似，只不过多了一个集合用来记录 ReplicaSet 的 pod 集合，key 是 ReplicaSet 的 key ，用 pod 命名空间和 pod 名 来做 uid 。
-- syncReplicaSet 期望达成才进入下一步的操作。
-- manageReplicas 这里是控制 pod 数量的地方，多则删除，少则新增。
+读完全文可以提炼出五条机制要点：
+
+1. **事件驱动而非轮询**：控制器监听 ReplicaSet 增删改事件，事件只做入队（更新事件会检查 spec 副本数与 uid 是否变化，删除事件记录删除期望），真正的工作在 worker 的 `syncReplicaSet` 里做。
+2. **PodControl 是对 apiserver Pod 写接口的封装**：创建/删除/更新 Pod 的动作统一走 `podControl`（`controller_util` 里对 Clientset 的再封装），方便 mock 与事件记录。
+3. **`NewUIDTrackingControllerExpectations` 是带 UID 集合的期望记账**：比 Job 侧的 `ControllerExpectations` 多一层 UID 集合，key 是 ReplicaSet 的 key，用「命名空间/Pod 名」做 uid——防止"Pod 还没从 informer 消失，新一轮 sync 又重复创建"的竞态。
+4. **`manageReplicas` 是副本数控制点**：多则删、少则建；批量创建走 `slowStartBatch`（起步 `SlowStartInitialBatchSize = 1`，每轮翻倍），单轮总吞吐上限 `BurstReplicas = 500`——大规模扩容不是一次打满，而是慢启动。
+5. **期望达成才进入下一步**：`syncReplicaSet` 开头检查 expectations 是否满足，未满足说明上一轮的 Pod 创建/删除还在路上，本轮直接跳过等事件驱动下一轮。语义层的展开（与 Deployment 的关系、滚动更新）见 [Workloads](/docs/CS/Container/k8s/Workloads.md) 与 [Deployment 一节](/docs/CS/Container/k8s/Workloads.md?id=deployment)。
 
 
 ## Links
@@ -166,3 +166,10 @@ func (rsc *ReplicaSetController) Run(ctx context.Context, workers int) {
 - [K8s 架构与四条主链路](/docs/CS/Container/k8s/Architecture.md)
 - [controller-manager](/docs/CS/Container/k8s/controller-manager.md)
 - [client-go](/docs/CS/Container/k8s/client-go.md)
+- [Workloads](/docs/CS/Container/k8s/Workloads.md)
+- [jobController](/docs/CS/Container/k8s/jobController.md)
+
+## References
+
+1. [Kubernetes v1.37.2 pkg/controller/replicaset](https://github.com/kubernetes/kubernetes/tree/v1.37.2/pkg/controller/replicaset)
+2. [ReplicaSet - Kubernetes 文档](https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/)

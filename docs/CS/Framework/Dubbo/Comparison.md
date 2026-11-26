@@ -1,3 +1,5 @@
+# Dubbo vs Spring Cloud, gRPC and Istio
+
 ## Introduction
 
 Dubbo、Spring Cloud、gRPC、Istio 四者经常被放在一起比较，但**它们并不在同一个抽象层次上**：gRPC 是通信协议规范，Dubbo 是微服务开发框架，Spring Cloud 是分布式模式抽象 + 厂商实现套件，Istio 是服务网格控制面。把它们放在一张表里「哪个更好」是没有意义的，真正要回答的是「**各自定义的边界在哪、能不能叠加使用**」。
@@ -103,7 +105,7 @@ Dubbo 已实现对 Istio 体系的全面接入：可以用 Istio 控制面治理
 源码事实（3.3.6 已核实）：
 
 - `org.apache.dubbo.rpc.protocol.tri.TripleProtocol extends AbstractProtocol`；其 SPI 文件 `dubbo-rpc-triple/.../META-INF/dubbo/internal/org.apache.dubbo.rpc.Protocol` 注册了三个名字：`tri=TripleProtocol`、`grpc=GrpcProtocol`、`rest2=RestProtocol`。
-- `GrpcProtocol extends TripleProtocol`、`RestProtocol extends TripleProtocol`（`dubbo-rpc-triple/.../tri/GrpcProtocol.java:21`、`RestProtocol.java:21`）——三者共用同一套 HTTP/2 栈（`dubbo-remoting-http12`）。
+- `GrpcProtocol extends TripleProtocol`、`RestProtocol extends TripleProtocol`（`dubbo-rpc-triple/.../tri/GrpcProtocol.java`、`RestProtocol.java`）——三者共用同一套 HTTP/2 栈（`dubbo-remoting-http12`）。
 - gRPC 只定义「线格式 + 代码生成工具链」；Dubbo 在 Triple 之上叠加了注册发现、路由、集群容错、Filter 等治理能力，这些 gRPC 原生没有。
 
 为什么 Dubbo 的「支持 gRPC」不是「纯 gRPC」：

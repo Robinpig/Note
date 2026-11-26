@@ -1,3 +1,5 @@
+# Dubbo Transporter: Netty Server Lifecycle
+
 ## Introduction
 
 Dubbo 的 RPC 抽象（`Protocol` / `Invoker`）之下还有一层「传输」抽象（`Transporter`）。它只负责一件事：把「收发字节」这件事抽象出来，因此同一套 RPC 协议既可以跑在 Netty 上，也可以跑在 HTTP/2、WebSocket 之上。流传最广的三个说法，本文逐条从源码推翻：
@@ -6,7 +8,7 @@ Dubbo 的 RPC 抽象（`Protocol` / `Invoker`）之下还有一层「传输」�
 - **「`Transporters` 是门面类，里面有 `connectAsync` 异步连接入口」**——不成立。3.3.6 的 `Transporters` 一共只有 5 个静态方法：`bind`(×2)、`connect`(×2)、`getTransporter`，**没有任何异步连接方法**。
 - **「`NettyServer` 用 `SSL_ENABLED_KEY` 开关决定是否加 SSL handler」**——不成立。3.3.6 的 pipeline **无条件**插入 `negotiation`（`SslServerTlsHandler`），TLS 协商变成一种「嗅探式」的渐进增强，不再受 URL 参数开关控制。
 
-版本基线：Apache Dubbo **3.3.6**，源码 tag `dubbo-3.3.6`。本文所有类签名、SPI 注册文件内容、默认值、行号均取自该 tag 官方源码。
+版本基线：Apache Dubbo **3.3.6**，源码 tag `dubbo-3.3.6`。本文所有类签名、SPI 注册文件内容、默认值均取自该 tag 官方源码。
 
 事实来源声明：`dubbo-remoting/` 的模块清单与 SPI 注册文件内容来自 `ls` 与读取 `META-INF/dubbo/internal/org.apache.dubbo.remoting.Transporter`；类实现逐行取自 `dubbo-remoting/dubbo-remoting-netty4/` 与 `dubbo-remoting/dubbo-remoting-api/` 的 `.java` 文件。本文不引用任何二手博客或网络文章。
 
@@ -26,7 +28,7 @@ Dubbo 的 RPC 抽象（`Protocol` / `Invoker`）之下还有一层「传输」�
 `HeaderExchanger` 是两层之间唯一的桥：
 
 ```java
-// dubbo-remoting/dubbo-remoting-api/src/main/java/org/apache/dubbo/remoting/exchange/support/header/HeaderExchanger.java:49-58
+// dubbo-remoting/dubbo-remoting-api/src/main/java/org/apache/dubbo/remoting/exchange/support/header/HeaderExchanger.java
 @Override
 public ExchangeServer bind(URL url, ExchangeHandler handler) throws RemotingException {
     ExchangeServer server;
@@ -45,7 +47,7 @@ public ExchangeServer bind(URL url, ExchangeHandler handler) throws RemotingExce
 > [!TIP]
 > `IS_PU_SERVER_KEY`（URL 参数 `ispuserver`）是「单端口多协议」的开关。为 `true` 时走 `PortUnificationExchanger`，否则走普通 `Transporters`——这条分支是理解「DubboProtocol 与 Triple 如何共用一个端口」的关键，详见 [Triple.md](/docs/CS/Framework/Dubbo/Triple.md?id=port-and-single-port-multi-protocol)。
 
-`Protocol` 层不感知具体传输实现，只通过 URL 上的 `transporter` 参数间接选择扩展。参数校验在 `ConfigValidationUtils.java:586,599`，会先用 `ExtensionLoader.hasExtension` 确认扩展存在。
+`Protocol` 层不感知具体传输实现，只通过 URL 上的 `transporter` 参数间接选择扩展。参数校验在 `ConfigValidationUtils.java`，会先用 `ExtensionLoader.hasExtension` 确认扩展存在。
 
 ## `dubbo-remoting/` Module Overview
 
@@ -69,7 +71,7 @@ public ExchangeServer bind(URL url, ExchangeHandler handler) throws RemotingExce
 ### Interface Definition
 
 ```java
-// dubbo-remoting/dubbo-remoting-api/src/main/java/org/apache/dubbo/remoting/Transporter.java:32-58
+// dubbo-remoting/dubbo-remoting-api/src/main/java/org/apache/dubbo/remoting/Transporter.java
 @SPI(value = "netty", scope = ExtensionScope.FRAMEWORK)
 public interface Transporter {
 
@@ -118,7 +120,7 @@ netty3=org.apache.dubbo.remoting.transport.netty.NettyTransporter
 ### NettyTransporter
 
 ```java
-// dubbo-remoting/dubbo-remoting-netty4/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyTransporter.java:29-42
+// dubbo-remoting/dubbo-remoting-netty4/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyTransporter.java
 /**
  * Default extension of {@link Transporter} using netty4.x.
  */
@@ -145,7 +147,7 @@ public class NettyTransporter implements Transporter {
 `Transporters` 是纯静态门面，构造器私有，**3.3.6 只有 5 个方法**。核心是 `getTransporter` 与两个 handler 分发方法：
 
 ```java
-// dubbo-remoting/dubbo-remoting-api/src/main/java/org/apache/dubbo/remoting/Transporters.java:34-47,69-73
+// dubbo-remoting/dubbo-remoting-api/src/main/java/org/apache/dubbo/remoting/Transporters.java
 public static RemotingServer bind(URL url, ChannelHandler... handlers) throws RemotingException {
     if (url == null) {
         throw new IllegalArgumentException("url == null");
@@ -193,7 +195,7 @@ public static Transporter getTransporter(URL url) {
 ### Separation of Construction and doOpen
 
 ```java
-// dubbo-remoting/dubbo-remoting-netty4/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyServer.java:63-110
+// dubbo-remoting/dubbo-remoting-netty4/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyServer.java
 public class NettyServer extends AbstractServer {
 
     private Map<String, Channel> channels;
@@ -204,14 +206,14 @@ public class NettyServer extends AbstractServer {
     private int serverShutdownTimeoutMills;
 
     public NettyServer(URL url, ChannelHandler handler) throws RemotingException {
-        // the handler will be wrapped: MultiMessageHandler->HeartbeatHandler->handler
+  // the handler will be wrapped: MultiMessageHandler->HeartbeatHandler->handler
         super(url, ChannelHandlers.wrap(handler, url));
     }
 
     @Override
     protected void doOpen() throws Throwable {
         bootstrap = new ServerBootstrap();
-        // read config before destroy
+  // read config before destroy
         serverShutdownTimeoutMills = ConfigurationUtils.getServerShutdownTimeout(getUrl().getOrDefaultModuleModel());
 
         bossGroup = createBossGroup();
@@ -225,21 +227,21 @@ public class NettyServer extends AbstractServer {
             channelFuture.syncUninterruptibly();
             channel = channelFuture.channel();
         } catch (Throwable t) {
-            closeBootstrap();                      // 失败也要回收 EventLoop
+            closeBootstrap();  // 失败也要回收 EventLoop
             throw t;
         }
-        // ... metrics 上报，见下文
+  // ... metrics 上报，见下文
     }
 ```
 
 `doOpen` 被拆成 5 个 `protected` 方法（`createBossGroup` / `createWorkerGroup` / `createNettyServerHandler` / `initServerBootstrap` / `closeBootstrap`），**全部可覆写**——这是 3.3.6 相对 2.7.x 最大的结构变化，2.7.x 是一个 40 行的 `doOpen` 一把梭。
 
-另外两个 2.7.x 时代的写法在 3.3.6 里已经不存在：`super(ExecutorUtil.setThreadName(url, SERVER_THREAD_POOL_NAME), ...)` 的线程名包装**已移到 `AbstractServer` 内部**（`AbstractServer.java:78,105`）；`private static final Logger logger` **已删除**，改用继承自 `AbstractEndpoint` 的 `ErrorTypeAwareLogger logger`（`AbstractEndpoint.java:37`），日志带错误码。
+另外两个 2.7.x 时代的写法在 3.3.6 里已经不存在：`super(ExecutorUtil.setThreadName(url, SERVER_THREAD_POOL_NAME), ...)` 的线程名包装**已移到 `AbstractServer` 内部**（`AbstractServer.java`）；`private static final Logger logger` **已删除**，改用继承自 `AbstractEndpoint` 的 `ErrorTypeAwareLogger logger`（`AbstractEndpoint.java`），日志带错误码。
 
 ### IO Thread Count, SO_KEEPALIVE and pipeline Order
 
 ```java
-// dubbo-remoting/dubbo-remoting-netty4/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyServer.java:157-161
+// dubbo-remoting/dubbo-remoting-netty4/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyServer.java
 protected EventLoopGroup createWorkerGroup() {
     return NettyEventLoopFactory.eventLoopGroup(
             getUrl().getPositiveParameter(IO_THREADS_KEY, Constants.DEFAULT_IO_THREADS),
@@ -248,14 +250,14 @@ protected EventLoopGroup createWorkerGroup() {
 ```
 
 ```java
-// dubbo-remoting/dubbo-remoting-api/src/main/java/org/apache/dubbo/remoting/Constants.java:118
+// dubbo-remoting/dubbo-remoting-api/src/main/java/org/apache/dubbo/remoting/Constants.java
 int DEFAULT_IO_THREADS = Math.min(Runtime.getRuntime().availableProcessors() + 1, 32);
 ```
 
-boss 组固定 1 个线程（`createBossGroup`，`:153-155`），worker 组默认 `min(CPU+1, 32)`。`iothreads` 走 `getPositiveParameter`，配成 0 或负值会**回落到默认值**而不是建 0 个线程。3.3.6 还新增了一个 server 端 keepalive 选项，见下面的 `SO_KEEPALIVE`。
+boss 组固定 1 个线程（`createBossGroup`），worker 组默认 `min(CPU+1, 32)`。`iothreads` 走 `getPositiveParameter`，配成 0 或负值会**回落到默认值**而不是建 0 个线程。3.3.6 还新增了一个 server 端 keepalive 选项，见下面的 `SO_KEEPALIVE`。
 
 ```java
-// dubbo-remoting/dubbo-remoting-netty4/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyServer.java:167-189
+// dubbo-remoting/dubbo-remoting-netty4/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyServer.java
 protected void initServerBootstrap(NettyServerHandler nettyServerHandler) {
     boolean keepalive = getUrl().getParameter(KEEP_ALIVE_KEY, Boolean.FALSE);
     bootstrap
@@ -292,7 +294,7 @@ pipeline 顺序是 `negotiation` → `decoder` → `encoder` → `server-idle-ha
 2.7.x 只有 `getIdleTimeout` / `getHeartbeat` 两个方法。3.3.6 增加了 `getCloseTimeout`，且两者**不是替换关系**——`getCloseTimeout` 内部会回落到 `getIdleTimeout`：
 
 ```java
-// dubbo-remoting/dubbo-remoting-api/src/main/java/org/apache/dubbo/remoting/utils/UrlUtils.java:40-70
+// dubbo-remoting/dubbo-remoting-api/src/main/java/org/apache/dubbo/remoting/utils/UrlUtils.java
 public static int getCloseTimeout(URL url) {
     String configuredCloseTimeout = SystemPropertyConfigUtils.getSystemProperty(
             CommonConstants.DubboProperty.DUBBO_CLOSE_TIMEOUT_CONFIG_KEY);
@@ -301,11 +303,11 @@ public static int getCloseTimeout(URL url) {
         try {
             defaultCloseTimeout = Integer.parseInt(configuredCloseTimeout);
         } catch (NumberFormatException e) {
-            // use default heartbeat
+  // use default heartbeat
         }
     }
     if (defaultCloseTimeout < 0) {
-        defaultCloseTimeout = getIdleTimeout(url);      // 回落
+        defaultCloseTimeout = getIdleTimeout(url);  // 回落
     }
     int closeTimeout = url.getParameter(Constants.CLOSE_TIMEOUT_KEY, defaultCloseTimeout);
     int heartbeat = getHeartbeat(url);
@@ -341,7 +343,7 @@ public static int getIdleTimeout(URL url) {
 ### Graceful Shutdown and the New Semantics of getChannels
 
 ```java
-// dubbo-remoting/dubbo-remoting-netty4/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyServer.java:225-249
+// dubbo-remoting/dubbo-remoting-netty4/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyServer.java
 private void closeBootstrap() {
     try {
         if (bootstrap != null) {
@@ -373,21 +375,21 @@ public Collection<Channel> getChannels() {
 | 2.7.x | 遍历 `channels.values()`，**过滤** `isConnected()`，并 `channels.remove(...)` 顺手清理死链，返回 `HashSet` |
 | 3.3.6 | `new ArrayList<>(channels.values())`——**不过滤、不清理** |
 
-也就是说 3.3.6 把「过滤死链」的职责从 `getChannels()` 挪走了。调用方如果依赖「拿到的都是活连接」，需要自己判断 `isConnected()`。新增的 `getChannelsSize()`（`:241-244`）返回 map 全量大小，不受此影响。
+也就是说 3.3.6 把「过滤死链」的职责从 `getChannels()` 挪走了。调用方如果依赖「拿到的都是活连接」，需要自己判断 `isConnected()`。新增的 `getChannelsSize()`返回 map 全量大小，不受此影响。
 
 ### metrics Reporting
 
 3.3.6 在 `doOpen` 末尾新增了 Netty 分配器指标上报，共 **8 项**，全部读同一个 `PooledByteBufAllocator.DEFAULT`：
 
 ```java
-// dubbo-remoting/dubbo-remoting-netty4/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyServer.java:121-124,144-151
+// dubbo-remoting/dubbo-remoting-netty4/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyServer.java
 if (isSupportMetrics()) {
     ApplicationModel applicationModel = ApplicationModel.defaultModel();
     MetricsEventBus.post(NettyEvent.toNettyEvent(applicationModel), () -> {
         Map<String, Long> dataMap = new HashMap<>();
         dataMap.put(MetricsKey.NETTY_ALLOCATOR_HEAP_MEMORY_USED.getName(),
                 PooledByteBufAllocator.DEFAULT.metric().usedHeapMemory());
-        // ... 另有 6 项 arena / cache 指标
+  // ... 另有 6 项 arena / cache 指标
         dataMap.put(MetricsKey.NETTY_ALLOCATOR_CHUNK_SIZE.getName(),
                 (long) PooledByteBufAllocator.DEFAULT.chunkSize());
         return dataMap;
@@ -402,7 +404,7 @@ if (isSupportMetrics()) {
 | `NORMAL_CACHE_SIZE` / `SMALL_CACHE_SIZE` | `normalCacheSize()` / `smallCacheSize()` |
 | `THREAD_LOCAL_CACHES_NUM` / `CHUNK_SIZE` | `numThreadLocalCaches()` / `chunkSize()` |
 
-上报本身用 `isSupportMetrics()` 做类存在性探测（`ClassUtils.isPresent("io.netty.buffer.PooledByteBufAllocatorMetric")`，`:153-155`）——**是否上报取决于 Netty 4.1.75+ 是否带该类**，老版本 Netty 会静默跳过，不是异常。指标体系详见 [Metrics.md](/docs/CS/Framework/Dubbo/Metrics.md)。
+上报本身用 `isSupportMetrics()` 做类存在性探测（`ClassUtils.isPresent("io.netty.buffer.PooledByteBufAllocatorMetric")`）——**是否上报取决于 Netty 4.1.75+ 是否带该类**，老版本 Netty 会静默跳过，不是异常。指标体系详见 [Metrics.md](/docs/CS/Framework/Dubbo/Metrics.md)。
 
 > [!NOTE]
 > 上报取的是 `ApplicationModel.defaultModel()`，而不是 `getUrl().getOrDefaultApplicationModel()`。在多应用模型下这是已知的不精确点。
@@ -412,7 +414,7 @@ if (isSupportMetrics()) {
 `NettyClient extends AbstractClient`，`doOpen` 只做两件事——建 handler、建 `Bootstrap`，真正的连接在 `doConnect`：
 
 ```java
-// dubbo-remoting/dubbo-remoting-netty4/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyClient.java:60,72-75,82-84,98-104
+// dubbo-remoting/dubbo-remoting-netty4/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyClient.java
 public class NettyClient extends AbstractClient {
 
     private static final GlobalResourceInitializer<EventLoopGroup> EVENT_LOOP_GROUP = new GlobalResourceInitializer<>(
@@ -424,7 +426,7 @@ public class NettyClient extends AbstractClient {
     private volatile Channel channel;
 
     public NettyClient(final URL url, final ChannelHandler handler) throws RemotingException {
-        // the handler will be wrapped: MultiMessageHandler->HeartbeatHandler->handler
+  // the handler will be wrapped: MultiMessageHandler->HeartbeatHandler->handler
         super(url, wrapChannelHandler(url, handler));
     }
 
@@ -440,23 +442,23 @@ public class NettyClient extends AbstractClient {
 
 - **EventLoopGroup 是全进程共享的**：`GlobalResourceInitializer` 持有单例 + `EventExecutorGroup::shutdownGracefully` 释放钩子，不是每个 client 一个线程池。客户端的 IO 线程数也用 `DEFAULT_IO_THREADS`，但**不读 `iothreads` 参数**。
 - **一个 client 只有一条连接**：`channel` 字段是 `volatile` 单值，`doConnect` 每次成功都用新 channel 替换并关掉旧 channel（源码注释写明 "Each successful invocation of doConnect() will replace this with new channel and close old channel"）。多 Reference 的连接复用规则见 [ThreadPool.md](/docs/CS/Framework/Dubbo/ThreadPool.md?id=multiple-references-share-one-connection-by-default)。
-- **业务线程池不是它创建的**：`initExecutor` 在 `AbstractClient.java:145-156`，把 `THREADPOOL_KEY` 补上 `DEFAULT_CLIENT_THREADPOOL`（即 `cached`）后交给 `ExecutorRepository` 全局创建，**全应用共享一个池**。这就是消费端线程池默认 `cached` 的来源。
+- **业务线程池不是它创建的**：`initExecutor` 在 `AbstractClient.java`，把 `THREADPOOL_KEY` 补上 `DEFAULT_CLIENT_THREADPOOL`（即 `cached`）后交给 `ExecutorRepository` 全局创建，**全应用共享一个池**。这就是消费端线程池默认 `cached` 的来源。
 
 `initBootstrap` 的 client 侧 pipeline 是 `negotiation`（**条件性**，仅 `sslContext != null` 时加）→ `decoder` → `encoder` → `client-idle-handler`（`IdleStateHandler(heartbeatInterval, 0, 0)`，只写空闲触发心跳）→ `handler`。与 server 端相反，client 端仍受 `SslContexts.buildClientSslContext(getUrl())` 是否返回非空控制。它还支持 SOCKS5 代理：若配置了 `socksProxyHost` 且目标地址不是本机，则 `pipeline().addFirst(new Socks5ProxyHandler(...))`，默认端口 `1080`。
 
 ### NettyChannel.send and the Semantics of sent
 
 ```java
-// dubbo-remoting/dubbo-remoting-netty4/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyChannel.java:191-232
+// dubbo-remoting/dubbo-remoting-netty4/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyChannel.java
 @Override
 public void send(Object message, boolean sent) throws RemotingException {
-    super.send(message, sent);                    // 父类先做关闭检查
+    super.send(message, sent);  // 父类先做关闭检查
     boolean success = true;
     int timeout = 0;
     ByteBuf buf = null;
     try {
         Object outputMessage = message;
-        if (!encodeInIOThread) {                  // 非 IO 线程则先编码
+        if (!encodeInIOThread) {  // 非 IO 线程则先编码
             buf = channel.alloc().buffer();
             ChannelBuffer buffer = new NettyBackedChannelBuffer(buf);
             codec.encode(this, buffer, message);
@@ -464,7 +466,7 @@ public void send(Object message, boolean sent) throws RemotingException {
         }
         ChannelFuture future = writeQueue.enqueue(outputMessage).addListener((ChannelFutureListener) f -> {
             if (!(message instanceof Request)) {
-                return;                            // 仅 Request 回调
+                return;  // 仅 Request 回调
             }
             ChannelHandler handler = getChannelHandler();
             if (f.isSuccess()) {
@@ -474,12 +476,12 @@ public void send(Object message, boolean sent) throws RemotingException {
                 if (t == null) {
                     return;
                 }
-                // 写失败转成 error response，走正常的 received 分发
+  // 写失败转成 error response，走正常的 received 分发
                 Response response = buildErrorResponse((Request) message, t);
                 handler.received(NettyChannel.this, response);
             }
         });
-        if (sent) {                                // sent=true 才阻塞等待
+        if (sent) {  // sent=true 才阻塞等待
             timeout = getUrl().getPositiveParameter(TIMEOUT_KEY, DEFAULT_TIMEOUT);
             success = future.await(timeout);
         }
@@ -490,7 +492,7 @@ public void send(Object message, boolean sent) throws RemotingException {
     } catch (Throwable e) {
         removeChannelIfDisconnected(channel);
         if (buf != null) {
-            ReferenceCountUtil.safeRelease(buf);   // 防止 ByteBuf 泄漏
+            ReferenceCountUtil.safeRelease(buf);  // 防止 ByteBuf 泄漏
         }
         throw new RemotingException(...);
     }
@@ -506,37 +508,37 @@ public void send(Object message, boolean sent) throws RemotingException {
 > [!TIP]
 > `sent` 默认值来自 URL 参数 `Constants.SENT_KEY`，见 `AbstractPeer.send(Object)`：`send(message, url.getParameter(SENT_KEY, false))`——**默认 `false`（异步）**。
 
-listener 里只有 `Request` 才回调（`:208`）。写失败时不是抛异常，而是**构造一个 error response 走 `handler.received()`**，让上层按正常的错误响应处理，这是 Dubbo 把「写失败」与「读失败」统一到一套 handler 语义里的关键设计。
+listener 里只有 `Request` 才回调。写失败时不是抛异常，而是**构造一个 error response 走 `handler.received()`**，让上层按正常的错误响应处理，这是 Dubbo 把「写失败」与「读失败」统一到一套 handler 语义里的关键设计。
 
 `!encodeInIOThread` 分支是**在业务线程里提前编码**：`NettyBackedChannelBuffer` 把 Dubbo 的 `ChannelBuffer` 包装到 Netty 的 `ByteBuf` 上，让 `codec.encode` 直接写出字节，IO 线程只做搬运。`writeQueue` 是 `Netty4BatchWriteQueue`（继承 `BatchExecutorQueue`），提供 `enqueue` 批量写能力。
 
 ### Codec Adaptation Layer
 
-`NettyCodecAdapter`（`NettyCodecAdapter.java:37-60`）是 `Codec2` 与 Netty pipeline 之间的桥，`final class`，构造时同时创建 `InternalEncoder`（`extends MessageToByteEncoder`）与 `InternalDecoder`（`extends ByteToMessageDecoder`），由 `getEncoder()` / `getDecoder()` 取出后放进 pipeline。
+`NettyCodecAdapter`（`NettyCodecAdapter.java`）是 `Codec2` 与 Netty pipeline 之间的桥，`final class`，构造时同时创建 `InternalEncoder`（`extends MessageToByteEncoder`）与 `InternalDecoder`（`extends ByteToMessageDecoder`），由 `getEncoder()` / `getDecoder()` 取出后放进 pipeline。
 
-`Codec2` 实例从哪来：`AbstractEndpoint.getChannelCodec(url)`（`AbstractEndpoint.java:48-60`）——读 URL 参数 `codec`，**为空则直接用协议名**（因为 Dubbo 约定 codec 扩展名与协议名相同），先去 `Codec2` 扩展里找，找不到再退 `Codec` 扩展。`NettyBackedChannelBuffer` / `NettyBackedChannelBufferFactory` 则是 `Buffer` 体系对 Netty `ByteBuf` 的适配，让上层（`Codec2` 实现、`Payload` 检查）不必认识 Netty 类型。
+`Codec2` 实例从哪来：`AbstractEndpoint.getChannelCodec(url)`（`AbstractEndpoint.java`）——读 URL 参数 `codec`，**为空则直接用协议名**（因为 Dubbo 约定 codec 扩展名与协议名相同），先去 `Codec2` 扩展里找，找不到再退 `Codec` 扩展。`NettyBackedChannelBuffer` / `NettyBackedChannelBufferFactory` 则是 `Buffer` 体系对 Netty `ByteBuf` 的适配，让上层（`Codec2` 实现、`Payload` 检查）不必认识 Netty 类型。
 
 ## NettyServerHandler and NettyClientHandler Event Translation
 
 上面所有 pipeline 最终都把字节交给 `NettyServerHandler` / `NettyClientHandler`——它们是 Netty 事件与 Dubbo `ChannelHandler` 语义之间的**唯一翻译层**。两个类都 `@Sharable`、`extends ChannelDuplexHandler`，且持有的 `handler` 已经是 `MultiMessageHandler` → `HeartbeatHandler` → `Dispatcher` 包装后的链，因此**翻译层本身不做派发**，只负责把 Netty 生命周期事件映射成 Dubbo 语义事件，派发由下游 `Dispatcher` 决定。
 
-服务端翻译（`NettyServerHandler.java:45,74-173`）：
+服务端翻译（`NettyServerHandler.java`）：
 
 ```java
 @io.netty.channel.ChannelHandler.Sharable
 public class NettyServerHandler extends ChannelDuplexHandler {
     private final Map<String, Channel> channels = new ConcurrentHashMap<>();
-    // channelActive   -> channels.put(...) + handler.connected(channel)
-    // channelInactive -> channels.remove(...) + handler.disconnected(channel) + NettyChannel.removeChannel(ch)
-    // channelRead     -> handler.received(channel, msg); ctx.fireChannelRead(msg);  // 继续向 QoS handler 传播
-    // write           -> super.write(...); handler.sent(channel, msg);             // 写成功后回调 sent
-    // userEventTriggered -> IdleStateEvent: channel.close()（读空闲超时关链）
-    //                       SslHandshakeCompletionEvent: 把 SSLSession 存入 channel 属性
-    // exceptionCaught -> handler.caught(channel, cause)
+  // channelActive   -> channels.put(...) + handler.connected(channel)
+  // channelInactive -> channels.remove(...) + handler.disconnected(channel) + NettyChannel.removeChannel(ch)
+  // channelRead     -> handler.received(channel, msg); ctx.fireChannelRead(msg);  // 继续向 QoS handler 传播
+  // write           -> super.write(...); handler.sent(channel, msg);  // 写成功后回调 sent
+  // userEventTriggered -> IdleStateEvent: channel.close()（读空闲超时关链）
+  //                       SslHandshakeCompletionEvent: 把 SSLSession 存入 channel 属性
+  // exceptionCaught -> handler.caught(channel, cause)
 }
 ```
 
-客户端翻译（`NettyClientHandler.java:36,54-143`）与服务端有两点关键差异：
+客户端翻译（`NettyClientHandler.java`）与服务端有两点关键差异：
 
 - **`write` 不回调 `handler.sent`**。客户端发送是否成功的语义由 `NettyChannel.send` 里的 `ChannelFutureListener` 跟踪（见上文「`sent` 语义」），因此 `NettyClientHandler.write` 只 `super.write(...)` 透传，没有 `sent` 回调。
 - **`userEventTriggered` 在 `IdleStateEvent` 时主动发心跳**而不是关链：构造 `Request` 设 `setEvent(HEARTBEAT_EVENT)`、`setTwoWay(true)`，调 `channel.send(req)`。即「客户端读空闲 → 发心跳探测；服务端读空闲 → 直接关链」，心跳的「探测」与「裁决」职责分属两端。
@@ -550,7 +552,7 @@ public class NettyServerHandler extends ChannelDuplexHandler {
 `NettyServer` / `NettyClient` 构造时都会把业务 handler 包一层，顺序是**从外到内** `MultiMessageHandler` → `HeartbeatHandler` → `Dispatcher 包装后的 handler`：
 
 ```java
-// dubbo-remoting/dubbo-remoting-api/src/main/java/org/apache/dubbo/remoting/transport/dispatcher/ChannelHandlers.java:42-50
+// dubbo-remoting/dubbo-remoting-api/src/main/java/org/apache/dubbo/remoting/transport/dispatcher/ChannelHandlers.java
 protected ChannelHandler wrapInternal(ChannelHandler handler, URL url) {
     return new MultiMessageHandler(new HeartbeatHandler(url.getOrDefaultFrameworkModel()
             .getExtensionLoader(Dispatcher.class)
@@ -566,7 +568,7 @@ protected ChannelHandler wrapInternal(ChannelHandler handler, URL url) {
 3.x 新增的 `ConnectionManager` SPI，用于 Triple / 端口复用这类需要「在一条连接上跑多路协议」的场景：
 
 ```java
-// dubbo-remoting/dubbo-remoting-api/src/main/java/org/apache/dubbo/remoting/api/connection/ConnectionManager.java:25-31
+// dubbo-remoting/dubbo-remoting-api/src/main/java/org/apache/dubbo/remoting/api/connection/ConnectionManager.java
 @SPI(scope = ExtensionScope.FRAMEWORK)
 public interface ConnectionManager {
 
@@ -590,7 +592,7 @@ public interface ConnectionManager {
 `PortUnificationTransporter` 是 `Transporter` 之外的**独立 SPI**，专门做端口统一，注册在 `org.apache.dubbo.remoting.api.pu.PortUnificationTransporter`（netty4 模块注册 `netty4`，netty3 模块注册 `netty3`）：
 
 ```java
-// dubbo-remoting/dubbo-remoting-netty4/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyPortUnificationTransporter.java:29-43
+// dubbo-remoting/dubbo-remoting-netty4/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyPortUnificationTransporter.java
 public class NettyPortUnificationTransporter implements PortUnificationTransporter {
 
     public static final String NAME = "netty4";
@@ -625,27 +627,27 @@ public class NettyPortUnificationTransporter implements PortUnificationTransport
 连接断开后的自动重连**不是** `AbstractClient` 自带定时器，而是由交换层的 `HeaderExchangeClient` 借助共享 `HashedWheelTimer`（`IDLE_CHECK_TIMER`）驱动的 `ReconnectTimerTask` 完成。`AbstractClient` 只负责「算间隔」与「执行一次重连」：
 
 ```java
-// dubbo-remoting/dubbo-remoting-api/.../transport/AbstractClient.java:72,78,324-352
-needReconnect = url.getParameter(Constants.SEND_RECONNECT_KEY, true);   // send.reconnect，默认 true
+// dubbo-remoting/dubbo-remoting-api/.../transport/AbstractClient.java
+needReconnect = url.getParameter(Constants.SEND_RECONNECT_KEY, true);  // send.reconnect，默认 true
 reconnectDuration = getReconnectDuration(url);
 
 private long getReconnectDuration(URL url) {
     int idleTimeout = getIdleTimeout(url);
-    long heartbeatTimeoutTick = calculateLeastDuration(idleTimeout);     // idleTimeout / HEARTBEAT_CHECK_TICK(=3)，下限 LEAST_HEARTBEAT_DURATION(=1000)
-    return calculateReconnectDuration(url, heartbeatTimeoutTick);         // max(LEAST_RECONNECT_DURATION(=60000), tick)
+    long heartbeatTimeoutTick = calculateLeastDuration(idleTimeout);  // idleTimeout / HEARTBEAT_CHECK_TICK(=3)，下限 LEAST_HEARTBEAT_DURATION(=1000)
+    return calculateReconnectDuration(url, heartbeatTimeoutTick);  // max(LEAST_RECONNECT_DURATION(=60000), tick)
 }
 
-public void reconnect() throws RemotingException {                       // 加锁后「断 + 连」
+public void reconnect() throws RemotingException {  // 加锁后「断 + 连」
     connectLock.lock();
     try { disconnect(); connect(); } finally { connectLock.unlock(); }
 }
 ```
 
-定时任务侧（`HeaderExchangeClient.java:221-261`）：
+定时任务侧（`HeaderExchangeClient.java`）：
 
 ```java
 private void startReconnectTask(URL url) {
-    if (shouldReconnect(url)) {                                         // RECONNECT_KEY 默认 true；配 "false" 关闭
+    if (shouldReconnect(url)) {  // RECONNECT_KEY 默认 true；配 "false" 关闭
         reconnectTimerTask = new ReconnectTimerTask(
                 () -> Collections.singleton(this),
                 IDLE_CHECK_TIMER.get(),
@@ -658,37 +660,37 @@ protected boolean shouldReconnect(URL url) {
 }
 ```
 
-`ReconnectTimerTask.doTask`（`ReconnectTimerTask.java:44-80`）每 tick 做两件事，任一命中即 `reconnect()`：
+`ReconnectTimerTask.doTask`（`ReconnectTimerTask.java`）每 tick 做两件事，任一命中即 `reconnect()`：
 
 - 通道**未连接**（`!channel.isConnected()`）——覆盖懒连接初始化失败与运行中掉线；
 - 通道已连但 `now - lastRead > idleTimeout`——即客户端侧心跳读空闲超时。
 
 注意重连间隔 `reconnectDuration` 由 `idleTimeout`（心跳超时）分片与 `LEAST_RECONNECT_DURATION`（默认 60000ms，URL key `dubbo.application.least-reconnect-duration`）取较大值，而**不是**独立的 `reconnect` 参数；`reconnect` 这个 key 只决定「是否开启重连任务」，已被证实 3.3.6 里**没有** `reconnect.warningperiod` 之类的「告警周期」参数。
 
-懒连接（`LAZY_CONNECT_KEY`，`AbstractClient.java:102`）：首次 `connect()` 失败时，若开了懒连接则**不抛异常**、实例照常创建，后续由 `ReconnectTimerTask` 兜底重试；否则按 `CHECK_KEY`（默认 `true`）决定是否在构造期抛错（`check=false` 则记日志、留待重试）。
+懒连接（`LAZY_CONNECT_KEY`，`AbstractClient.java`）：首次 `connect()` 失败时，若开了懒连接则**不抛异常**、实例照常创建，后续由 `ReconnectTimerTask` 兜底重试；否则按 `CHECK_KEY`（默认 `true`）决定是否在构造期抛错（`check=false` 则记日志、留待重试）。
 
 ## Default Value Summary Table
 
 | 项 | 默认值 | 来源 |
 | :--- | :--- | :--- |
-| `Transporter` 扩展名 / scope | `netty` / `FRAMEWORK` | `Transporter.java:32` |
+| `Transporter` 扩展名 / scope | `netty` / `FRAMEWORK` | `Transporter.java` |
 | 注册的扩展名 | `netty`、`netty4`、`netty3` | 2 份 SPI 文件 |
-| `DEFAULT_TRANSPORTER` / `DEFAULT_REMOTING_CLIENT` / `DEFAULT_EXCHANGER` | `netty` / `netty` / `header` | `remoting/Constants.java:110,106,114` |
-| server worker / boss IO 线程 | `min(CPU+1, 32)` / `1` | `remoting/Constants.java:118`（走 `getPositiveParameter`）；`NettyServer.java:153-155` |
-| client IO 线程 | `min(CPU+1, 32)` | `NettyClient.java:72-75`，**不读 `iothreads`** |
-| server / client `SO_KEEPALIVE` | `false` / `true` | `NettyServer.java:168`；`NettyClient.initBootstrap` 硬编码 |
-| `heartbeat` | `60000` ms | `remoting/Constants.java:157` |
-| `heartbeat.timeout`（idle） | `heartbeat * 3` | `UrlUtils.java:62-70` |
-| `close.timeout` | 回落 `idleTimeout` | `UrlUtils.java:40-60` |
+| `DEFAULT_TRANSPORTER` / `DEFAULT_REMOTING_CLIENT` / `DEFAULT_EXCHANGER` | `netty` / `netty` / `header` | `remoting/Constants.java` |
+| server worker / boss IO 线程 | `min(CPU+1, 32)` / `1` | `remoting/Constants.java`（走 `getPositiveParameter`）；`NettyServer.java` |
+| client IO 线程 | `min(CPU+1, 32)` | `NettyClient.java`，**不读 `iothreads`** |
+| server / client `SO_KEEPALIVE` | `false` / `true` | `NettyServer.java`；`NettyClient.initBootstrap` 硬编码 |
+| `heartbeat` | `60000` ms | `remoting/Constants.java` |
+| `heartbeat.timeout`（idle） | `heartbeat * 3` | `UrlUtils.java` |
+| `close.timeout` | 回落 `idleTimeout` | `UrlUtils.java` |
 | `sent` | `false` | `AbstractPeer.send(Object)` 读 `SENT_KEY` |
-| 消费端线程池 | `cached` | `CommonConstants.java:135`，`AbstractClient.java:155` |
-| 停机 `quietPeriod` | `min(2000, timeout)` | `NettyServer.java:230` |
-| SOCKS5 默认端口 | `1080` | `NettyClient.java:66` |
-| netty4 依赖版本（`netty4_version`） | `4.2.2.Final` | `dubbo-dependencies-bom/pom.xml:98` |
-| `reconnect` 开关（是否启重连任务） | `true`（设 `false` 关闭） | `remoting/Constants.java:142` `RECONNECT_KEY` |
-| `LEAST_RECONNECT_DURATION` | `60000` ms（key `dubbo.application.least-reconnect-duration`） | `remoting/Constants.java:70,72` |
-| `HEARTBEAT_CHECK_TICK`（重连/心跳分片分母） | `3` | `remoting/Constants.java:60` |
-| `send.reconnect`（`needReconnect`） | `true` | `remoting/Constants.java:148` `SEND_RECONNECT_KEY` |
+| 消费端线程池 | `cached` | `CommonConstants.java`，`AbstractClient.java` |
+| 停机 `quietPeriod` | `min(2000, timeout)` | `NettyServer.java` |
+| SOCKS5 默认端口 | `1080` | `NettyClient.java` |
+| netty4 依赖版本（`netty4_version`） | `4.2.2.Final` | `dubbo-dependencies-bom/pom.xml` |
+| `reconnect` 开关（是否启重连任务） | `true`（设 `false` 关闭） | `remoting/Constants.java` `RECONNECT_KEY` |
+| `LEAST_RECONNECT_DURATION` | `60000` ms（key `dubbo.application.least-reconnect-duration`） | `remoting/Constants.java` |
+| `HEARTBEAT_CHECK_TICK`（重连/心跳分片分母） | `3` | `remoting/Constants.java` |
+| `send.reconnect`（`needReconnect`） | `true` | `remoting/Constants.java` `SEND_RECONNECT_KEY` |
 
 ## Pitfall List
 

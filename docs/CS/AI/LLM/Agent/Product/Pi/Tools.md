@@ -1,134 +1,369 @@
 ## Introduction
 
-Pi 默认只启用四个工具（`read` / `bash` / `edit` / `write`），其余能力靠扩展叠加——但"工具"本身是一套工程化的分层：工厂造定义、定义包一层本地实现、本地实现背后是**可插拔的 `operations` 接口**。本页把这套机制拆开：八个内置工具的真实实现与限制、`createCodingTools` 等工厂、`truncate` 共享截断工具、`withFileMutationQueue` 并发锁，以及 `operations` 如何成为远程执行的接缝。
+Pi 的工具是一套工程化分层：`ToolName` 声明八种能力，工厂按用途装配，ToolDefinition 经 `wrapToolDefinition` 变成可执行的 AgentTool；模型侧只默认激活四个（`read`/`bash`/`edit`/`write`），其余靠扩展、`--tools` 或 `defaultTools` 启用。输出限制统一走 `truncate.ts` 的**行 + 字节双上限**，与 token 无关；一次工具批次的并发度、截断响应下工具调用的处置，则由 `pi-agent-core` 的 agent loop 决定（见 [AgentLoop](/docs/CS/AI/LLM/Agent/Product/Pi/AgentLoop.md)）。本页按 v1.5.2 源码把这几条链路拆开讲清。
 
-> 版本基线：核实于 2026-10-21，基于 npm `@earendil-works/pi-coding-agent` **1.3.0**（2026-10-15）与 `main` 分支 `packages/coding-agent/src/core/tools/`（该目录最近提交 2026-10-14，修 read 行号标签）。所有事实以源码为准，非以文档为准。
-
-## Tool Factories
-
-`src/core/tools/index.ts` 是工具的装配层。它先定义 `ToolName` 联合类型（共 **8** 个），再用一组工厂按用途组装：
-
-```ts
-export type ToolName = "read" | "bash" | "powershell" | "edit" | "write" | "grep" | "find" | "ls";
-
-createCodingTools(cwd, opts)     // 默认四件套：read, bash, edit, write
-createReadOnlyTools(cwd, opts)   // 只读集：read, grep, find, ls
-createAllTools(cwd, opts)        // 全部 8 个（含 powershell）
-createCodingToolDefinitions(...) // 同上但只产出声明（不包 AgentTool）
-createReadOnlyToolDefinitions(...)
-createAllToolDefinitions(...)
-createTool(name, cwd, opts)      // 按名字单造
-createToolDefinition(name, cwd, opts)
-```
-
-`ToolName` 的八件套分两组：**默认四件套**（`read`/`bash`/`edit`/`write`，即 `createCodingTools`）与**只读集**（`read`/`grep`/`find`/`ls`，即 `createReadOnlyTools`）；`powershell` 走 Windows/可选路径，与 `bash` 平行。`ToolsOptions` 允许对每个工具单独传配置（如 `read.autoResizeImages`、`bash.shellPath`、`bash.commandPrefix`）。每个工具都由 `wrapToolDefinition` 包一层，并带 `constrainedSampling: { type: "json_schema", strict: "prefer" }`——尽量让模型按严格 JSON Schema 出参。
-
-所有工具都带 `promptSnippet` / `promptGuidelines`，会注入系统提示，告诉模型"用 read 看文件而不是 cat/sed""edit 的 oldText 必须精确匹配"等。
-
-## Pluggable Operations（远程执行的接缝）
-
-八个工具各自定义一个 `operations` 接口，默认实现是本地文件系统 / `spawn` / `rg` / `fd`；传 `options.operations` 即可整体替换掉 I/O 后端：
-
-| 工具 | `operations` 接口 | 默认实现 |
-| :--- | :--- | :--- |
-| `read` | `ReadOperations`（`readFile` / `access` / `detectImageMimeType`） | `fs.readFile` / `fs.access(R_OK)` |
-| `edit` | `EditOperations`（`readFile` / `writeFile` / `access`） | `fs` 读写 + `R_OK\|W_OK` |
-| `write` | `WriteOperations`（`writeFile` / `mkdir`） | `fs.writeFile` / `mkdir -p` |
-| `bash` | `BashOperations`（`exec`） | `spawn` 本地 shell |
-| `grep` | `GrepOperations`（`isDirectory` / `readFile`） | `fs` + ripgrep |
-| `find` | `FindOperations`（`exists` / `glob`） | `fs` + fd |
-| `ls` | `LsOperations`（`exists` / `stat` / `readdir`） | `fs.readdir` |
-
-这套接口是 Pi 远程执行与隔离的**接缝**：`env` 包的 SSH daemon（`RemoteExecutionEnv`，见 [Env](/docs/CS/AI/LLM/Agent/Product/Pi/Env.md)）、Gondolin 扩展的 Linux 微虚拟机，正是通过替换 `operations` 把文件读写与命令执行路由到宿主机之外——而工具定义、声明、钩子都不用改。
+> 版本基线：核实于 2026-11-16，对应 **v1.5.2**（commit `b4afdddf44e059c67ccf5097e5317d913521b470`，2026-11-10 发布）。所有事实以该 tag 的源码为准，非以文档为准；源码路径相对仓库根。
 
 ```dot
 digraph tools {
   rankdir=TB;
-  factories [label="工厂\ncreateCodingTools / createReadOnlyTools / createAllTools" shape=box];
-  defs [label="8 个 ToolDefinition\nread/bash/edit/write/grep/find/ls/powershell" shape=box];
-  local [label="默认 local operations\nfs / spawn / rg / fd" shape=box];
-  remote [label="可插拔 operations\nenv (SSH daemon)\nGondolin (微虚拟机)" shape=box style=dashed];
-  factories -> defs [label="装配"];
-  defs -> local [label="默认 I/O"];
-  defs -> remote [label="覆盖 operations" style=dashed];
+  node [shape=box];
+  subgraph cluster_pi_tools {
+    label="coding-agent 工具层";
+    factories [label="工厂\ncreateCodingTools / createReadOnlyTools\ncreateAllTools"];
+    names [label="ToolName 八种\nread/bash/powershell/edit/write/grep/find/ls"];
+    trunc [label="truncate.ts\n行 + 字节双上限"];
+    queue [label="withFileMutationQueue\nrealpath 作 key 串行写"];
+    factories -> names;
+    names -> trunc;
+    names -> queue;
+  }
+  loop [label="pi-agent-core agent-loop\nparallel(default) | sequential"];
+  local [label="默认 I/O\nfs / spawn / rg / fd"];
+  remote [label="可插拔 operations\nenv(SSH daemon) / Gondolin(微虚拟机)", style=dashed];
+  names -> loop [label="一次批次执行"];
+  loop -> local;
+  names -> remote [label="覆盖 operations" style=dashed];
 }
 ```
 
-## The Default Four（read / bash / edit / write）
+## Tool Factories and Exposure
 
-### read
+`packages/coding-agent/src/core/tools/index.ts` 是装配层。它先声明八种工具名，再给出三组工厂：
 
-- 入参：`path`、`offset`（1-indexed 起读行）、`limit`（读取行数）。
-- 限制：`DEFAULT_MAX_LINES = 2000` 行、`DEFAULT_MAX_BYTES = 50KB`，**先到为准**，用 `truncateHead`（从头截）保留前部。
-- 单行超限（`firstLineExceedsLimit`）：返回空内容 + 提示，教模型用 `sed -n 'Np' … | head -c 50KB` 取该行；其余截断附 `[Showing lines A-B of T. Use offset=C to continue.]` 续读提示。
-- 图片：`jpg`/`png`/`gif`/`webp`/`bmp` 走 `processImage`（默认 `autoResizeImages: true`），按模型 `inputLimits.images` 缩放；当前模型不支持图像时附 `[Current model does not support images…]` 提示。
-- 程序化输出：`outputSchema` 是 `string` 与 `{ type:"image", data, mimeType, note }` 的联合——codemode 脚本拿到的不是纯文本而是结构化块（文本或可直接喂 `image()` 的图像块）。`structuredContent` 由 `toReadOutput` 生成。
-- 路径经 `resolveReadPathAsync` 解析，全程可 `AbortSignal` 取消。
+```ts
+export type ToolName = "read" | "bash" | "powershell" | "edit" | "write" | "grep" | "find" | "ls";
+export const allToolNames: Set<ToolName> = new Set([
+	"read",
+	"bash",
+	"powershell",
+	"edit",
+	"write",
+	"grep",
+	"find",
+	"ls",
+]);
+```
 
-### edit
+```ts
+export function createCodingTools(cwd: string, options?: ToolsOptions): Tool[] {
+	return [
+		createReadTool(cwd, options?.read),
+		createBashTool(cwd, options?.bash),
+		createEditTool(cwd, options?.edit),
+		createWriteTool(cwd, options?.write),
+	];
+}
+```
 
-- 入参：`path`、`edits[]`（每项 `{ oldText, newText }`）。**所有 `oldText` 都针对原始文件匹配**，不是增量应用——所以多个 edit 不能重叠或嵌套，否则报错；`oldText` 需在文件内唯一。
-- 匹配前剥 BOM、归一化成 LF 再比，写回时恢复原始行尾（`detectLineEnding` → `restoreLineEndings`），避免把 CRLF 文件悄悄改成 LF。
-- `prepareArguments` 做兼容性归一：旧式 `oldText`/`newText`（单字段）并入 `edits[]`；有些模型（Opus 4.6、GLM-5.1）把 `edits` 当 JSON 字符串或单对象发来，这里都归一成数组，保证健壮。
-- 全程 `withFileMutationQueue` 串行化；`access` 要求 `R_OK | W_OK`。
-- 返回 `details`：`diff`（展示用）、`patch`（标准 unified diff）、`firstChangedLine`（给编辑器导航）。
+`createReadOnlyTools` 是 `read`/`grep`/`find`/`ls`，`createAllTools` 返回上面八个的完整 `Record`。每个工厂还有对应的 `*ToolDefinitions` 版本，只产出声明、不包 AgentTool。
 
-### write
+**注册八个、默认激活四个**是两条独立机制：`AgentSession` 用 `createAllToolDefinitions` 把八个全部注册进 `_baseToolDefinitions`，再按 active 名字决定哪些进入模型可见的 loadout：
 
-- 入参：`path`、`content`。
-- **创建或覆盖**：文件不存在则建，存在则**直接覆盖**（没有"必须不存在"的护栏——与语义"完整重写用 write"一致）；自动 `mkdir -p` 父目录。
-- 全程 `withFileMutationQueue` 串行化；返回 `Successfully wrote to <path>`。
+```ts
+const baseToolDefinitions = this._baseToolsOverride
+	? Object.fromEntries(
+			Object.entries(this._baseToolsOverride).map(([name, tool]) => [
+				name,
+				createToolDefinitionFromAgentTool(tool),
+			]),
+		)
+	: createAllToolDefinitions(this._cwd, {
+			read: { autoResizeImages },
+			bash: { commandPrefix: shellCommandPrefix, shellPath },
+		});
+```
+
+```ts
+const defaultActiveToolNames = this._baseToolsOverride
+	? Object.keys(this._baseToolsOverride)
+	: ["read", "bash", "edit", "write"];
+const baseActiveToolNames = options.activeToolNames ?? defaultActiveToolNames;
+```
+
+`defaultTools` 设置（`DEFAULT_TOOL_NAMES = ["read", "bash", "edit", "write"]`）和 `--tools` 的 `+name`/`-name` 都在这层生效；reload 时新加进 `defaultTools` 的工具被激活，被移除的仍保持激活。暴露态五态（`direct`/`model-only`/`codemode`/`deferred`/`hidden`）与编排型工具的 `prepareLoadout` 见 [Extensions](/docs/CS/AI/LLM/Agent/Product/Pi/Extensions.md)。
+
+## The Eight Tools
+
+### read / edit / write
+
+`read` 入参 `path`、`offset`（1-indexed 起读行）、`limit`（读取行数），文本走流式或 buffer 读取，`resolveReadPathAsync` 解析路径，全程可 `AbortSignal` 取消。图片（`jpg`/`png`/`gif`/`webp`/`bmp`）走 `processImage`，默认 `autoResizeImages: true`，按模型 `inputLimits.images` 缩放；不支持 vision 时附提示。`outputSchema` 是字符串与 `{ type:"image", data, mimeType, note }` 的联合，codemode 脚本拿到的是可直接喂 `image()` 的结构化块。
+
+截到首行就超字节上限时，不是简单丢弃，而是给模型一条可执行的 shell 兜底：
+
+```ts
+if (truncation.firstLineExceedsLimit) {
+	// First line alone exceeds the byte limit. Point the model at a bash fallback.
+	const firstLineSize = formatSize(firstLineBytes);
+	outputText = `[Line ${startLineDisplay} is ${firstLineSize}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit. Use bash: sed -n '${startLineDisplay}p' ${path} | head -c ${DEFAULT_MAX_BYTES}]`;
+	details = { truncation };
+} else if (truncation.truncated) {
+	// Truncation occurred. Build an actionable continuation notice.
+	const endLineDisplay = startLineDisplay + truncation.outputLines - 1;
+	const nextOffset = endLineDisplay + 1;
+	outputText = truncation.content;
+	if (truncation.truncatedBy === "lines") {
+		outputText += `\n\n[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalFileLines}. Use offset=${nextOffset} to continue.]`;
+	} else {
+		outputText += `\n\n[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalFileLines} (${formatSize(DEFAULT_MAX_BYTES)} limit). Use offset=${nextOffset} to continue.]`;
+	}
+	details = { truncation };
+}
+```
+
+`edit` 入参 `path` + `edits[]`（每项 `{ oldText, newText }`）。**所有 `oldText` 都针对原始文件匹配**，不可重叠/嵌套，需在文件内唯一；匹配前剥 BOM、归一化成 LF，写回时用 `applyReplacementsToOriginal` 把改动拼回原文，未触碰的行保留原始行尾。`prepareEditArguments` 做兼容归一：旧式单字段 `oldText`/`newText` 并入 `edits[]`，Opus 4.6 / GLM-5.1 之类把 `edits` 发成 JSON 字符串或单对象的情况也统一成数组。返回 `diff`（展示）、`patch`（unified diff）、`firstChangedLine`（导航）。`write` 入参 `path` + `content`，不存在则建、存在则**直接覆盖**，自动 `mkdir -p` 父目录；两者全程走 `withFileMutationQueue`。
 
 ### bash
 
-- 入参：`command`、`timeout?`（秒，**无默认值 → 默认不超时**）。源码常量 `MAX_TIMEOUT_MS = 2_147_483_647`（约 24.8 天）是上限；`STRUCTURED_OUTPUT_MAX_BYTES = 1MB` 限制程序化 `structuredContent.output`。
-- 执行：`spawn` 非交互式（`bash -c`，非 Windows 设 `detached` 以便杀整棵进程树），stdout 与 stderr **合并**进同一累积器；`timeout`/`abort` 触发 `killProcessTree`。
-- 流式：`onUpdate` 受 `BASH_UPDATE_THROTTLE_MS` 节流推送增量；长输出截断后写入临时文件（前缀 `pi-bash`），文末附 `[… Full output: <path>]` 让模型去读全文。
-- `BashToolOptions`：`operations`（可替换执行后端）、`commandPrefix`（每条命令前垫 setup，对应设置 `shellCommandPrefix`）、`shellPath`、`exposeSessionEnvironment`（默认 `true`，暴露 `PI_*` 会话环境变量）、`spawnHook`（执行前改命令/cwd/env）。
-- **无内置沙箱**，也**无 `run_in_background` 参数**（当前 main 的 `bashSchema` 仅 `command` + 可选 `timeout`）：命令同步等待结束，安全性靠外部隔离（见 [Security](/docs/CS/AI/LLM/Agent/Product/Pi/Security.md)）。`operations` 可被远程后端整体接管。
+`bash` 的 schema 只有 `command` + 可选 `timeout`（秒，**无默认值即不超时**）。`MAX_TIMEOUT_MS = 2_147_483_647` 是上限，`STRUCTURED_OUTPUT_MAX_BYTES = 1MB` 只限制程序化 `structuredContent.output`，模型可见输出另按尾部 2000 行 / 50KB 截断并落临时文件（前缀 `pi-bash`，附 `[Showing lines A-B of T. Full output: <path>]`）。
 
-## The Read-Only Set（read / grep / find / ls）
+执行后端是本地 shell operations，每次调用 `spawn` 一个**独立子进程**，非 Windows 设 `detached` 以便杀整棵进程树；stdout 与 stderr 接进同一个 `onData` 累积器：
 
-`createReadOnlyTools` 的四件套面向"只看不改"场景（如只读模式、`--tools` 收窄）。`read` 同上，其余三个：
+```ts
+const child = spawn(shellConfig.shell, commandFromStdin ? shellConfig.args : [...shellConfig.args, command], {
+	cwd,
+	detached: process.platform !== "win32",
+	env: env ?? getShellEnv(),
+	stdio: [commandFromStdin ? "pipe" : "ignore", "pipe", "pipe"],
+	windowsHide: true,
+});
+if (commandFromStdin) {
+	child.stdin?.on("error", () => {});
+	child.stdin?.end(command);
+}
+if (child.pid) trackDetachedChildPid(child.pid);
+```
 
-| 工具 | 入参（除 `path` 外） | 后端 | 默认上限 | 关键行为 |
-| :--- | :--- | :--- | :--- | :--- |
-| `grep` | `pattern` / `glob?` / `ignoreCase?` / `literal?` / `context?` / `limit?`(100) | ripgrep（`rg`，缺失则下载） | 100 匹配 / 50KB | 尊重 `.gitignore` + `--hidden`；长行截到 `GREP_MAX_LINE_LENGTH = 500` 字符；`context` 给前后 N 行 |
-| `find` | `pattern`(glob) / `limit?`(1000) | fd（缺失则下载） | 1000 结果 / 50KB | 尊重 `.gitignore`；仓库外用 `--no-require-git`；含 `/` 的模式走 `--full-path` 并补 `**/` |
-| `ls` | `limit?`(500) | `fs.readdir` | 500 条目 / 50KB | 大小写不敏感字母序；目录加 `/` 后缀；含 dotfile |
+abort 和 timeout 都落到一个动作——`killProcessTree(child.pid)`：
 
-三者都经 `ensureTool` 惰性取 `rg` / `fd`（本地没有就下载），输出统一 `truncateHead` 截断并附"已达上限，用 `limit=` 取更多"的可行动提示。`grep`/`find` 同样支持 `operations` 覆盖以委托远程。
+```ts
+const onAbort = () => {
+	if (child.pid) killProcessTree(child.pid);
+};
+
+try {
+	// Set timeout if provided.
+	if (timeoutMs !== undefined) {
+		timeoutHandle = setTimeout(() => {
+			timedOut = true;
+			exitedBeforeDeadlineAfterMs = shellExitedAfterMs;
+			// Also when the shell already exited: on Unix the group kill still reaches background
+			// processes holding the pipes. Windows cannot find them once the shell pid is gone.
+			if (child.pid) killProcessTree(child.pid);
+		}, timeoutMs);
+	}
+```
+
+`BashToolOptions` 支持 `operations`（替换后端）、`commandPrefix`（每条命令前垫 setup）、`shellPath`、`exposeSessionEnvironment`（默认 `true`，暴露 `PI_*`）、`spawnHook`。**无内置沙箱、无 `run_in_background` 参数**，安全靠外部隔离（见 [Security](/docs/CS/AI/LLM/Agent/Product/Pi/Security.md)）。
+
+### grep / find / ls
+
+三者组成只读集。`grep` 与 `find` 默认**调外部二进制**：`ensureTool("rg")` / `ensureTool("fd")`，本地没有就下载。
+
+`grep` 入参 `pattern` / `path?` / `glob?` / `ignoreCase?` / `literal?` / `context?` / `limit?`(100)。它用 `--json --line-number --hidden --no-config` 起 ripgrep，`--no-config` 是为了让工具契约不依赖 `RIPGREP_CONFIG_PATH`；`context` 直接由 rg 的 `context` 事件给出，不再回读文件：
+
+```ts
+// --no-config: the tool contract (literal, glob, limit, ...) must not depend on
+// ambient user config like RIPGREP_CONFIG_PATH. Users can customize via bash or extensions.
+const args: string[] = ["--no-config", "--json", "--line-number", "--color=never", "--hidden"];
+if (ignoreCase) args.push("--ignore-case");
+if (literal) args.push("--fixed-strings");
+// rg never matches a leading "./" ("./src/*.ts" finds nothing), so drop it; "!" negates.
+if (glob) args.push("--glob", glob.replace(/^(!?)(?:\.\/)+/, "$1"));
+// rg emits the surrounding lines as `context` events, so no matched file is ever read here (#9276).
+if (contextValue > 0) args.push("--context", String(contextValue));
+// rg roots --glob at its own cwd, so a directory search runs inside searchPath (#11807).
+// It searches "." because rg canonicalizes its cwd: with an absolute path, a symlinked
+// searchPath (macOS /tmp) would no longer lie under the glob root.
+args.push("--", pattern, isDirectory ? "." : searchPath);
+
+const child = spawn(rgPath, args, {
+	cwd: isDirectory ? searchPath : undefined,
+	stdio: ["ignore", "pipe", "pipe"],
+});
+```
+
+匹配行经 `truncateLine` 截到 `GREP_MAX_LINE_LENGTH = 500` 字符，超限时提示用 read 看全文；字节上限 50KB，匹配数上限 100（`limit=` 可加）。注意 `GrepOperations` 在 v1.5.2 只剩 `isDirectory`（`readFile` 已废弃并被忽略），注释明确「搜索本身始终跑本地 ripgrep」，要远程搜索得覆盖整个 `execute()`，而不是替换 I/O 后端。
+
+`find` 入参 `pattern`(glob) / `path?` / `limit?`(1000)，默认走 fd：
+
+```ts
+// Default implementation uses fd.
+const fdPath = await ensureTool("fd");
+if (signal?.aborted) {
+	settle(() => reject(new Error("Operation aborted")));
+	return;
+}
+if (!fdPath) {
+	settle(() => reject(new Error("fd is not available and could not be downloaded")));
+	return;
+}
+
+const args: string[] = ["--color=never", "--hidden"];
+```
+
+`FindOperations` 的 `exists`/`glob` 可整体替换掉 fd（自定义 `glob` 存在时直接走它）；`--no-require-git` 只在仓库外追加，含 `/` 的模式走 `--full-path` 并补 `**/`，Windows 上带路径的 glob 改由 `Minimatch` 兜底。`ls` 用 `fs.readdir`，大小写不敏感字母序、目录加 `/`、含 dotfile，上限 500 条 / 50KB；`LsOperations`（`exists`/`stat`/`readdir`）可替换后端。
 
 ## Shared Truncation（`truncate.ts`）
 
-所有工具的输出限制都来自同一工具：`DEFAULT_MAX_LINES = 2000`、`DEFAULT_MAX_BYTES = 50KB`、`GREP_MAX_LINE_LENGTH = 500`。提供四个函数：
-
-- `truncateHead`：从头留（read / grep / find / ls 用），绝不断在行中间；首行超字节上限时返回空 + 标记。
-- `truncateTail`：从尾留（bash 错误/末段用）。
-- `truncateLine`：单行截到 N 字符（grep 长行）。
-- `truncateMiddle`：Codex 式"头 + 尾 + `…N chars truncated…` 中间标记"，只在字符边界切（bash 结构化输出兜底）。
-
-`formatSize` 把字节渲染成 `B`/`KB`/`MB`，用在各类"已达 X 限制"提示里。
-
-## Concurrency Guard（`withFileMutationQueue`）
-
-`file-mutation-queue.ts` 解决"多个工具（或 codemode 脚本）并发改同一文件"的读-改-写竞态：
+所有工具的输出上限来自同一处：两个独立上限**先到为准**，绝不按 token 计。
 
 ```ts
-const fileMutationQueues = new Map<string, Promise<void>>();  // key = realpath
-export async function withFileMutationQueue(filePath, fn) {
-  // 按 realpath 串起一条 promise 链：同一文件排队，不同文件并行
+export const DEFAULT_MAX_LINES = 2000;
+export const DEFAULT_MAX_BYTES = 50 * 1024; // 50KB
+export const GREP_MAX_LINE_LENGTH = 500; // Max chars per grep match line
+
+export interface TruncationResult {
+	/** The truncated content */
+	content: string;
+	/** Whether truncation occurred */
+	truncated: boolean;
+	/** Which limit was hit: "lines", "bytes", or null if not truncated */
+	truncatedBy: "lines" | "bytes" | null;
+	/** Total number of lines in the original content */
+	totalLines: number;
+	/** Total number of bytes in the original content */
+	totalBytes: number;
+	/** Number of complete lines in the truncated output */
+	outputLines: number;
+	/** Number of bytes in the truncated output */
+	outputBytes: number;
+	/** Whether the last line was partially truncated (only for tail truncation edge case) */
+	lastLinePartial: boolean;
+	/** Whether the first line exceeded the byte limit (for head truncation) */
+	firstLineExceedsLimit: boolean;
+	/** The max lines limit that was applied */
+	maxLines: number;
+	/** The max bytes limit that was applied */
+	maxBytes: number;
 }
 ```
 
-机制：每个绝对路径（经 `realpath`，缺失则解析路径）一条 promise 链，同一文件的变更严格串行，不同文件仍并行；`fn` 跑完在 `finally` 里释放并清理空队列。这是 `read`（不改）/ `edit` / `write` 都包的一层，保证 Pi 与沙箱脚本不会互相踩到对方的半写完状态。
+四个能力：`truncateHead`（从头留，read/grep/find/ls 用；首行超字节上限时返回空并置 `firstLineExceedsLimit`）、`truncateTail`（从尾留，bash 用；单行超限时才可能留半行）、`truncateLine`（grep 长行截到 N 字符，按 UTF-16 code unit 且不切代理对）、`formatSize`（字节渲染成 `B`/`KB`/`MB`）。v1.5.2 已**没有** `truncateMiddle`——旧的「头+尾+中间标记」实现不在 `truncate.ts` 的导出里。`grep`/`find`/`ls` 因已有匹配数/条目数上限，调用 `truncateHead` 时把 `maxLines` 设为 `Number.MAX_SAFE_INTEGER`，实际只受字节上限约束。
+
+## Tool Execution: Parallel by Default
+
+一个 assistant 消息里的多个 tool call 默认**并行**执行：`Agent` 的 `toolExecution` 默认 `parallel`，`executeToolCalls` 据此分流；并行分支把所有调用映射成 promise 后 `Promise.all`，**没有并发度上限**（无信号量/限流）。
+
+```ts
+const toolCalls = assistantMessage.content.filter((c) => c.type === "toolCall");
+const hasSequentialToolCall = toolCalls.some(
+	(tc) => currentContext.tools?.find((t) => t.name === tc.name)?.executionMode === "sequential",
+);
+if (config.toolExecution === "sequential" || hasSequentialToolCall) {
+	return executeToolCallsSequential(currentContext, assistantMessage, toolCalls, config, signal, emit);
+}
+return executeToolCallsParallel(currentContext, assistantMessage, toolCalls, config, signal, emit);
+```
+
+```ts
+const orderedFinalizedCalls = await Promise.all(
+	finalizedCalls.map((entry) => (typeof entry === "function" ? entry() : Promise.resolve(entry))),
+);
+const messages: ToolResultMessage[] = [];
+for (const finalized of orderedFinalizedCalls) {
+	const toolResultMessage = createToolResultMessage(finalized);
+	await emitToolResultMessage(toolResultMessage, emit);
+	messages.push(toolResultMessage);
+}
+```
+
+结果是：执行可以乱序完成，但 `tool_execution_start` 与 `tool_result` 的持久化顺序按原始调用顺序固定。任一工具把 `executionMode` 声明为 `"sequential"`，整批退回串行（wrapToolDefinition 会透传该字段）；内置八工具都没设，所以默认全是并行。
+
+## Truncated Responses Fail All Tool Calls
+
+模型输出被 token 上限截断时，`stopReason === "length"`。此时流式工具调用参数经 best-effort JSON 抢救可能「解析合法但内容残缺」，**整批调用一律判失败、绝不执行**：
+
+```ts
+const toolCalls = message.content.filter((c) => c.type === "toolCall");
+
+const toolResults: ToolResultMessage[] = [];
+hasMoreToolCalls = false;
+if (toolCalls.length > 0) {
+	// A "length" stop means the output was cut off by the token limit, so
+	// every tool call in the message may carry truncated arguments. Fail
+	// them all instead of executing potentially borked calls.
+	const executedToolBatch =
+		message.stopReason === "length"
+			? await failToolCallsFromTruncatedMessage(toolCalls, emit)
+			: await executeToolCalls(currentContext, message, config, signal, emit);
+```
+
+每个调用收到统一的 error result，要模型用完整参数重发：
+
+```ts
+const finalized: FinalizedToolCallOutcome = {
+	toolCall,
+	result: createErrorToolResult(
+		`Tool call "${toolCall.name}" was not executed: the response hit the output token limit, so its arguments may be truncated. Re-issue the tool call with complete arguments.`,
+	),
+	isError: true,
+};
+await emitToolExecutionEnd(finalized, emit);
+const toolResultMessage = createToolResultMessage(finalized);
+```
+
+注意这与上一节的「输出裁剪」是两回事：裁剪针对**工具返回给模型的内容**（行+字节），这里针对**模型生成的 tool call 参数被截断**。
+
+## Concurrency Guard（`withFileMutationQueue`）
+
+并行执行下，多个工具或 codemode 脚本可能同时改同一文件。`withFileMutationQueue` 用 **realpath 作 key**（缺失则退回 `resolve` 后的路径）把同一文件的变更串成一条 promise 链，不同文件仍并行：
+
+```ts
+async function getMutationQueueKey(filePath: string): Promise<string> {
+	const resolvedPath = resolve(filePath);
+	try {
+		return await realpath(resolvedPath);
+	} catch (error) {
+		if (isMissingPathError(error)) {
+			return resolvedPath;
+		}
+		throw error;
+	}
+}
+```
+
+```ts
+export async function withFileMutationQueue<T>(filePath: string, fn: () => Promise<T>): Promise<T> {
+	const registration = registrationQueue.then(async () => {
+		const key = await getMutationQueueKey(filePath);
+		const currentQueue = fileMutationQueues.get(key) ?? Promise.resolve();
+
+		let releaseNext!: () => void;
+		const nextQueue = new Promise<void>((resolveQueue) => {
+			releaseNext = resolveQueue;
+		});
+		const chainedQueue = currentQueue.then(() => nextQueue);
+		fileMutationQueues.set(key, chainedQueue);
+
+		return { key, currentQueue, chainedQueue, releaseNext };
+	});
+	registrationQueue = registration.then(
+		() => undefined,
+		() => undefined,
+	);
+
+	const { key, currentQueue, chainedQueue, releaseNext } = await registration;
+	await currentQueue;
+	try {
+		return await fn();
+	} finally {
+		releaseNext();
+		if (fileMutationQueues.get(key) === chainedQueue) {
+			fileMutationQueues.delete(key);
+		}
+	}
+}
+```
+
+`registrationQueue` 保证「取链尾、挂新链尾」这一步本身原子化；`edit`/`write` 把整个读-改-写包在 `fn` 里，所以同一文件的写入严格串行、不会读到半写完状态。
 
 ```sequence
 Title: withFileMutationQueue 对同一文件的串行化
 
 participant A as edit(file X)
 participant B as edit(file X) 并发
-participant Q as fileMutationQueues[X]
+participant Q as fileMutationQueues[realpath(X)]
 participant F as fs 写盘
 
 A->>Q: 取当前链尾，挂上自己的 next
@@ -137,24 +372,38 @@ A->>F: 读-改-写 file X
 A-->>Q: finally 释放
 B->>F: A 释放后才跑，读-改-写 file X
 B-->>Q: finally 释放，清理空队列
-Note over A,B: 不同文件（realpath 不同）则各自并行，不互锁
+Note over A,B: realpath 不同（不同文件）则各自并行，不互锁
 ```
 
-## Exposure and Selection
+## Pluggable Operations and Selection
 
-默认四件套以 `direct` 暴露态注册（声明给模型且可被调）；只读集在只读模式 / `--tools` 收窄时出现。工具集可由 `--tools` / `--exclude-tools` / `defaultTools` 选择，暴露态五态（`direct`/`model-only`/`codemode`/`deferred`/`hidden`）与编排型工具的 `prepareLoadout` 见 [Extensions](/docs/CS/AI/LLM/Agent/Product/Pi/Extensions.md)；codemode 脚本经 `tools.<id>()` 调到的就是这里定义的工具（见 [CodeMode](/docs/CS/AI/LLM/Agent/Product/Pi/CodeMode.md)）。一个批次内多个工具并行执行、事件按固定顺序持久化，见 [Architecture](/docs/CS/AI/LLM/Agent/Product/Pi/Architecture.md)。
+八个工具各自定义 `operations` 接口，默认实现是本地 fs / `spawn` / `rg` / `fd`；传 `options.operations` 即可换掉后端。这正是 Pi 远程执行的接缝：[Env](/docs/CS/AI/LLM/Agent/Product/Pi/Env.md) 的 SSH daemon（`RemoteExecutionEnv`）、Gondolin 扩展的 Linux 微虚拟机，都靠替换 `operations` 把文件读写与命令执行路由出去，而工具声明、钩子不用改。例外是 `grep`——如上所述它始终跑本地 rg，远程搜索得覆盖 `execute()`。
+
+| 工具 | `operations` 接口 | 默认实现 |
+| :--- | :--- | :--- |
+| `read` | `readFile` / `access` / `detectImageMimeType?` / `createReadStream?` | fs 读写 + `R_OK`，可选流式读 |
+| `edit` | `readFile` / `writeFile` / `access` | fs 读写 + `R_OK\|W_OK` |
+| `write` | `writeFile` / `mkdir` | `fs.writeFile` / `mkdir -p` |
+| `bash` | `exec` | `spawn` 本地 shell（PowerShell 平行一套） |
+| `grep` | `isDirectory`（`readFile` 已废弃） | 本地 ripgrep，搜索不可替换 |
+| `find` | `exists` / `glob` | fs + fd |
+| `ls` | `exists` / `stat` / `readdir` | `fs.readdir` |
+
+`constrainedSampling: { type: "json_schema", strict: "prefer" }` 只出现在四个默认工具（`read`/`bash`/`edit`/`write`）的定义上，`grep`/`find`/`ls` 不带；wrapToolDefinition 只是把它原样透传给 AgentTool。工具集可由 `--tools` / `--exclude-tools` / `defaultTools` 选择；事件与持久化顺序见 [Events](/docs/CS/AI/LLM/Agent/Product/Pi/Events.md)。
 
 ## Links
 
 - [Pi 枢纽](/docs/CS/AI/LLM/Agent/Product/Pi/Pi.md)
-- [Architecture：内部架构](/docs/CS/AI/LLM/Agent/Product/Pi/Architecture.md) — 工具批次与事件持久化顺序、exposure 五态
-- [Extensions：扩展体系](/docs/CS/AI/LLM/Agent/Product/Pi/Extensions.md) — 自定义工具契约、`--tools` 选择、exposure
-- [CodeMode：codemode 实现机制](/docs/CS/AI/LLM/Agent/Product/Pi/CodeMode.md) — 沙箱脚本如何 `tools.<id>()` 调本页工具
-- [Security：信任与隔离](/docs/CS/AI/LLM/Agent/Product/Pi/Security.md) — `operations` 接缝如何被 Docker/OpenShell/Gondolin 利用
-- [Env：远程执行环境](/docs/CS/AI/LLM/Agent/Product/Pi/Env.md) — `operations` 的远端后端：SSH daemon 部署与 `RemoteExecutionEnv` RPC 客户端
+- [Architecture](/docs/CS/AI/LLM/Agent/Product/Pi/Pi.md?id=architecture)
+- [Session：会话树](/docs/CS/AI/LLM/Agent/Product/Pi/Session.md)
+- [Interaction：交互侧](/docs/CS/AI/LLM/Agent/Product/Pi/Interaction.md)
+- [Durable：持久化 Agent 框架](/docs/CS/AI/LLM/Agent/Product/Pi/Durable.md)
+- [Schema：无 eval 参数校验](/docs/CS/AI/LLM/Agent/Product/Pi/Schema.md)
 
 ## References
 
-- [Pi coding-agent tools 源码](https://github.com/earendil-works/pi/tree/main/packages/coding-agent/src/core/tools)
-- [Pi Extensions（工具契约与 exposure）](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md)
-- [Pi Shell Aliases（bash 默认非交互、commandPrefix）](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/shell-aliases.md)
+- [Pi coding-agent tools 源码（v1.5.2）](https://github.com/earendil-works/pi/tree/v1.5.2/packages/coding-agent/src/core/tools)
+- [pi-agent-core agent-loop（v1.5.2）](https://github.com/earendil-works/pi/blob/v1.5.2/packages/agent/src/agent-loop.ts)
+- [AgentSession 工具装配（v1.5.2）](https://github.com/earendil-works/pi/blob/v1.5.2/packages/coding-agent/src/core/agent-session.ts)
+- [Pi Extensions（v1.5.2）](https://github.com/earendil-works/pi/blob/v1.5.2/packages/coding-agent/docs/extensions.md)
+- [Pi Shell Aliases（v1.5.2）](https://github.com/earendil-works/pi/blob/v1.5.2/packages/coding-agent/docs/shell-aliases.md)

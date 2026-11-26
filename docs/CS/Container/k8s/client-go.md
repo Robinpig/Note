@@ -34,7 +34,7 @@ client-go 的配置来自 `rest.Config`——但用户通常不直接构造它�
 |---|---|---|
 | `clientcmd.BuildConfigFromFlags(masterUrl, kubeconfigPath)` | 大多数 kubectl 风格 CLI | `tools/clientcmd/client_config.go` |
 | `clientcmd.NewDefaultClientConfigLoadingRules().Load()` | 多配置文件优先级合并 | `tools/clientcmd/loader.go` |
-| `rest.InClusterConfig()` | Pod 内运行的应用 | `rest/config.go:275` |
+| `rest.InClusterConfig()` | Pod 内运行的应用 | `rest/config.go` |
 
 ### Precedence 链
 
@@ -79,7 +79,7 @@ rest.Config.TransportConfig() → transport.Config → transport.New(cfg) → HT
 
 ### 底层 RoundTripper：tlsCache
 
-`transport.New(config)`（`transport/transport.go:38`）第一步决定**基础 Transport**：
+`transport.New(config)`（`transport/transport.go`）第一步决定**基础 Transport**：
 
 ```go
 if config.Transport != nil {
@@ -92,7 +92,7 @@ return HTTPWrappersForConfig(config, rt)     // 再套一层认证/UA/Impersonat
 
 `tlsCache`（`transport/cache.go`）是一个包级单例 `var tlsCache = newTlsCache()`，它缓存的是 **TLS 配置完全相同** 的 `http.Transport`，key 由 CA cert hash + client cert/key hash + serverName + insecure 拼接而成。缓存命中直接返回，不命中才新建 `http.Transport` + `tls.Config`。
 
-TLS 配置的关键默认值（`transport/transport.go:80`）：
+TLS 配置的关键默认值（`transport/transport.go`）：
 
 | 字段 | 值 |
 |---|---|
@@ -103,7 +103,7 @@ TLS 配置的关键默认值（`transport/transport.go:80`）：
 
 ### HTTPWrappersForConfig：认证/UA/Impersonate 层
 
-拿到底层 Transport 后，`HTTPWrappersForConfig`（`transport/round_trippers.go:41`）按**自内向外**的顺序包装——实际请求进来时先遇到的是最后一层 Impersonate，然后逐层下钻到底层 TLS Transport：
+拿到底层 Transport 后，`HTTPWrappersForConfig`（`transport/round_trippers.go`）按**自内向外**的顺序包装——实际请求进来时先遇到的是最后一层 Impersonate，然后逐层下钻到底层 TLS Transport：
 
 ```
 ① config.WrapTransport(rt)          // 用户自定义 wrapper（最内层）
@@ -152,7 +152,6 @@ Go 标准库 `http.Transport` 会从 `http.DefaultTransport` 复制默认值，c
 拿到 `rest.Config` 后，`RESTClientFor(config)`（`rest/config.go`）组装最终产物：
 
 ```go
-// rest/config.go:218
 func RESTClientFor(config *Config) (*RESTClient, error) {
     baseURL, versionedAPIPath := defaultServerUrlFor(config)
     transport := TransportFor(config)
@@ -293,10 +292,10 @@ Watch 是 client-go 到 apiserver 的长连接核心。它的链路从 `Request.
 
 ### Request.Watch
 
-`rest/request.go:Watch(ctx)` 和 `Do()` 的关键差异：**Do 会 retry 写操作，Watch 不做 QPS 限流**（因为 watch 不是高频操作）。它直接发 `GET ?watch=true` 请求，收到 200 OK 后进入 `newStreamWatcher`：
+`rest/request.go` 的 `Watch(ctx)` 和 `Do()` 的关键差异：**Do 会 retry 写操作，Watch 不做 QPS 限流**（因为 watch 不是高频操作）。它直接发 `GET ?watch=true` 请求，收到 200 OK 后进入 `newStreamWatcher`：
 
 ```go
-// rest/request.go:760
+// rest/request.go
 func (r *Request) Watch(ctx context.Context) (watch.Interface, error) {
     // 直接 client.Do，不走 rateLimiter
     resp, err := r.c.Client.Do(req)
@@ -306,7 +305,7 @@ func (r *Request) Watch(ctx context.Context) (watch.Interface, error) {
     // retryable 错误（EOF, timeout）用 retryFn 重发
 }
 
-// rest/request.go:833
+// rest/request.go
 func (r *Request) newStreamWatcher(ctx context.Context, resp *http.Response) (watch.Interface, error) {
     // 1. Negotiator.StreamDecoder → framer.NewFrameReader(resp.Body)
     //    framer 负责把 HTTP 响应体按帧切分（JSON 是按行，protobuf 是 varint 长度前缀）
@@ -328,7 +327,7 @@ func (r *Request) newStreamWatcher(ctx context.Context, resp *http.Response) (wa
 Reflector（`tools/cache/reflector.go`）是 Informer 的数据入口，它在一个后台 goroutine 里跑 `RunWithContext`：
 
 ```go
-// reflector.go:423
+// reflector.go
 func (r *Reflector) RunWithContext(ctx context.Context) {
     r.delayHandler.Until(ctx, true, true, func(ctx) (bool, error) {
         if err := r.ListAndWatchWithContext(ctx); err != nil {
@@ -344,7 +343,7 @@ func (r *Reflector) RunWithContext(ctx context.Context) {
 ### ListAndWatch 主入口
 
 ```go
-// reflector.go:470
+// reflector.go
 func (r *Reflector) ListAndWatchWithContext(ctx context.Context) error {
     fallbackToList := !r.useWatchList
     
@@ -370,7 +369,7 @@ func (r *Reflector) ListAndWatchWithContext(ctx context.Context) error {
 
 ### WatchList 路径（流式 List）
 
-`watchList`（`reflector.go:804`）发的是一条特殊 Watch 请求：
+`watchList`（`reflector.go`）发的是一条特殊 Watch 请求：
 
 ```go
 options := metav1.ListOptions{
@@ -401,7 +400,7 @@ return w, nil
 
 ### 传统 list() 路径
 
-`list()`（`reflector.go:674`）的关键设计：
+`list()`（`reflector.go`）的关键设计：
 
 1. **分页**：`pager.SimplePageFunc`，默认每次 500 条，但在 `ResourceVersion != ""` 时把 `PageSize = 0`——这是为了**强制从 watch cache 走**（带 `resourceVersion` 的 list 在 apiserver 侧会优先用 watch cache，不带 Limit 时一次性返回全量）。
 2. **资源版本过期处理**：如果 list 时带的 resourceVersion 被 etcd 截断（Expired / TooLarge），自动 fallback 到 RV="" 重走一次。
@@ -409,10 +408,10 @@ return w, nil
 
 ### handleWatch 事件消费循环
 
-拿到 Watch 连接后，`watch()` 方法（`reflector.go:561`）进入**增量事件循环**：
+拿到 Watch 连接后，`watch()` 方法（`reflector.go`）进入**增量事件循环**：
 
 ```go
-// reflector.go:620 → handleWatch
+// reflector.go
 for {
     w, err := r.listerWatcher.WatchWithContext(ctx, options)   // WatchList 路径复用已有 w；传统路径新建
     err = handleWatch(ctx, start, w, r.store, ...)             // 消费事件直到出错
@@ -425,7 +424,7 @@ for {
 }
 ```
 
-`handleWatch` 内部是 `handleAnyWatch`（`reflector.go:972`）——就是一个简单的 `for-select` 消费 `w.ResultChan()`：
+`handleWatch` 内部是 `handleAnyWatch`（`reflector.go`）——就是一个简单的 `for-select` 消费 `w.ResultChan()`：
 
 ```go
 loop:
@@ -453,7 +452,7 @@ Watch 的超时处理：Reflector 每次建 Watch 时给 `TimeoutSeconds` 一个
 `watchWithResync` 在后台起一个 goroutine 跑 `startResync`：
 
 ```go
-// reflector.go:514
+// reflector.go
 func (r *Reflector) startResync(ctx, errc) {
     for {
         <-r.clock.After(r.resyncPeriod)   // 到期
@@ -476,15 +475,31 @@ Informer 是一个持久运行的 goroutine，职责是**从队列取对象 → 
 从 Kubernetes v1.36 起，**默认队列已经换成 RealFIFO**（`InOrderInformers` 已 GA 且 LockToDefault）。选择逻辑在 `tools/cache/controller.go` 的 `newQueueFIFO` 里：
 
 ```go
-if clientgofeaturegate.FeatureGates().Enabled(clientgofeaturegate.InOrderInformers) {
-    options := RealFIFOOptions{...}
-    if clientgofeaturegate.FeatureGates().Enabled(clientgofeaturegate.AtomicFIFO) {
-        options.AtomicEvents = true
-        options.UnlockWhileProcessing = ...
-    }
-    f := NewRealFIFOWithOptions(options)
-} else {
-    f := NewDeltaFIFOWithOptions(...)   // 1.37 中此分支已不可达
+func newQueueFIFO(logger klog.Logger, objectType any, clientState Store, transform TransformFunc, identifier InformerNameAndResource, metricsProvider InformerMetricsProvider) (klog.Logger, Queue) {
+	if clientgofeaturegate.FeatureGates().Enabled(clientgofeaturegate.InOrderInformers) {
+		options := RealFIFOOptions{
+			Logger:          &logger,
+			Name:            fmt.Sprintf("RealFIFO %T", objectType),
+			KeyFunction:     MetaNamespaceKeyFunc,
+			Transformer:     transform,
+			Identifier:      identifier,
+			MetricsProvider: metricsProvider,
+		}
+		// If atomic events are enabled, unset clientState in the case of atomic events as we cannot pass a
+		// store to an atomic fifo.
+		if clientgofeaturegate.FeatureGates().Enabled(clientgofeaturegate.AtomicFIFO) {
+			options.AtomicEvents = true
+			options.UnlockWhileProcessing = clientgofeaturegate.FeatureGates().Enabled(clientgofeaturegate.UnlockWhileProcessingFIFO)
+			options.EmitDeltaTypeBookmark = true
+		} else {
+			options.KnownObjects = clientState
+		}
+		f := NewRealFIFOWithOptions(options)
+		return f.logger, f
+	} else {
+		f := NewDeltaFIFOWithOptions(DeltaFIFOOptions{...})   // InOrderInformers 锁定 true 后此分支不可达
+		return f.logger, f
+	}
 }
 ```
 
@@ -509,28 +524,52 @@ Informer 负责把数据搬到缓存并触发回调，**真正的业务解耦发
 > [!TIP]
 > WorkQueue 里放的**只有 `namespace/name` 这样一个字符串，没有对象**。worker 取出 key 之后必须重新从 lister 读最新状态。队列里没有对象，这是"水平触发"能成立的前提。
 
-核心是 `dirty` 与 `processing` 两个集合：
+核心是 `dirty` 与 `processing` 两个集合（v1.37 已泛型化为 `Typed[T]`）：
 
 ```go
-// queue.go:Add
-func (q *Type) Add(item interface{}) {
-    q.cond.L.Lock()
-    defer q.cond.L.Unlock()
-    if q.shuttingDown { return }
-    if q.dirty.Has(item) { return }    // 已在待处理集合 → 幂等丢弃
-    q.dirty.Insert(item)
-    if q.processing.Has(item) { return } // 正在处理 → 只标脏，不入队
-    q.queue.Push(item)
-    q.cond.Signal()
-}
+// util/workqueue/queue.go
+func (q *Typed[T]) Add(item T) {
+	q.cond.L.Lock()
+	defer q.cond.L.Unlock()
+	if q.shuttingDown {
+		return
+	}
+	if q.dirty.Has(item) {
+		// the same item is added again before it is processed, call the Touch
+		// function if the queue cares about it (for e.g, reset its priority)
+		if !q.processing.Has(item) {
+			q.queue.Touch(item)
+		}
+		return
+	}
 
-// queue.go:Done
-func (q *Type) Done(item interface{}) {
-    q.processing.Delete(item)
-    if q.dirty.Has(item) {                // 处理期间又被标脏 → 重新入队
-        q.queue.Push(item)
-        q.cond.Signal()
-    }
+	q.metrics.add(item)
+
+	q.dirty.Insert(item)
+	if q.processing.Has(item) {
+		return
+	}
+
+	q.queue.Push(item)
+	q.cond.Signal()
+}
+```
+
+```go
+// util/workqueue/queue.go
+func (q *Typed[T]) Done(item T) {
+	q.cond.L.Lock()
+	defer q.cond.L.Unlock()
+
+	q.metrics.done(item)
+
+	q.processing.Delete(item)
+	if q.dirty.Has(item) {
+		q.queue.Push(item)
+		q.cond.Signal()
+	} else if q.processing.Len() == 0 {
+		q.cond.Signal()
+	}
 }
 ```
 

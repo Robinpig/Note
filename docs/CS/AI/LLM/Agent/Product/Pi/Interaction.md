@@ -1,33 +1,88 @@
 ## Introduction
 
-Pi 把能力藏在**基础操作**里：`@` 引用文件、`!` 跑命令、Enter/Alt+Enter 两种发送语义、一整套可自定义的快捷键。本页覆盖这些日常交互的完整机制——输入、Shell 集成、快捷键体系、模型与思考级别、消息队列与 TUI 形态。
+Pi 把能力藏在**基础操作**里：`@` 引用文件、`!` 跑命令、Enter/Alt+Enter 两种发送语义、一整套可自定义的快捷键。本页覆盖这些日常交互的完整机制——输入、Shell 集成、快捷键体系、模型与思考级别、消息队列与 TUI 形态。内容按 v1.5.2（commit `b4afdddf`）源码核验。
 
-会话树操作（`/tree` / `/fork` / `/clone`）在 [Session](/docs/CS/AI/LLM/Agent/Product/Pi/Session.md)；上下文文件在 [Context](/docs/CS/AI/LLM/Agent/Product/Pi/Context.md)。
+Enter/Alt+Enter 对应的 steer/follow-up 队列语义见 [AgentLoop](/docs/CS/AI/LLM/Agent/Product/Pi/AgentLoop.md)；会话树操作（`/tree` / `/fork` / `/clone`）在 [Session](/docs/CS/AI/LLM/Agent/Product/Pi/Session.md)；上下文文件在 [Context](/docs/CS/AI/LLM/Agent/Product/Pi/Context.md)。
 
 ## Enter a Prompt
 
 - `Enter` 提交；`Shift+Enter`（或 `ctrl+j`）换行；`ctrl+g` 把当前编辑内容丢进外部编辑器（`externalEditor` 设置 → `$VISUAL` → `$EDITOR` → Windows 记事本 / 其他 `nano`）写长提示。
 - `@` 触发文件模糊搜索，`Tab` 补全路径；一条消息可引用多个文件，启动参数也支持 `pi @README.md "总结一下"` 与管道 stdin（内容会前置到第一条提示）。
-- 粘贴或拖拽图片进兼容终端即入上下文（macOS `ctrl+v`，Windows/WSL `alt+v`）。
+- 粘贴或拖拽图片进兼容终端即入上下文（macOS `ctrl+v`，Windows/WSL `alt+v`；快捷键在 `keybindings.json` 里可改，Windows 默认 `["alt+v", "ctrl+v"]`）。
 
 ## Steer, Follow Up, Abort
 
-Pi 工作时还能继续输入，两种发送语义对应两种排队时机：
+Pi 工作时还能继续输入，两种发送语义对应两种排队时机。二者落到 `AgentSession.prompt()` 的同一参数 `streamingBehavior` 上，类型定义是 `"steer" | "followUp"`（`src/core/agent-session.ts`）：
 
-| 操作 | 时机 |
-| :--- | :--- |
-| `Enter`（steering） | 等当前响应及其工具调用跑完后，引导下一轮生成 |
-| `Alt+Enter`（follow-up） | 等 Pi 把当前**任务**全部做完才投入 |
-| `Alt+Up` | 把排队中的消息取回编辑器 |
-| `Escape` | 中止当前运行，排队消息同时归还 |
+```typescript
+export interface PromptOptions {
+	/** Whether to dispatch extension commands and expand skill commands and prompt templates (default: true) */
+	expandPromptTemplates?: boolean;
+	/** Image attachments */
+	images?: ImageContent[];
+	/** When streaming, how to queue the message: "steer" (interrupt) or "followUp" (wait). Required if streaming. */
+	streamingBehavior?: "steer" | "followUp";
+```
+
+| 操作 | 键位 | `streamingBehavior` | 时机 |
+| :--- | :--- | :--- | :--- |
+| Steering | `Enter` | `"steer"` | 插到**当前回合之后**，引导下一步生成（不必等整任务做完） |
+| Follow-up | `Alt+Enter`（Windows `ctrl+q`） | `"followUp"` | 等 Pi 把当前**任务**全部做完才投入 |
+| `alt+up`（Windows `alt+q`） | — | — | 把排队中的消息取回编辑器 |
+| `Escape` | — | — | 中止当前运行，排队消息同时归还 |
+
+键位差异来自 `keybindings.ts` 的平台分支——`app.message.followUp` 在 Windows 上默认 `ctrl+q`：
+
+```typescript
+	"app.message.followUp": {
+		defaultKeys: windowsKeybindings ? "ctrl+q" : "alt+enter",
+		description: "Queue follow-up message",
+	},
+	"app.message.dequeue": {
+		defaultKeys: windowsKeybindings ? "alt+q" : "alt+up",
+		description: "Restore queued messages",
+	},
+```
+
+按 Enter 时交互模式直接以 steer 投递（`src/modes/interactive/interactive-mode.ts`）：
+
+```typescript
+			// If streaming, use prompt() with steer behavior
+			// This handles extension commands (execute immediately), prompt template expansion, and queueing
+			if (this.session.isStreaming) {
+				this.editor.addToHistory?.(text);
+				this.editor.setText("");
+				await this.session.prompt(text, { streamingBehavior: "steer" });
+```
 
 「忙」的判定从 run 启动就开始（含压缩检查与 `before_agent_start`），这期间发出的消息会进入即将开始的 run，而不是被当成下一轮。
 
 ## Shell Integration
 
-行首加 `!` 执行命令并**把输出送进对话**，`!!` 则静默执行（不发给模型）。
+行首加 `!` 执行命令并**把输出送进对话**，`!!` 则静默执行——`excludeFromContext` 为真，输出不发给模型（`src/modes/interactive/interactive-mode.ts`）：
 
-但每条命令都是**独立的非交互 shell 进程**（`bash -c`）——旧版社区文章里「导出的环境变量、切换的目录会保留」的说法已不成立：`!cd backend` 之后的下一条命令并不会停在 `backend`。要跨命令复现状态，用设置项在**每条命令前**垫 setup：
+```typescript
+			// Handle bash command (! for normal, !! for excluded from context)
+			if (text.startsWith("!")) {
+				const isExcluded = text.startsWith("!!");
+				const command = isExcluded ? text.slice(2).trim() : text.slice(1).trim();
+				if (command) {
+```
+
+但每条命令都是**独立的非交互 shell 进程**：`createLocalShellOperations()` 每次执行都 `spawn` 一个新子进程，没有跨命令的 shell 状态（`src/core/tools/bash.ts`）：
+
+```typescript
+export function createLocalShellOperations(shellName: string, resolveShellConfig: () => ShellConfig): BashOperations {
+	return {
+		exec: async (command, cwd, { onData, signal, timeout, env }) => {
+			const timeoutMs = resolveTimeoutMs(timeout);
+			if (signal?.aborted) {
+				throw new Error("aborted");
+			}
+			const shellConfig = resolveShellConfig();
+```
+
+旧版社区文章里「导出的环境变量、切换的目录会保留」的说法已不成立：`!cd backend` 之后的下一条命令并不会停在 `backend`。要跨命令复现状态，用设置项在**每条命令前**垫 setup：
 
 | 设置 | 作用 |
 | :--- | :--- |
@@ -67,12 +122,12 @@ Bash 解析顺序：`/bin/bash` → `PATH` 上的 `bash` → 都没有才退到 
 | `ctrl+t` | 显示/隐藏 thinking 块 |
 | `ctrl+x` | 复制（`/tree` 内为选中消息；否则最后一条 assistant 消息） |
 | `ctrl+g` | 外部编辑器 |
-| `alt+enter` / `alt+up` | 排队 follow-up / 取回 |
+| `alt+enter` / `alt+up`（Windows `ctrl+q` / `alt+q`） | 排队 follow-up / 取回 |
 | `escape` | 中止 |
 | `ctrl+c` | 第一次清空编辑器，第二次退出 |
 | `ctrl+z` | 挂到后台（Windows 无默认，终端不支持 Unix 作业控制） |
 
-编辑器内还有一套 emacs 风格移动（`ctrl+a`/`ctrl+e`/`ctrl+w`/`ctrl+u`/`ctrl+k`/`ctrl+y`…）；全屏模式下 `pageUp`/`pageDown`/`ctrl+shift+up/down`（跳到上/下一条标记消息）与 `ctrl+shift+f`（转录搜索）优先于编辑器动作。Windows Terminal 占用部分 Alt 组合，替代键见官方 Terminal Setup（如 `alt+v`→`ctrl+q` 之类映射以文档为准）。
+编辑器内还有一套 emacs 风格移动（`ctrl+a`/`ctrl+e`/`ctrl+w`/`ctrl+u`/`ctrl+k`/`ctrl+y`…）；全屏模式下 `pageUp`/`pageDown`/`ctrl+shift+up/down`（跳到上/下一条标记消息）与 `ctrl+shift+f`（转录搜索）优先于编辑器动作。Windows Terminal 占用部分 Alt 组合，替代键见官方 Terminal Setup。
 
 ## Models and Thinking
 
@@ -85,7 +140,13 @@ pi --models "*-sonnet*,o3-mini"     # 启动作用域：glob/精确/模糊混排
 pi --list-models claude             # 列出可用模型后退出
 ```
 
-思考级别共七档：`off` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max`，`--thinking` 会覆盖 `--model` 后缀并被模型能力钳制。凭证解析顺序：运行时 `--api-key` > `auth.json` 已存凭证 > `models.json` 的 `apiKey` > provider 环境变量或云厂商 ambient 凭证。
+思考级别共七档，`shift+tab` 循环；`ThinkingLevel` 类型定义在 `packages/agent/src/types.ts`：
+
+```typescript
+export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+```
+
+`--thinking` 会覆盖 `--model` 后缀并被模型能力钳制（`clampThinkingLevel`：请求级别被模型不支持时，向低一档回退并记录真实生效值）。凭证解析顺序：运行时 `--api-key` > `auth.json` 已存凭证 > `models.json` 的 `apiKey` > provider 环境变量或云厂商 ambient 凭证。
 
 模型目录随包发布，可叠加 pi.dev 的新目录数据，缓存离线可用，`pi update --models` 强制刷新。除聊天模型，目录里还有**分类模型**（TypeSafe Jev、Cloudflare Clef/Clef Flash、OpenAI GPT-6 Luna 走 Decisions API——不对话，只对 JSON 状态做选择/是非/打分）与**图像模型**（OpenRouter 系列，`models.generateImages()`）。
 
@@ -96,13 +157,15 @@ pi --list-models claude             # 列出可用模型后退出
 ## Links
 
 - [Pi 枢纽](/docs/CS/AI/LLM/Agent/Product/Pi/Pi.md)
-- [Session：会话树](/docs/CS/AI/LLM/Agent/Product/Pi/Session.md)
-- [Context：上下文与压缩](/docs/CS/AI/LLM/Agent/Product/Pi/Context.md)
-- [Extensions：扩展体系](/docs/CS/AI/LLM/Agent/Product/Pi/Extensions.md) — 快捷键、slash 命令、CLI flag 都能由扩展注册
+- [Extensions：扩展体系](/docs/CS/AI/LLM/Agent/Product/Pi/Extensions.md)
+- [Providers：Provider 与模型目录](/docs/CS/AI/LLM/Agent/Product/Pi/Providers.md)
+- [Tools：工具系统](/docs/CS/AI/LLM/Agent/Product/Pi/Tools.md)
+- [TUI：终端渲染机制](/docs/CS/AI/LLM/Agent/Product/Pi/TUI.md)
 
 ## References
 
-- [Pi Usage](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/usage.md)
-- [Pi Keybindings](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/keybindings.md)
-- [Pi Shell Aliases](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/shell-aliases.md)
-- [Pi Models](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md)
+- [Pi Usage（v1.5.2）](https://github.com/earendil-works/pi/blob/v1.5.2/packages/coding-agent/docs/usage.md)
+- [Pi Keybindings（v1.5.2）](https://github.com/earendil-works/pi/blob/v1.5.2/packages/coding-agent/docs/keybindings.md)
+- [Pi Shell Aliases（v1.5.2）](https://github.com/earendil-works/pi/blob/v1.5.2/packages/coding-agent/docs/shell-aliases.md)
+- [Pi Models（v1.5.2）](https://github.com/earendil-works/pi/blob/v1.5.2/packages/coding-agent/docs/models.md)
+- [PromptOptions / streamingBehavior（v1.5.2）](https://github.com/earendil-works/pi/blob/v1.5.2/packages/coding-agent/src/core/agent-session.ts)

@@ -2,13 +2,29 @@
 
 **Mod** 是 Claude Code 插件的一种形态：hook 不写成 JSON 配置，而是写成**在 Claude Code 进程内运行的 JavaScript / TypeScript 函数**。v2.1.287 起官方称之为「Claude Mods: plugins may now modify deeper behavior」——它与 [Hooks](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Hooks.md) 的 JSON hooks 并存，是同一插件包里两条独立的 hook 通道。
 
-本文的事实基线不是文档，而是官方仓库里的**类型契约** [`mods/types/claude-code.d.ts`](https://github.com/anthropics/claude-code/blob/main/mods/types/claude-code.d.ts)（517KB / 13440 行，由 `/plugin-types` 命令生成，首行标注写入它的 Claude Code 版本）。它比文档和 CHANGELOG 都精确一个数量级——常量是**字面量**、事件名是**联合类型**、参数是**完整签名**。仓库 `mods/` 下另有五个可读的完整实现（`diff`、`sec-default`、`agents-md`、`telemetry`），本文的实现细节亦据其坐实。
+事实基线：npm `@anthropic-ai/claude-code` **2.1.326**，官方仓库 [`anthropics/claude-code`](https://github.com/anthropics/claude-code) 的本地快照。本文的事实依据不是文档，而是官方仓库里的**类型契约** [`mods/types/claude-code.d.ts`](https://github.com/anthropics/claude-code/blob/main/mods/types/claude-code.d.ts)（2.1.326 实测 824KB / 20680 行），它比文档和 CHANGELOG 都精确一个数量级——常量是**字面量**、事件名是**联合类型**、参数是**完整签名**。仓库 `mods/` 下另有五个可读的完整实现（`diff`、`sec-default`、`agents-md`、`telemetry`、`privacy`），实现细节亦据其坐实。
 
 本文只讲**接口面**；这些 mod 的**源码级实现机制**（给 `$` 添加 noun、跨 mod 契约、测试布局、宿主抽象、内置退场机制）见 [ModInternals](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/ModInternals.md)。
 
-⚠️ 一个必须提防的落差：契约由 **2.1.277** 生成，而客户端基线已到 **2.1.302**——**25 个小版本之间的新增接口不在契约里**（`$.telemetry` 就是现成例子）。读 mod 源码比读契约更能反映引擎实际提供了什么。
+⚠️ 两个必须提防的落差：其一，契约标注 **EARLY ACCESS——此表面可能在小版本间无预告变更**，且它是引擎**在加载 mod 时写出**的副本（写在 `.claude-plugin/types/claude-code/index.d.ts`、首行标注写入它的版本），更新后应重新写出而非手改；其二，也是更根本的，**声明合并加进来的 noun 永远不在契约文件里**——`$.telemetry` 在 `claude-code.d.ts` 里搜不到，它由 `telemetry` mod 的 `types/index.d.ts` 声明。所以读 mod 源码比只盯契约更能反映引擎实际提供了什么。
 
 ## The Module Contract
+
+契约把事件系统设计成一张关联联合（这是理解后文所有事件类型与结果类型怎么对上的钥匙）：
+
+```ts
+export type EventOf = CoreEventOf & NounEventOf;
+type CoreEventOf = EngineEventOf & ClassicEventOf & OpEventOf;
+export type EventName = keyof EventOf;
+export type Args<N extends EventName = EventName> = EventOf[N];
+export type ResultOf = EngineResultOf & ClassicResultOf & {
+    [N in OpEventName]: OpEventResult<N>;
+} & {
+    [N in NounEventName]: NounEventResult<N>;
+};
+```
+
+事件名空间由四块相交而成：`EngineEventOf`（引擎自身钩子点）、`ClassicEventOf`（`classic.*` 那 33 个）、`OpEventOf`（`$` 上每一次宿主调用，如 `fs.read`、`http.fetch`）、`NounEventOf`（插件声明的名词方法）。参数统一叫 `Args<N>`、结果统一叫 `ResultOf[N]`——这解释了为什么事件和它的输入/结果类型能一一对应。
 
 契约开篇即规定了运行环境，这是写 mod 前必须知道的前提：
 
@@ -46,11 +62,34 @@
 | `turn` | `abort` |
 | `plugin` | `register`（另有 `name` 与 `root` 两个只读字段） |
 
-三点值得单独记：
+四点值得单独记：
 
 - **`ui.resolve(e)` 按 surface 取元素**。四个渲染表面的元素集**并不相同**（见下节），所以取元素的代码必须按传入的 surface 解析，不能硬编码。
 - **`mcp.call(server, tool, args)` 让 mod 能反向调 MCP 工具**——mod 与 MCP 不是单向的，mod 可以当 client。
 - **`session.surfaces()` 与 `session.surface()` 分开**：一个会话可能同时跑在多个表面上（终端 + 桌面 + 移动），`surface()` 只给当前那个。
+- **每一个 `$` 方法都是可拦截的事件**。契约注释原文：「引擎的事件（`CoreEventOf`）」里包含 `OpEventOf`——`$.fs.write(...)` 本身是一次 dispatch，挂在 `fs.write` 上的别的 mod hook 看得见。mod 之间的调用因此构成一条可观测链（详见 Events 节）。
+
+`$` 上的调用结果统一是「值或拒绝」的标签联合，工具调用则是四态：
+
+```ts
+export type ToolCallResult<Name extends string = string> = {
+    deny: string;
+} | {
+    result: ToolResultOf<Name>;
+    context?: readonly string[];
+    ref?: number;
+    text?: string;
+    isReadOnly?: true;
+    isError?: undefined;
+} | {
+    isError: true;      // 工具抛错/被打断/回答了错误
+    result: unknown;
+    text?: string;
+    // ...
+};
+```
+
+`isReadOnly` 是**工具自报**的只读声明——契约注释明确它「不是无副作用的证明」（fetch、发消息、委派 agent 都会说自己是只读），mcp 工具的更是其 server 自报、未经证实。一个谨慎的 hook 在字段缺失时应按「写」处理。
 
 ## Render Surfaces And Their Elements
 
@@ -99,10 +138,13 @@ CHANGELOG 只说「10 秒」，契约给出三个配额。`HookFailure` 只有�
 `TIERS` 是五级只读元组，决定 hook 的执行顺序：
 
 ```ts
-const TIERS: readonly ["prepend", "user", "append", "builtin", "core"]
+const TIERS: readonly ["prepend", "user", "append", "builtin", "core"];
+export type TargetTier = Exclude<Tier, 'prepend'>;
 ```
 
-即：插到最前 → 用户级 → 追加 → 内置 → 核心。核心层的 hook 最后跑——**组织管控靠 `core` 层实现，所以用户 hook 总在管控之前被看到**，这与后面「managed settings 权力削减」那些修复是一致的。
+契约注释把顺序的意义写得很直白：**「earlier is outer is more authority」——越靠外权力越大**，同一事件的 hook 严格按此嵌套、别无第二种顺序。`prepend` / `append` 是组织管控层，`user` 是用户安装，`builtin` 随二进制，`core` 是引擎最内层。
+
+配套的 `next.to(e, tier)` 是**向内跳层**（`TargetTier` 排除了 `prepend`，没人能往外跳），`next.origin`（谁调的、什么 tier，由宿主盖章、插件写不到）、`next.trace`（链上每个 link 的判定）与 `next.called`（失败前是否下传过，只在 `.catch` 里有）共同构成了治理与审计的基础。2.1.326 起 `engine.create` 上的通配/namespace/取反 hook **只观察**，要增删 `$` noun 必须按名字 hook——见 [ModInternals](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/ModInternals.md)。
 
 ## Testing Surface
 
@@ -149,7 +191,8 @@ test('notes add up on every surface that takes input', async $ => {
 | `telemetry` | 275 文件 / 160KB | 自建遥测上报 |
 | `sec-default` | 195 文件 / 205KB | 默认安全策略，README 有 34KB 的规则说明——见 [Security](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Security.md) |
 | `agents-md` | 75 文件 / 58KB | AGENTS.md 发现与加载 |
-| `types` | 1 文件 / 517KB | 即本文依据的类型契约 |
+| `privacy` | 12 文件 | 阻止登录邮箱随工具调用外发、拒绝 user 层读会话身份，见 [ModInternals](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/ModInternals.md) |
+| `types` | 1 文件 / 824KB | 即本文依据的类型契约（2.1.326 实测 20680 行） |
 
 `diff` 的 README 顺带说明了几个只有实测才知道的渲染语义：**面板的停靠位置由每次绘制的 `viewport` 决定**（全屏布局下靠 transcript 侧）；自动打开有**多重前置条件**——主循环本会话首次成功编辑（subagent 的编辑不触发）、终端够宽（用户没选过时 144 列，保持过则 110 列）、文件 checkpointing 开着；**停靠式面板会先取数再打开**，所以不会闪`Loading diff…`；而「引擎让出等待却没画出来」的打开请求会被撤销（避免日后 resize 又把它摆出来），但 `no-surface` 的打开请求会被保留——没人看见时不刷新，首次绘制时重读仓库。这些都是 `viewport` / `surface` 这两个契约字段的实际用法示范。
 
@@ -162,7 +205,7 @@ test('notes add up on every surface that takes input', async $ => {
 - hook 失败只有 throw 与 timeout 两种，`catchMs` 只有 1 秒——`.catch` 里别做重活。
 - `TIERS` 里管控在 `core`（最后执行），用户 hook 无法阻止它。
 - 引擎方法即事件（`fs.write` 等），你的调用会触发别人挂的 hook——别指望「内部调用」是私密的。
-- 别手改 `claude-code.d.ts`：更新后用 `/plugin-types` 重新生成。
+- 别手改 `claude-code.d.ts`：它是引擎加载 mod 时写出的副本，更新后以新写出的为准。
 
 ## Links
 

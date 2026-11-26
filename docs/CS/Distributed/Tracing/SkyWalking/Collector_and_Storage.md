@@ -74,12 +74,120 @@ SkyWalking 的告警是**基于指标**的：规则写在 `config/alarm-settings
 - BanyanDB 需先于 OAP 启动；兼容版本号见 `config/bydb.yml` 的 `SW_STORAGE_BANYANDB_COMPATIBLE_SERVER_API_VERSIONS`。
 - OAP 监听 `0.0.0.0/11800`（gRPC 上报）与 `0.0.0.0/12800`（HTTP 上报 + GraphQL）；UI 监听 `8080`，向 `127.0.0.1/12800` 查询。
 
+## OAP 分析管线：Parse → Dispatch → Aggregate
+
+## OAP Side: From Segment to Sources
+
+OAP 的分析管线是**声明式**的：分析结果不写在代码里，而是由 listener 与 dispatcher 两层协作完成。
+
+### Stage 1: Parse (agent-analyzer)
+
+`SegmentParserServiceImpl` 遍历 Segment 的每个 Span，按 Span 类型分派给不同 **AnalysisListener**（`parseFirst` / `parseEntry` / `parseExit` / `parseLocal` / `parseSegment`）。这些 listener 做的是**语义提取**，产出 SkyWalking 内部的 **Source** 对象（`ISource`），而非最终存储实体。
+
+产物举例：
+
+- `SegmentAnalysisListener` → `Segment` source：装 `traceId`、`segmentId`、`serviceId`、`serviceInstanceId`、`endpointId`、`latency`、`isError`，并把整个 `SegmentObject` 的 protobuf 字节塞进 `dataBinary`（**明细原样保留**，查询时才反序列化）。
+- `EndpointDependencyBuilder` / `RPCTrafficSourceBuilder` → `EndpointRelation` / `ServiceRelation` source：这是**拓扑边的来源**。
+- `TagAutocomplete` source：给 UI 提供标签自动补全。
+
+`SegmentAnalysisListener` 里还有两个值得注意的细节：
+
+```java
+// 时长不是累加 span，而是取整个 segment 的时间跨度
+if (startTimestamp == 0 || startTimestamp > span.getStartTime()) startTimestamp = span.getStartTime();
+if (span.getEndTime() > endTimestamp) endTimestamp = span.getEndTime();
+duration = endTimestamp - startTimestamp;
+```
+
+即 **service 级延迟 = 段内最早开始到最晚结束**，不是各 span 时长之和（后者会因并行调用而失真）。
+
+另外，**可搜索标签（searchable tags）**是白名单机制：只有出现在 `searchableTagKeys` 中的 tag 才会被索引，且超过 `Tag.TAG_LENGTH` 的直接丢弃——这是防止高基数标签打爆存储。
+
+### Stage 2: Dispatch (core)
+
+`SourceReceiverImpl#receive` 把 Source 交给 `DispatcherManager#forward`：
+
+```java
+List<SourceDispatcher<ISource>> dispatchers = dispatcherMap.get(source.scope());
+if (dispatchers != null) {
+    source.prepare();
+    for (SourceDispatcher<ISource> dispatcher : dispatchers) {
+        dispatcher.dispatch(source);
+    }
+}
+```
+
+`dispatcherMap` 的 key 是 **scope id**（Source 的类型编号）。dispatcher 的注册是**运行期扫描 classpath** 完成的——`SourceReceiverImpl#scan()` 遍历 `org.apache.skywalking` 下所有顶层类，凡是实现了 `SourceDispatcher<ISource>` 的就注册进来。
+
+这条链路的含义是：**新增一种指标不需要改分发代码**。OAL 编译产物就是一个 `SourceDispatcher` 实现类；`DispatcherManager` 在启动时扫到它，自动挂到对应 scope 上。Source 的 `prepare()` 在分发前统一触发（生成 ID、算时间桶等），保证同一批 dispatcher 看到一致的数据。
+
+### Stage 3: Aggregation (MetricsStreamProcessor)
+
+`MetricsStreamProcessor#in` 是指标流式聚合的总入口：
+
+```java
+public void in(Metrics metrics) {
+    MetricsAggregateWorker worker = entryWorkers.get(metrics.getClass());
+    if (worker != null) { worker.in(metrics); return; }
+    unroutableSampleCount.incrementAndGet();
+    // 每个 class 只告警一次，避免日志洪水
+}
+```
+
+以 **metrics class** 为键路由到对应的 `MetricsAggregateWorker`。worker 内部是 **session cache**（`MetricsSessionCache`），按 `StorageID` 聚合——`StorageID` 由「时间桶 + 实体 ID」构成，例如 `ServiceRelationClientSideMetrics` 的 `id0()`：
+
+```java
+return new StorageID().append(TIME_BUCKET, getTimeBucket())
+                      .append(ENTITY_ID, entityId);
+```
+
+`entityId` 被标注为 `@BanyanDB.SeriesID(index = 0)`——**它就是 BanyanDB 里的 Series 身份**。聚合缓冲的合并逻辑由 `combine()` 定义，例如关系指标的合并是 **componentIds 集合并**（记录「这条调用链上出现过哪些组件 / 是否 TLS」）：
+
+```java
+public boolean combine(Metrics metrics) {
+    for (int i = 0; i < targetIDs.size(); i++) {
+        if (!sourceIDs.include(targetIDs.get(i))) { sourceIDs.add(targetIDs.get(i)); changed = true; }
+    }
+    return changed;
+}
+```
+
+`calculate()` 在关系指标里是**空实现**——因为拓扑边不需要数值聚合，只需要「这条边存在过、出现过哪些组件」。这解释了为什么拓扑图能在**零额外配置**下自动出现：分析器只要产出 `ServiceRelation` source，聚合器就会自然形成边。
+
+## OAL 编译成 Java 字节码（源码级）
+
+## OAL: A Compiled Script Language
+
+OAL 不是解释执行的 DSL，而是**编译成 Java 字节码**。链路是：
+
+```text
+OAL 脚本 (.oal)
+   ↓ 解析 + 校验
+   ↓ 生成 Java 源码
+   ↓ 动态编译（可 dump .class 调试）
+   ↓
+SourceDispatcher<ISource> 实现类 + Metrics 实现类
+   ↓ 注册进 DispatcherManager
+   ↓
+运行时按 scope 路由
+```
+
+这解释了几个之前只能观察到、无法解释的现象：
+
+1. **改 OAL 必须重启 OAP**——它是编译期产物，不是运行时解析；
+2. **集群各节点 OAL 必须一致**——生成的类不同则聚合结果不一致；
+3. **`SW_DYNAMIC_CLASS_ENGINE_DEBUG=Y` 能 dump 出 `.class` 文件**——因为生成的确实是标准 Java 类；
+4. **DispatcherManager 靠扫描 classpath 拿到 dispatcher**——dispatcher 就是编译产物。
+
+OAL 的 `from(Scope)` 声明数据源，`filter` 加条件，`.FUNCTION` 做聚合；生成的 dispatcher 对每个指标实现一个 `do<Metric>` 方法。`DispatcherManager#debugHolderForOalMetric` 的注释还揭示了一个细节：**OAL 的调试闸门（gate）是 per-metric 的**——每个 `do<Metric>` 有独立的 holder，一个 debug session 只捕获目标指标，其余指标静默。
+
+
 ## Links
 
 - [SkyWalking](/docs/CS/Distributed/Tracing/SkyWalking.md) — 枢纽页
 - [SkyWalking Transport](/docs/CS/Distributed/Tracing/SkyWalking/Transport.md) — Receiver 与 Kafka 通道
 - [SkyWalking Query and UI](/docs/CS/Distributed/Tracing/SkyWalking/Query_and_UI.md) — GraphQL 与拓扑可视化
-- [SkyWalking Internals](/docs/CS/Distributed/Tracing/SkyWalking/Internals.md) — OAL 编译、聚合 worker、TimeBucket 与 BanyanDB 模型
+- [SkyWalking Agent 机理](/docs/CS/Distributed/Tracing/SkyWalking/Agent.md) — 探针侧：span 栈、agent 滑窗采样（OAL 编译 / TimeBucket / BanyanDB 模型见本页与 Storage 分册）
 - [Elasticsearch](/docs/CS/Framework/ES/ES.md) — ES 存储后端对照
 - [Jaeger](/docs/CS/Distributed/Tracing/Jaeger.md) — 多进程追踪后端对照
 

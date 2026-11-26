@@ -1,3 +1,5 @@
+# Dubbo ScopeModel: The Three-Tier Domain Model
+
 ## Introduction
 
 **为什么 Dubbo 3 要引入域模型（ScopeModel）？** 2.x 时代 Dubbo 只有一个作用域，大量状态通过**静态类属性**共享，这带来三个无法绕开的问题：
@@ -8,7 +10,7 @@
 
 引入三层模型后：Dubbo 3 启动时需要启动的配置中心、元数据中心由**应用模型（ApplicationModel）**管理；作为 RPC 框架需要发布和引用的服务交给**模块模型（ModuleModel）**管理。分层管理让职责边界清晰，父子模型又天然支持数据向下传递。
 
-本文版本基线：Apache Dubbo **3.3.6**（源码 tag `dubbo-3.3.6`），所有行号相对该 tag。域模型对 SPI 实例作用域的影响（ExtensionDirector、ExtensionScope）在 [SPI](/docs/CS/Framework/Dubbo/SPI.md?id=scopemodel-which-model-an-extension-instance-belongs-to)，启动期模型如何被创建的时序见 [Start](/docs/CS/Framework/Dubbo/Start.md)。
+本文版本基线：Apache Dubbo **3.3.6**（源码 tag `dubbo-3.3.6`），所有片段均取自该 tag。域模型对 SPI 实例作用域的影响（ExtensionDirector、ExtensionScope）在 [SPI](/docs/CS/Framework/Dubbo/SPI.md?id=scopemodel-which-model-an-extension-instance-belongs-to)，启动期模型如何被创建的时序见 [Start](/docs/CS/Framework/Dubbo/Start.md)。
 
 ## Three-Layer Model
 
@@ -48,21 +50,21 @@ ScopeModel        -> ExtensionAccessor [color = "#008200", style = dashed, arrow
 
 `ExtensionScope` 只有四个值，**没有 GLOBAL**（`dubbo-common/src/main/java/org/apache/dubbo/common/extension/ExtensionScope.java`）：
 
-| 值 | 行号 | 语义 |
-| :--- | :--- | :--- |
-| `FRAMEWORK` | `:43` | 框架级，全进程共享一份 |
-| `APPLICATION` | `:59` | 应用级，每个 ApplicationModel 一份 |
-| `MODULE` | `:72` | 模块级，每个 ModuleModel 一份 |
-| `SELF` | `:77` | 自给自足，每个作用域各自创建实例，用于 `ExtensionInjector` 这类特殊 SPI |
+| 值 | 语义 |
+| :--- | :--- |
+| `FRAMEWORK` | 框架级，全进程共享一份 |
+| `APPLICATION` | 应用级，每个 ApplicationModel 一份 |
+| `MODULE` | 模块级，每个 ModuleModel 一份 |
+| `SELF` | 自给自足，每个作用域各自创建实例，用于 `ExtensionInjector` 这类特殊 SPI |
 
 ## ScopeModel Abstract Class
 
-字段（`dubbo-common/src/main/java/org/apache/dubbo/rpc/model/ScopeModel.java`）：`internalId:58`、`modelName:63`、`desc:65`、`classLoaders:67`、`parent:69`、`scope:70`、`extensionDirector:72`（volatile）、`beanFactory:74`（volatile）、`destroyListeners:75`、`classLoaderListeners:77`、`attributes:79`、`destroyed:80`（AtomicBoolean）、`internalScope:81`、`instLock:83`。
+字段（`dubbo-common/src/main/java/org/apache/dubbo/rpc/model/ScopeModel.java`）：`internalId`、`modelName`、`desc`、`classLoaders`、`parent`、`scope`、`extensionDirector`（volatile）、`beanFactory`（volatile）、`destroyListeners`、`classLoaderListeners`、`attributes`、`destroyed`（AtomicBoolean）、`internalScope`、`instLock`。
 
 注意 `extensionDirector` 与 `beanFactory` 都是 **volatile 且延迟到 `initialize()` 才创建**，不在构造器里：
 
 ```java
-// ScopeModel.java:100-113
+// ScopeModel.java
 protected void initialize() {
     synchronized (instLock) {
         this.extensionDirector =
@@ -70,7 +72,7 @@ protected void initialize() {
         this.extensionDirector.addExtensionPostProcessor(new ScopeModelAwareExtensionProcessor(this));
         this.beanFactory = new ScopeBeanFactory(parent != null ? parent.getBeanFactory() : null, extensionDirector);
 
-        // Add Framework's ClassLoader by default
+  // Add Framework's ClassLoader by default
         ClassLoader dubboClassLoader = ScopeModel.class.getClassLoader();
         if (dubboClassLoader != null) {
             this.addClassLoader(dubboClassLoader);
@@ -79,7 +81,7 @@ protected void initialize() {
 }
 ```
 
-`internalId` 的层级含义是官方注释（`:45-57`），值得原样记住：
+`internalId` 的层级含义是官方注释，值得原样记住：
 
 ```
 1          FrameworkModel (index=1)
@@ -90,7 +92,7 @@ protected void initialize() {
 
 ## FrameworkModel
 
-构造函数（`dubbo-common/src/main/java/org/apache/dubbo/rpc/model/FrameworkModel.java:78-109`）：
+构造函数（`dubbo-common/src/main/java/org/apache/dubbo/rpc/model/FrameworkModel.java`）：
 
 ```java
 public FrameworkModel() {
@@ -98,7 +100,7 @@ public FrameworkModel() {
     synchronized (globalLock) {
         synchronized (instLock) {
             this.setInternalId(String.valueOf(index.getAndIncrement()));
-            // register FrameworkModel instance early
+  // register FrameworkModel instance early
             allInstances.add(this);
             if (LOGGER.isInfoEnabled()) {
                 LOGGER.info(getDesc() + " is created");
@@ -129,12 +131,12 @@ public FrameworkModel() {
 
 两个顺序细节容易被忽略：`initialize()` 在 `TypeDefinitionBuilder.initBuilders()` **之前**；`ScopeModelInitializer` 的遍历在 `internalApplicationModel` 创建**之前**（所以内部应用模型构造时还会再跑一遍 initializer）。
 
-`DUBBO_INTERNAL_APPLICATION` 的字面量就是 `"DUBBO_INTERNAL_APPLICATION"`（`CommonConstants.java:531`），不是 `dubbo-internal-application`。
+`DUBBO_INTERNAL_APPLICATION` 的字面量就是 `"DUBBO_INTERNAL_APPLICATION"`（`CommonConstants.java`），不是 `dubbo-internal-application`。
 
 ### Default Model and Its Reset
 
 ```java
-// FrameworkModel.java:179-192
+// FrameworkModel.java
 public static FrameworkModel defaultModel() {
     FrameworkModel instance = defaultInstance;
     if (instance == null) {
@@ -151,7 +153,7 @@ public static FrameworkModel defaultModel() {
 ```
 
 ```java
-// FrameworkModel.java:319-337
+// FrameworkModel.java
 private static void resetDefaultFrameworkModel() {
     synchronized (globalLock) {
         if (defaultInstance != null && !defaultInstance.isDestroyed()) {
@@ -172,15 +174,15 @@ private static void resetDefaultFrameworkModel() {
 
 > During destroying the default FrameworkModel, the `FrameworkModel.defaultModel()` or `ApplicationModel.defaultModel()` will return a broken model, maybe cause unpredictable problem. **Recommendation: Avoid using the default model as much as possible.**
 
-其它静态/实例成员：`index:50`（AtomicLong，初值 1）、`globalLock:52`、`defaultInstance:54`、`allInstances:56`、`appIndex:61`（注释：internal app index is 0, default app index is 1）、`defaultAppModel:63`、`applicationModels:65`、`pubApplicationModels:67`、`serviceRepository:69`、`internalApplicationModel:71`、`destroyLock:73`。
+其它静态/实例成员：`index`（AtomicLong，初值 1）、`globalLock`、`defaultInstance`、`allInstances`、`appIndex`（注释：internal app index is 0, default app index is 1）、`defaultAppModel`、`applicationModels`、`pubApplicationModels`、`serviceRepository`、`internalApplicationModel`、`destroyLock`。
 
 > [!NOTE]
-> `defaultApplication()`（`:225-242`）与 `resetDefaultAppModel()`（`:299-317`）**都定义在 `FrameworkModel` 上，不在 `ApplicationModel` 上**；`ApplicationModel` 只有一个 `defaultModel()`（`:89-92`），其内部就是 `FrameworkModel.defaultModel().defaultApplication()`。网上很多资料把这三个方法的位置写反。
+> `defaultApplication()`与 `resetDefaultAppModel()`**都定义在 `FrameworkModel` 上，不在 `ApplicationModel` 上**；`ApplicationModel` 只有一个 `defaultModel()`，其内部就是 `FrameworkModel.defaultModel().defaultApplication()`。网上很多资料把这三个方法的位置写反。
 
 ## ApplicationModel
 
 ```java
-// dubbo-common/src/main/java/org/apache/dubbo/rpc/model/ApplicationModel.java:100-135
+// dubbo-common/src/main/java/org/apache/dubbo/rpc/model/ApplicationModel.java
 protected ApplicationModel(FrameworkModel frameworkModel, boolean isInternal) {
     super(frameworkModel, ExtensionScope.APPLICATION, isInternal);
     synchronized (instLock) {
@@ -222,7 +224,7 @@ protected ApplicationModel(FrameworkModel frameworkModel, boolean isInternal) {
 注意遍历 `ApplicationInitListener` 时用的是**先取名字再 `getExtension(name)`**，而 `ScopeModelInitializer` 用的是 `getSupportedExtensionInstances()`——两种写法在同一种构造逻辑里并存。
 
 ```java
-// ApplicationModel.java:138-143
+// ApplicationModel.java
 private void initApplicationExts() {
     Set<ApplicationExt> exts = this.getExtensionLoader(ApplicationExt.class).getSupportedExtensionInstances();
     for (ApplicationExt ext : exts) {
@@ -245,10 +247,10 @@ public void initialize() throws IllegalStateException {
     }
     CompositeConfiguration configuration = scopeModel.modelEnvironment().getConfiguration();
 
-    // dubbo.config.mode
+  // dubbo.config.mode
     String configModeStr = (String) configuration.getProperty(ConfigKeys.DUBBO_CONFIG_MODE);
     ...
-    // dubbo.config.ignore-duplicated-interface
+  // dubbo.config.ignore-duplicated-interface
     String ignoreDuplicatedInterfaceStr =
             (String) configuration.getProperty(ConfigKeys.DUBBO_CONFIG_IGNORE_DUPLICATED_INTERFACE);
     ...
@@ -276,7 +278,7 @@ public void initialize() throws IllegalStateException {
 
 ## ModuleModel
 
-`ModuleModel` 在不少资料里被一笔带过，但它的构造逻辑与 `ApplicationModel` 并不对称（`dubbo-common/src/main/java/org/apache/dubbo/rpc/model/ModuleModel.java:56-88`）：
+`ModuleModel` 在不少资料里被一笔带过，但它的构造逻辑与 `ApplicationModel` 并不对称（`dubbo-common/src/main/java/org/apache/dubbo/rpc/model/ModuleModel.java`）：
 
 ```java
 protected ModuleModel(ApplicationModel applicationModel, boolean isInternal) {
@@ -284,11 +286,11 @@ protected ModuleModel(ApplicationModel applicationModel, boolean isInternal) {
     synchronized (instLock) {
         Assert.notNull(applicationModel, "ApplicationModel can not be null");
         this.applicationModel = applicationModel;
-        applicationModel.addModule(this, isInternal);   // 反向注册
+        applicationModel.addModule(this, isInternal);  // 反向注册
         ...
         initialize();
         this.serviceRepository = new ModuleServiceRepository(this);
-        initModuleExt();                                // ApplicationModel 里叫 initApplicationExts
+        initModuleExt();  // ApplicationModel 里叫 initApplicationExts
         ExtensionLoader<ScopeModelInitializer> initializerExtensionLoader =
                 this.getExtensionLoader(ScopeModelInitializer.class);
         for (ScopeModelInitializer initializer : initializers) {
@@ -305,9 +307,9 @@ protected ModuleModel(ApplicationModel applicationModel, boolean isInternal) {
 }
 ```
 
-关键差异有两点：一是它会**反向注册**到父模型（`applicationModel.addModule`）并在末尾**通知 `ApplicationDeployer` 模块变更**（`DeployState.PENDING`）；二是它的扩展初始化方法叫 `initModuleExt()`（`:91-96`），不是 `initApplicationExts()`。
+关键差异有两点：一是它会**反向注册**到父模型（`applicationModel.addModule`）并在末尾**通知 `ApplicationDeployer` 模块变更**（`DeployState.PENDING`）；二是它的扩展初始化方法叫 `initModuleExt()`，不是 `initApplicationExts()`。
 
-其余成员：`NAME = "ModuleModel"`（`:43`）、`getConfigManager()` 从 `ModuleExt` SPI 取 `ModuleConfigManager.NAME`（`:162-168`）、`modelEnvironment()`（`:154-160`）、覆写的 `addClassLoader` 会刷新 environment（`:146-151`）、`acquireDestroyLock()` 向上取到 FrameworkModel 的 `destroyLock`（`:179-181`）。
+其余成员：`NAME = "ModuleModel"`、`getConfigManager()` 从 `ModuleExt` SPI 取 `ModuleConfigManager.NAME`、`modelEnvironment()`、覆写的 `addClassLoader` 会刷新 environment、`acquireDestroyLock()` 向上取到 FrameworkModel 的 `destroyLock`。
 
 ## ScopeModelInitializer SPI Registrations
 
@@ -342,18 +344,18 @@ protected ModuleModel(ApplicationModel applicationModel, boolean isInternal) {
 
 三层模型的销毁是**自下而上自动级联**的，不需要用户手动关 FrameworkModel——这是 3.x 相对 2.x「静态单例难清理」的核心改进之一。
 
-`ApplicationModel` 的销毁入口 `onDestroy()`（`ApplicationModel.java:146-193`）按 8 步收尾，最后一步是：
+`ApplicationModel` 的销毁入口 `onDestroy()`（`ApplicationModel.java`）按 8 步收尾，最后一步是：
 
 ```java
-// dubbo-common/src/main/java/org/apache/dubbo/rpc/model/ApplicationModel.java:191-192
+// dubbo-common/src/main/java/org/apache/dubbo/rpc/model/ApplicationModel.java
 // 8. destroy framework if none application
 frameworkModel.tryDestroy();
 ```
 
-`FrameworkModel.tryDestroy()`（`FrameworkModel.java:285-291`）只在**已发布应用数为 0**时才真正销毁整个框架：
+`FrameworkModel.tryDestroy()`（`FrameworkModel.java`）只在**已发布应用数为 0**时才真正销毁整个框架：
 
 ```java
-// dubbo-common/src/main/java/org/apache/dubbo/rpc/model/FrameworkModel.java:285-291
+// dubbo-common/src/main/java/org/apache/dubbo/rpc/model/FrameworkModel.java
 void tryDestroy() {
     synchronized (instLock) {
         if (pubApplicationModels.size() == 0) {
@@ -365,20 +367,20 @@ void tryDestroy() {
 
 注意判据是 `pubApplicationModels`（已发布应用），不是含内部应用 `internalApplicationModel` 的 `applicationModels`——内部应用模型销毁不会触发框架销毁。
 
-`FrameworkModel.destroy()`（`FrameworkModel.java:127-150`）自身再向下级联：
+`FrameworkModel.destroy()`（`FrameworkModel.java`）自身再向下级联：
 
 1. 遍历 `applicationModels` 逐个 `applicationModel.destroy()`；
-2. `checkApplicationDestroy()` 断言销毁期间没有新应用被创建（否则抛 "Not all application models are completely destroyed"，`FrameworkModel.java:153-163`）；
+2. `checkApplicationDestroy()` 断言销毁期间没有新应用被创建（否则抛 "Not all application models are completely destroyed"，`FrameworkModel.java`）；
 3. `notifyDestroy()`（由 `FrameworkModelCleaner` 等监听器清理框架级资源）；
 4. 从 `allInstances` 移除自己并 `resetDefaultFrameworkModel()`；
-5. `destroyGlobalResources()`——仅当 `allInstances.isEmpty()` 时调用 `GlobalResourcesRepository.getInstance().destroy()`，**彻底关停 Dubbo**（释放全局静态资源，`FrameworkModel.java:165-171`）。
+5. `destroyGlobalResources()`——仅当 `allInstances.isEmpty()` 时调用 `GlobalResourcesRepository.getInstance().destroy()`，**彻底关停 Dubbo**（释放全局静态资源，`FrameworkModel.java`）。
 
 > [!WARNING]
-> 销毁 default FrameworkModel 期间调用 `FrameworkModel.defaultModel()` / `ApplicationModel.defaultModel()` 会拿到 broken model（官方注释 `FrameworkModel.java:174`），所以官方明确建议「尽可能不用 default model」。级联销毁是自动的，但「最后一个应用 destroy 会顺带关掉 Framework」这一副作用，在单 JVM 多应用场景里要格外小心——别在别的应用还在跑时销毁其中一个。子模型的 `ExtensionLoader` 缓存随 `ExtensionDirector.destroy()` 一并清空，细节见 [SPI](/docs/CS/Framework/Dubbo/SPI.md?id=scopemodel-which-model-an-extension-instance-belongs-to)。
+> 销毁 default FrameworkModel 期间调用 `FrameworkModel.defaultModel()` / `ApplicationModel.defaultModel()` 会拿到 broken model（官方注释 `FrameworkModel.java`），所以官方明确建议「尽可能不用 default model」。级联销毁是自动的，但「最后一个应用 destroy 会顺带关掉 Framework」这一副作用，在单 JVM 多应用场景里要格外小心——别在别的应用还在跑时销毁其中一个。子模型的 `ExtensionLoader` 缓存随 `ExtensionDirector.destroy()` 一并清空，细节见 [SPI](/docs/CS/Framework/Dubbo/SPI.md?id=scopemodel-which-model-an-extension-instance-belongs-to)。
 
 ## Pitfall List
 
-- **把 `defaultApplication()` / `resetDefaultAppModel()` 当成 `ApplicationModel` 的方法**——它们在 `FrameworkModel` 上（`:225` / `:299`）。
+- **把 `defaultApplication()` / `resetDefaultAppModel()` 当成 `ApplicationModel` 的方法**——它们在 `FrameworkModel` 上（ / ）。
 - **在销毁 default FrameworkModel 期间继续用 `defaultModel()`**——会拿到 broken model，官方明确建议尽可能不用 default model。
 - **以为 `ExtensionScope` 还有 `GLOBAL`**——只有 FRAMEWORK / APPLICATION / MODULE / SELF 四个。
 - **把 `ScopeModelInitializer` 的数量写死**——19 条注册项，且实际生效数量随 classpath 变化。

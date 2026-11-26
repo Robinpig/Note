@@ -73,6 +73,23 @@ volumeMounts:
 > [!WARNING]
 > 卷挂载热更新的细节坑：更新后文件是**原子替换**（旧 symlink 指向不变、内容变），大部分应用需要自己重新读取；若用 `subPath` 挂载单个键，**不会热更新**（subPath 绕过的是整个卷的原子替换机制）。需要热加载的配置，避免用 `subPath`。
 
+### How the Hot Update Actually Works
+
+"约 1 分钟同步"与"原子替换"都有确切的源码依据，值得拆开看：
+
+**① kubelet 怎么知道 ConfigMap 变了**——kubelet 内部有一个 ConfigMap/Secret 管理器为所有注册 Pod 缓存对象：
+
+```go
+// pkg/kubelet/configmap/configmap_manager.go
+const (
+	defaultTTL = time.Minute
+)
+```
+
+caching manager 的缓存 TTL 就是 1 分钟：`GetObject()` 时若缓存超过 TTL 就回 apiserver 重取——这就是文档里"最多延迟约 1 分钟"的出处（watching manager 模式则直接 watch 对象，TTL 只作兜底）。环境变量为什么不热更新？因为 `env` 的值在创建容器 spec 时就被固化进去了，之后 kubelet 不会再碰它。
+
+**② 原子替换怎么实现**——投射卷的落盘由 `pkg/volume/util/atomic_writer.go` 完成：真实数据写在时间戳目录里，可见文件是 `..data` 这一层 symlink 的间接链（`文件 -> ..2024_xxx/文件 -> ..data/文件`）。更新时 writer 写新时间戳目录，再把 `..data` symlink 原子 rename 指向新目录——**rename(2) 保证任何时刻读者看到的都是完整一致的目录视图**。这也解释了 subPath 为什么不更新：subPath 直接 bind mount 了具体文件，绕过了这层 symlink。
+
 ## Immutable
 
 `immutable: true`（v1.19 GA）一旦设置，对象**不可再改**，只能删除重建。收益：

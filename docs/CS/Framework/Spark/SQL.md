@@ -1,5 +1,8 @@
 ## Introduction
 
+> [!NOTE]
+> 本页源码基线：**Spark 4.3.0**（tag `v4.3.0`，commit `98bc0212`，2026-10-27）。以下片段均取自该 tag，不混用其它版本。
+
 Spark SQL 处理的是**带 schema 的分布式数据**（DataFrame / Dataset），与底层 [RDD](/docs/CS/Framework/Spark/RDD.md) 的关系是：用户写 SQL 或 DataFrame 变换 → 交给 **Catalyst 优化器**生成逻辑与物理计划 → 用 **Tungsten**（堆外内存 + 代码生成）执行 → 最终仍然落到 RDD 上的 task。
 
 相比手写 RDD，它的优势来自"看得懂数据"：有 schema 就能做列裁剪、谓词下推、选择更优的 join 策略，还能在运行中用真实统计修正计划。
@@ -17,6 +20,34 @@ SQL / DataFrame
 ```
 
 逻辑优化阶段常见规则：谓词下推、列裁剪、常量折叠、分区裁剪、limit 下推、聚合下推、子查询消除等。物理阶段则是"同一算子多种实现"的选择（如 join 的四种实现、聚合的 hash / sort 两条路）。
+
+### Source: Catalyst Is an Ordered Rule Batch Pipeline
+
+Catalyst 的优化不是一个规则大杂烩，而是**有序的 Batch 序列**，每个 Batch 有明确的迭代策略（`Once` / `FixedPoint(1)` / `fixedPoint`）。`Optimizer.scala` 里把算子优化规则组织成"推断过滤条件前后各跑一轮"的三段式：
+
+```scala
+    val operatorOptimizationBatch: Seq[Batch] = Seq(
+      Batch("Operator Optimization before Inferring Filters", fixedPoint,
+        operatorOptimizationRuleSet: _*),
+      Batch("Infer Filters", Once,
+        InferFiltersFromGenerate,
+        InferFiltersFromConstraints),
+      Batch("Operator Optimization after Inferring Filters", fixedPoint,
+        operatorOptimizationRuleSet: _*),
+      Batch("Push extra predicate through join", fixedPoint,
+        PushExtraPredicateThroughJoin,
+        PushDownPredicates))
+```
+
+`Infer Filters` 夹在两轮算子优化之间是有意为之：先从约束里推断出新的过滤条件，再跑一轮让这些新条件下推到扫描节点。4.3.0 的 Batch 链新增了 `Pre Operator Optimization`（对应发布说明里的 `preOperatorOptimizationRules` 扩展点）和 `Convert python UDFs to Catalyst`——后者放在最前面，把 Python UDF 翻译成 Catalyst 表达式，使它们也能享受后续优化与 codegen，这是"UDF 打断代码融合"问题在 4.3 的正面回应。
+
+```scala
+    Batch("Convert python UDFs to Catalyst", Once, ConvertToCatalyst),
+    Batch("Finish Analysis", FixedPoint(1), FinishAnalysis),
+    Batch("Rewrite With expression", fixedPoint, RewriteWithExpression),
+```
+
+`fixedPoint` 会反复跑同一批规则直到计划不再变化（`Once` 只跑一次）。理解这一点，就能解释为什么 `explain()` 里某些规则的效果"叠加"出现——它们在不动点循环里被重复应用。
 
 ## Tungsten：执行侧的两板斧
 
@@ -52,7 +83,7 @@ Catalyst 在**执行前**规划，只能依赖统计信息；AQE 则在 **shuffl
 
 ## Spark 4.x 的 SQL 变化
 
-以 4.0（4.x 首个版本）为代表：
+4.0（4.x 首个版本）奠定的基线：
 
 | 变化 | 说明 |
 | ---- | ---- |
@@ -64,6 +95,34 @@ Catalyst 在**执行前**规划，只能依赖统计信息；AQE 则在 **shuffl
 | **会话变量、脚本化 SQL** | 支持控制流，便于把过程逻辑搬进 SQL |
 | **Spark Connect 成熟** | 客户端-服务端解耦架构，Python/Java API 基本对齐，另有轻量客户端与多语言客户端 |
 | **默认 JDK 17、Scala 2.13** | JDK 8/11 与 Scala 2.12 支持已移除 |
+
+4.3.0 在此之上新增（均已在源码/发布说明核实）：
+
+| 变化 | 说明 |
+| ---- | ---- |
+| **`JSON_TABLE` / VARIANT 变换函数** | `variant_set` / `variant_insert` / `variant_delete` 等原生操作嵌套文档（SPARK-58366 / 57804） |
+| **SQL ASOF JOIN** | 时间点匹配，`spark.sql.join.asofJoin.enabled` 控制（默认关，SPARK-58092 / 58122） |
+| **`BIN BY` 关系算子** | 把 range 类型行对齐到固定 bin 边界，`spark.sql.binByRelationOperator.enabled`（默认关，SPARK-57133） |
+| **纳秒精度时间戳（preview）** | `TIMESTAMP_NTZ(p)` / `TIMESTAMP_LTZ(p)`，p 为 7~9，`spark.sql.timestampNanosTypes.enabled`（默认关，SPARK-56876） |
+| **单任务执行（opt-in）** | `spark.sql.optimizer.singleTaskExecution.enabled`，小数据单分区片段跳过 shuffle 在一个 task 里跑完（SPARK-57851） |
+| **Arrow 原生缓存（opt-in）** | `spark.sql.cache.serializer=org.apache.spark.sql.execution.columnar.ArrowCachedBatchSerializer`，带压缩与列统计（SPARK-57268） |
+
+### Source: Shuffle-Free Single-Task Execution
+
+4.3.0 针对"小数据上固定开销占比过高"给出了一个 opt-in 路径，配置定义直接说明了它的边界：
+
+```scala
+    buildConf("spark.sql.optimizer.singleTaskExecution.enabled")
+      .doc("When true, eligible query fragments that read a small single-partition scan can run " +
+        "in a single task, skipping the shuffle that would otherwise be inserted before an " +
+        "operator such as a sort or aggregation. This avoids the scheduling overhead of an " +
+        "unnecessary shuffle for small, low-latency queries.")
+      .version("4.3.0")
+      .booleanConf
+      .createWithDefault(false)
+```
+
+关键限定词是 "small single-partition scan"：只对小数据、单分区扫描生效，跳过的是 sort / aggregation 之前**本来要插入的 shuffle**。它默认关闭，是纯粹的延迟优化开关，不改变大数据路径的行为——与 AQE 在运行期合并分区是两种互补思路（AQE 减少 shuffle 后的碎片，单任务执行直接消掉 shuffle）。
 
 ## 存储与读写
 
@@ -84,4 +143,7 @@ Catalyst 在**执行前**规划，只能依赖统计信息；AQE 则在 **shuffl
 
 1. [Spark Release 4.0.0（SQL / Spark Connect / ANSI / VARIANT 等）](https://spark.apache.org/releases/spark-release-4-0-0.html)
 2. [Spark Docs - SQL Performance Tuning（AQE 自 3.2.0 起默认启用）](https://spark.apache.org/docs/latest/sql-performance-tuning.html)
-3. [Spark Docs - Adaptive Query Execution](https://spark.apache.org/docs/latest/sql-performance-tuning.html#adaptive-query-execution)
+3. [Spark Docs - Adaptive Query Execution](https://spark.apache.org/docs/4.3.0/sql-performance-tuning.html#adaptive-query-execution)
+4. [Spark Release 4.3.0（JSON_TABLE / ASOF JOIN / single-task execution / Arrow cache）](https://spark.apache.org/releases/spark-release-4-3-0.html)
+5. [Optimizer.scala @ v4.3.0](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/optimizer/Optimizer.scala)
+6. [ShuffleExchangeExec.scala @ v4.3.0](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/exchange/ShuffleExchangeExec.scala)

@@ -1,3 +1,5 @@
+# Dubbo Mesh: Proxyless Capability Boundary
+
 ## Introduction
 
 网上有大量文章声称「Dubbo 3 支持 Proxyless 模式直接接入 Istio 控制面」。本文要在**源码层面**把这个说法拆开：Dubbo 3.3.6 主仓库里有 Mesh 相关的真实代码，但**没有 Proxyless 直连 xDS 控制面的实现**。把「文档愿景」当成「源码现状」是这一主题最常见的错误。
@@ -8,7 +10,7 @@
 - **「`io.envoyproxy.controlplane:api` 被主模块依赖」**——不成立。它只在 `dubbo-dependencies-bom/pom.xml` 里做**版本声明**（`envoy_api_version = 0.1.35`），没有任何主模块声明该依赖。
 - **「`mesh-enable=true` 就是 Proxyless」**——不成立。这套逻辑做的事只是「按 Kubernetes Service DNS 名拼出一个 `tri://` 地址」，把流量交给**外部 Envoy/Istio sidecar** 治理，属于 classic sidecar 模式，Dubbo 进程本身不连控制面。
 
-版本基线：Apache Dubbo **3.3.6**，源码 tag `dubbo-3.3.6`。本文所有「有 / 没有」的结论都给出检索范围与文件行号；凡是「未查到」的，都在同一棵源码树上做过全量检索。
+版本基线：Apache Dubbo **3.3.6**，源码 tag `dubbo-3.3.6`。本文所有「有 / 没有」的结论都给出检索范围与源码路径；凡是「未查到」的，都在同一棵源码树上做过全量检索。
 
 ## Proxy and Proxyless: Two Concepts That Must Be Distinguished
 
@@ -63,7 +65,7 @@ Proxyless 之所以难，是因为它把 Envoy 承担的一整套职责搬进了
 这是最容易在源码里看到、也最常被误读为 Proxyless 的一块。核心逻辑在 `ReferenceConfig` 的 mesh URL 构造：
 
 ```java
-// dubbo-config/dubbo-config-api/.../config/ReferenceConfig.java:562-573（节选）
+// dubbo-config/dubbo-config-api/.../config/ReferenceConfig.java（节选）
 // In mesh mode, providedBy equals K8S Service name.
 String providedBy = referenceParameters.get(PROVIDED_BY);
 // cluster_domain default is 'cluster.local',generally unchanged.
@@ -83,10 +85,10 @@ url = TRIPLE + "://" + providedBy + "." + podNamespace + SVC + clusterDomain + "
 前置校验在 `checkMeshConfig`：
 
 ```java
-// dubbo-config/dubbo-config-api/.../config/ReferenceConfig.java:582-592（节选）
+// dubbo-config/dubbo-config-api/.../config/ReferenceConfig.java（节选）
 private boolean checkMeshConfig(Map<String, String> referenceParameters) {
     if (!"true".equals(referenceParameters.getOrDefault(MESH_ENABLE, "false"))) {
-        // In mesh mode, unloadClusterRelated can only be false.
+  // In mesh mode, unloadClusterRelated can only be false.
         referenceParameters.put(UNLOAD_CLUSTER_RELATED, "false");
         return false;
     }
@@ -101,20 +103,20 @@ private boolean checkMeshConfig(Map<String, String> referenceParameters) {
 
 两条硬性约束由此明确：
 
-1. **必须 `mesh-enable=true`**：它是 `ConsumerConfig` 上的属性（`ConsumerConfig.java:181` `@Parameter(key = MESH_ENABLE)`），不是 Reference 注解属性，配置形如 `dubbo.consumer.mesh-enable=true`。
+1. **必须 `mesh-enable=true`**：它是 `ConsumerConfig` 上的属性（`ConsumerConfig.java` `@Parameter(key = MESH_ENABLE)`），不是 Reference 注解属性，配置形如 `dubbo.consumer.mesh-enable=true`。
 2. **必须存在 triple 协议**：`getConfigManager().getProtocol(TRIPLE)` 取不到就抛异常。原因是 Triple 走 HTTP/2，Envoy/Istio 才能按其规则识别与路由；Dubbo 私有 TCP 协议对 sidecar 而言不可路由。这一点与 [Triple.md](/docs/CS/Framework/Dubbo/Triple.md) 中「Triple 让流量可被通用组件识别」的设计目标一致。
 
 相关常量与默认值：
 
 | 项 | 值 | 来源 |
 | :--- | :--- | :--- |
-| `MESH_ENABLE` | `"mesh-enable"`（`@since 3.1.0`） | `CommonConstants.java:568` |
-| `DEFAULT_MESH_PORT` | `80` | `CommonConstants.java:573` |
-| `PROVIDED_BY` | `"provided-by"` | `RegistryConstants.java:102` |
-| `PROVIDER_NAMESPACE` | `"provider-namespace"` | `RegistryConstants.java:116` |
-| `SVC` | `".svc."` | `CommonConstants.java:578` |
-| `DEFAULT_CLUSTER_DOMAIN` | `"cluster.local"` | `CommonConstants.java:585` |
-| `TRIPLE` | `"tri"` | `CommonConstants.java:30` |
+| `MESH_ENABLE` | `"mesh-enable"`（`@since 3.1.0`） | `CommonConstants.java` |
+| `DEFAULT_MESH_PORT` | `80` | `CommonConstants.java` |
+| `PROVIDED_BY` | `"provided-by"` | `RegistryConstants.java` |
+| `PROVIDER_NAMESPACE` | `"provider-namespace"` | `RegistryConstants.java` |
+| `SVC` | `".svc."` | `CommonConstants.java` |
+| `DEFAULT_CLUSTER_DOMAIN` | `"cluster.local"` | `CommonConstants.java` |
+| `TRIPLE` | `"tri"` | `CommonConstants.java` |
 
 namespace 的取值优先级是：`@DubboReference(providerNamespace = "...")` > 环境变量 `POD_NAMESPACE` > 字面量 `"default"`。取不到 `POD_NAMESPACE` 时会打告警，提示可能不在 K8s 环境。
 
@@ -157,7 +159,7 @@ standard-mesh-rule=org.apache.dubbo.rpc.cluster.router.mesh.route.StandardMeshRu
 ```
 
 ```java
-// dubbo-cluster/.../router/mesh/route/StandardMeshRuleRouterFactory.java:27-33（节选）
+// dubbo-cluster/.../router/mesh/route/StandardMeshRuleRouterFactory.java（节选）
 @Activate(order = -50)
 public class StandardMeshRuleRouterFactory implements StateRouterFactory {
     @Override
@@ -172,18 +174,18 @@ public class StandardMeshRuleRouterFactory implements StateRouterFactory {
 但关键在于**规则从哪里来**：
 
 ```java
-// dubbo-cluster/.../router/mesh/route/MeshRuleManager.java:62-95（节选）
+// dubbo-cluster/.../router/mesh/route/MeshRuleManager.java（节选）
 private synchronized MeshAppRuleListener subscribeAppRule(String app) {
     MeshAppRuleListener meshAppRuleListener = new MeshAppRuleListener(app);
-    // demo-app.MESHAPPRULE
+  // demo-app.MESHAPPRULE
     String appRuleDataId = app + MESH_RULE_DATA_ID_SUFFIX;
 
-    // Add listener to rule repository ( dynamic configuration )
+  // Add listener to rule repository ( dynamic configuration )
     String rawConfig = ruleRepository.getRule(appRuleDataId, DynamicConfiguration.DEFAULT_GROUP, 5000L);
     ...
     ruleRepository.addListener(appRuleDataId, DynamicConfiguration.DEFAULT_GROUP, meshAppRuleListener);
 
-    // Add listener to env ( kubernetes, xDS )
+  // Add listener to env ( kubernetes, xDS )
     for (MeshEnvListener envListener : envListeners) {
         if (envListener.isEnable()) {
             envListener.onSubscribe(app, meshAppRuleListener);
@@ -196,7 +198,7 @@ private synchronized MeshAppRuleListener subscribeAppRule(String app) {
 规则来源是 `GovernanceRuleRepository`（动态配置中心），data id 形如 `<app>.MESHAPPRULE`，group 是 `DynamicConfiguration.DEFAULT_GROUP`。代码里确实留了注释 "Add listener to env ( kubernetes, xDS )"，但那个 `MeshEnvListener` 是一个**扩展点，主仓库没有提供任何实现**：
 
 ```java
-// dubbo-cluster/.../router/mesh/route/MeshEnvListener.java:20-32（节选）
+// dubbo-cluster/.../router/mesh/route/MeshEnvListener.java（节选）
 /**
  * Mesh Rule Listener
  * Such as Kubernetes, Service Mesh (xDS) environment support define rule in env
@@ -222,7 +224,7 @@ public interface MeshEnvListener {
 路由器本体是 `MeshRuleRouter`，它是一个 `AbstractStateRouter`，同时实现 `MeshRuleListener` 以接收规则变更：
 
 ```java
-// dubbo-cluster/.../router/mesh/route/MeshRuleRouter.java:60-70（节选）
+// dubbo-cluster/.../router/mesh/route/MeshRuleRouter.java（节选）
 public abstract class MeshRuleRouter<T> extends AbstractStateRouter<T> implements MeshRuleListener {
 
     private static final ErrorTypeAwareLogger logger = LoggerFactory.getErrorTypeAwareLogger(MeshRuleRouter.class);
@@ -239,7 +241,7 @@ public abstract class MeshRuleRouter<T> extends AbstractStateRouter<T> implement
 `StandardMeshRuleRouter` 是它的标准实现，靠 `ruleSuffix()` 返回 `"standard"` 区分规则来源：
 
 ```java
-// dubbo-cluster/.../router/mesh/route/StandardMeshRuleRouter.java:22-32
+// dubbo-cluster/.../router/mesh/route/StandardMeshRuleRouter.java
 public class StandardMeshRuleRouter<T> extends MeshRuleRouter<T> {
 
     public StandardMeshRuleRouter(URL url) {
@@ -268,12 +270,12 @@ public class StandardMeshRuleRouter<T> extends MeshRuleRouter<T> {
 侧车模式下，地址已经由 K8s DNS + Envoy 决定，Dubbo 本地的 Directory / Cluster 选址链就成了多余的（甚至是有害的，因为它只看到一个地址却仍要做集群容错）。Dubbo 用一个开关让调用直接落到 mesh 地址：
 
 ```java
-// dubbo-config/dubbo-config-api/.../config/ReferenceConfig.java:668-679（节选）
+// dubbo-config/dubbo-config-api/.../config/ReferenceConfig.java（节选）
 private void createInvoker() {
     if (urls.size() == 1) {
         URL curUrl = urls.get(0);
         invoker = protocolSPI.refer(interfaceClass, curUrl);
-        // registry url, mesh-enable and unloadClusterRelated is true, not need Cluster.
+  // registry url, mesh-enable and unloadClusterRelated is true, not need Cluster.
         if (!UrlUtils.isRegistry(curUrl) && !curUrl.getParameter(UNLOAD_CLUSTER_RELATED, false)) {
             List<Invoker<?>> invokers = new ArrayList<>();
             invokers.add(invoker);
@@ -286,7 +288,7 @@ private void createInvoker() {
 }
 ```
 
-`unloadClusterRelated` 是 `@DubboReference` 上的属性（`DubboReference.java:385`，默认 `false`），配置项名 `UNLOAD_CLUSTER_RELATED = "unloadClusterRelated"`（`CommonConstants.java:590`）。当它为 `true` 时，只有单个 mesh 地址的情形**不再 join Cluster**，Invoker 直接指向 Envoy。这与上文 `checkMeshConfig` 里「非 mesh 模式强制把它设为 false」是配套逻辑。
+`unloadClusterRelated` 是 `@DubboReference` 上的属性（`DubboReference.java`，默认 `false`），配置项名 `UNLOAD_CLUSTER_RELATED = "unloadClusterRelated"`（`CommonConstants.java`）。当它为 `true` 时，只有单个 mesh 地址的情形**不再 join Cluster**，Invoker 直接指向 Envoy。这与上文 `checkMeshConfig` 里「非 mesh 模式强制把它设为 false」是配套逻辑。
 
 > [!NOTE]
 > mesh 模式下是否要开 `unloadClusterRelated` 取决于你的治理诉求：开了就更「纯粹」地把治理交给 Istio（Dubbo 不做本地容错），不开则 Dubbo 仍保留本地 Cluster 行为。两条路径都只涉及「本地是否包一层 Cluster」，与 xDS 无关。
@@ -300,7 +302,7 @@ private void createInvoker() {
 1. 集群侧在构造 `RouterChain` 时，通过 `StateRouterFactory` 扩展加载器把所有被激活的工厂收集成 `List<StateRouter<T>>`：
 
    ```java
-   // dubbo-cluster/.../cluster/RouterChain.java:69-72（节选）
+  // dubbo-cluster/.../cluster/RouterChain.java（节选）
    List<StateRouter<T>> stateRouters =
        moduleModel.getExtensionLoader(StateRouterFactory.class)
            .getActivateExtension(url, ROUTER_KEY).stream()
@@ -308,19 +310,19 @@ private void createInvoker() {
            .collect(Collectors.toList());
    ```
 
-2. `StandardMeshRuleRouterFactory` 因为类上标了 `@Activate(order = -50)`（`StandardMeshRuleRouterFactory.java:27`），只要 URL 上的 `router=` 激活条件命中，就会被 `getActivateExtension(url, ROUTER_KEY)` 一并取出，和普通条件路由、标签路由站在同一条链上。
+2. `StandardMeshRuleRouterFactory` 因为类上标了 `@Activate(order = -50)`（`StandardMeshRuleRouterFactory.java`），只要 URL 上的 `router=` 激活条件命中，就会被 `getActivateExtension(url, ROUTER_KEY)` 一并取出，和普通条件路由、标签路由站在同一条链上。
 
-3. `RouterChain` 把这些 `StateRouter` 串成一条链，对外只暴露一个 `getHeadStateRouter()`（`RouterChain.java:238`），调用方（如 `AbstractClusterInvoker` 选址时）只需对「链头」调一次 `route(...)`，请求便依次穿过每个 `StateRouter`，`MeshRuleRouter` 自然被纳入其中。
+3. `RouterChain` 把这些 `StateRouter` 串成一条链，对外只暴露一个 `getHeadStateRouter()`（`RouterChain.java`），调用方（如 `AbstractClusterInvoker` 选址时）只需对「链头」调一次 `route(...)`，请求便依次穿过每个 `StateRouter`，`MeshRuleRouter` 自然被纳入其中。
 
 接入形态归纳：
 
 | 维度 | 事实（源码） |
 | :--- | :--- |
-| 接口身份 | `MeshRuleRouter<T> extends AbstractStateRouter<T> implements MeshRuleListener`（`MeshRuleRouter.java:60`），是标准 `StateRouter`，不是独立控制面客户端 |
+| 接口身份 | `MeshRuleRouter<T> extends AbstractStateRouter<T> implements MeshRuleListener`（`MeshRuleRouter.java`），是标准 `StateRouter`，不是独立控制面客户端 |
 | 工厂注册 | `standard-mesh-rule=...StandardMeshRuleRouterFactory` 写在 `META-INF/dubbo/internal/org.apache.dubbo.rpc.cluster.router.state.StateRouterFactory` |
 | 激活方式 | `@Activate(order = -50)` + `ROUTER_KEY` 激活，与条件/标签路由同链 |
 | 规则来源 | 配置中心 `DynamicConfiguration`（`<app>.MESHAPPRULE`），`MeshEnvListener` 默认 `isEnable()=false`，无 xDS 实现 |
-| 链头访问 | `RouterChain.getHeadStateRouter()`（`RouterChain.java:238`）统一对外，调用方无感知是否含 mesh 路由 |
+| 链头访问 | `RouterChain.getHeadStateRouter()`（`RouterChain.java`）统一对外，调用方无感知是否含 mesh 路由 |
 
 > [!NOTE]
 > 这条接入路径再次印证 [Mesh](/docs/CS/Framework/Dubbo/Mesh.md?id=mesh-code-actually-present-in-the-main-repo) 的核心结论：主仓库的 mesh 能力 = 「拼 K8s Service 地址」+「从配置中心消费 Istio 风格规则做本地选址」，**全部落在已有 SPI/路由范式内，没有新增 xDS 控制面代码**。
@@ -364,13 +366,13 @@ ls dubbo-registry/
 
 | 命中 | 位置 | 性质 |
 | :--- | :--- | :--- |
-| `io.envoyproxy.controlplane:api` 版本声明 | `dubbo-dependencies-bom/pom.xml:671-673` | BOM 版本锁定，无模块依赖 |
-| checkstyle / RAT 排除 `**/istio/v1/auth/**/*` | 根 `pom.xml:596` | 构建排除项 |
-| `dubbo-registry-xds` 字样 | `LICENSE:284` | 许可证归属说明（`ca.proto` 源自 Istio） |
-| `REGISTRY_ERROR_*_XDS` / `REGISTRY_*_ISTIO` 错误码 | `dubbo-common/.../LoggerCodeConstants.java:160-193` | 历史错误码常量，无对应生产代码 |
-| `@ProvidedBy("dubbo-samples-xds-provider")` | `dubbo-common/.../config/annotation/ProvidedBy.java:29` | javadoc 示例 |
-| envoy 路由注释 | `ReferenceConfig.java:567`、`AbstractReferenceConfig.java:88` | 注释 |
-| mesh 路由器的 `xDS` 注释 | `MeshRuleManager.java:77,95`、`MeshEnvListener.java:21` | 注释（无实现） |
+| `io.envoyproxy.controlplane:api` 版本声明 | `dubbo-dependencies-bom/pom.xml` | BOM 版本锁定，无模块依赖 |
+| checkstyle / RAT 排除 `**/istio/v1/auth/**/*` | 根 `pom.xml` | 构建排除项 |
+| `dubbo-registry-xds` 字样 | `LICENSE` | 许可证归属说明（`ca.proto` 源自 Istio） |
+| `REGISTRY_ERROR_*_XDS` / `REGISTRY_*_ISTIO` 错误码 | `dubbo-common/.../LoggerCodeConstants.java` | 历史错误码常量，无对应生产代码 |
+| `@ProvidedBy("dubbo-samples-xds-provider")` | `dubbo-common/.../config/annotation/ProvidedBy.java` | javadoc 示例 |
+| envoy 路由注释 | `ReferenceConfig.java`、`AbstractReferenceConfig.java` | 注释 |
+| mesh 路由器的 `xDS` 注释 | `MeshRuleManager.java`、`MeshEnvListener.java` | 注释（无实现） |
 
 > [!WARNING]
 > `LICENSE` 里出现 `dubbo-registry-xds`、`LoggerCodeConstants` 里有 `XDS` / `ISTIO` 错误码，说明这个模块在历史上**曾经存在过**（Dubbo 3.0/3.1 时期），后被移除，只留下许可证归属与错误码常量。**不要因为这些残留就认为 3.3.6 仍带该模块。** 判断某模块是否还在，看目录与 SPI 注册文件，不要看常量与注释。

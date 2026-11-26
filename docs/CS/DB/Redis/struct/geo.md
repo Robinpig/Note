@@ -1,4 +1,8 @@
+# Redis Geo: Source Deep Dive
+
 ## Introduction
+
+> 版本基线：Redis 8.10.2（commit 498ecd0d）。以下源码片段均取自该 tag，路径为 `src/` 相对路径。
 
 GeoHash encode to a binary value and use Sorted-Set
 
@@ -90,7 +94,7 @@ void geoaddCommand(client *c) {
         GeoHashBits hash;
         geohashEncodeWGS84(xy[0], xy[1], GEO_STEP_MAX, &hash);
         GeoHashFix52Bits bits = geohashAlign52Bits(hash);
-        robj *score = createObject(OBJ_STRING, sdsfromlonglong(bits));
+        robj *score = createStringObjectFromLongLongWithSds(bits);
         robj *val = c->argv[longidx + i * 3 + 2];
         argv[longidx+i*2] = score;
         argv[longidx+1+i*2] = val;
@@ -102,6 +106,79 @@ void geoaddCommand(client *c) {
     zaddCommand(c);
 }
 ```
+
+### geohashEncode：坐标 → 52 位 score
+
+GEOADD 把经纬度编码成 Geohash 的二进制位，再 `interleave64` 交错经纬度，得到 52 位整数作为 zset 的 score（范围受限 WGS84：-180..180 经度、-85..85 纬度）。
+
+```c
+int geohashEncode(const GeoHashRange *long_range, const GeoHashRange *lat_range,
+                  double longitude, double latitude, uint8_t step,
+                  GeoHashBits *hash) {
+    /* Check basic arguments sanity. */
+    if (hash == NULL || step > 32 || step == 0 ||
+        RANGEPISZERO(lat_range) || RANGEPISZERO(long_range)) return 0;
+
+    /* Return an error when trying to index outside the supported
+     * constraints. */
+    if (longitude > GEO_LONG_MAX || longitude < GEO_LONG_MIN ||
+        latitude > GEO_LAT_MAX || latitude < GEO_LAT_MIN) return 0;
+
+    hash->bits = 0;
+    hash->step = step;
+
+    if (latitude < lat_range->min || latitude > lat_range->max ||
+        longitude < long_range->min || longitude > long_range->max) {
+        return 0;
+    }
+
+    double lat_offset =
+        (latitude - lat_range->min) / (lat_range->max - lat_range->min);
+    double long_offset =
+        (longitude - long_range->min) / (long_range->max - long_range->min);
+
+    /* convert to fixed point based on the step size */
+    lat_offset *= (1ULL << step);
+    long_offset *= (1ULL << step);
+    hash->bits = interleave64(lat_offset, long_offset);
+    return 1;
+}
+
+int geohashEncodeWGS84(double longitude, double latitude, uint8_t step,
+                       GeoHashBits *hash) {
+    return geohashEncodeType(longitude, latitude, step, hash);
+}
+```
+
+### GEOHASH / GEOCODE：score → Geohash 字符串
+
+`geohashCommand`（GEOHASH）先从 zset 取 score，用 `decodeGeohash` 还原经纬度，再用标准 -90..90 纬度范围**重新编码**成合法 Geohash 字符串——因为内部用的是 -85..85 范围，不能直接输出。
+
+```c
+void geohashCommand(client *c) {
+    char *geoalphabet= "0123456789bcdefghjkmnpqrstuvwxyz";
+    int j;
+
+    /* Look up the requested zset */
+    kvobj *zobj = lookupKeyRead(c->db, c->argv[1]);
+    if (checkType(c, zobj, OBJ_ZSET)) return;
+
+    /* Geohash elements one after the other, using a null bulk reply for
+     * missing elements. */
+    addReplyArrayLen(c,c->argc-2);
+    for (j = 2; j < c->argc; j++) {
+        double score;
+        if (!zobj || zsetScore(zobj, c->argv[j]->ptr, &score) == C_ERR) {
+            addReplyNull(c);
+        } else {
+            /* Decode... */
+            double xy[2];
+            if (!decodeGeohash(score,xy)) {
+                addReplyNull(c);
+                continue;
+            }
+
+            /* Re-encode */
 
 
 
@@ -443,4 +520,6 @@ void georadiusGeneric(client *c, int srcKeyIndex, int flags) {
 
 ## References
 
-1. [Redis geospatial indexes](https://redis.io/docs/latest/develop/data-types/geospatial/)
+- <https://github.com/redis/redis/blob/8.10.2/src/geo.c>
+- <https://github.com/redis/redis/blob/8.10.2/src/geohash.c>
+- [Redis geospatial indexes](https://redis.io/docs/latest/develop/data-types/geospatial/)

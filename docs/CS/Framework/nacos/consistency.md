@@ -2,109 +2,320 @@
 
 ## Introduction
 
-Nacos 最容易被混淆的一点是：同一个组件里**服务发现默认 AP、配置管理却是 CP**。这不是两套独立产品，而是同一进程内两套一致性协议并存。理解它的钥匙，是 Nacos 的**一致性抽象层**——把「数据怎么存、怎么在节点间达成一致」从业务模块（naming / config）里抽出来，做成可插拔的协议能力。
+Nacos 最容易被误读的一点是：同一个进程里**服务发现默认 AP、配置管理却走 CP**——这不是两套产品拼装，而是同一套一致性抽象层上挂了两种可插拔协议。理解它的钥匙是 `core/distributed/ProtocolManager`：把「数据怎么存、怎么在节点间达成一致」从 naming / config 两个业务模块里抽出来，下沉成内核能力。
 
-> [!WARNING]
-> 本文早期版本详细讲解的「老 KV 层 `ConsistencyService`」（`DelegateConsistencyServiceImpl` / `EphemeralConsistencyService` / `DistroConsistencyServiceImpl` / `PersistentConsistencyServiceDelegateImpl` / `BasePersistentServiceProcessor` / `EmbeddedDistroProtocol` / `JRaftConsistencyServiceImpl` / `KeyBuilder.matchEphemeralKey`）**已在 3.x 整体移除**，仅作为历史保留在文末「历史」段。下面以 **3.2.4 源码**为准描述当前（3.x）模型。
+> 版本基线：Nacos 3.2.4（commit 2c587c0，Java 17 / Spring Boot 3）。以下片段均取自该 tag，路径为模块相对路径。
 
-当前 3.x 的一致性抽象只有**一套**还活在内核里：
+三个先要扭转的直觉：
 
-- **Core 层 `ConsistencyProtocol` / `ProtocolManager`**：协议接口下沉到内核（`core/distributed/`），`ProtocolManager` 选 `CPProtocol`(`JRaftProtocol`) / `APProtocol`(`DistroProtocol`)。这是 3.x 命名 Client 模型与配置模块的主路径，[Nacos](/docs/CS/Framework/nacos/Nacos.md) 的 `## Consistency` 已详述。
+- **不是非此即彼**：AP（Distro）与 CP（JRaft）在同一个 `ProtocolManager` 里并存，业务侧只依赖抽象、不碰实现。
+- **`LogProcessor4CP` 不是类型**：它是 `consistency/Config.java` 的 javadoc 与 `JRaftProtocol.java` ASCII 图里的概念名，全树没有一个叫这个名字的 Java 类；真正的状态机是 `NacosStateMachine`。
+- **两路协议都是懒加载**：第一次 `getApProtocol()` / `getCpProtocol()` 才初始化，且注入给两路的成员格式不同——AP 用 `address`，CP 用 `ip:raftPort`。
 
-## Core-layer Consistency Abstraction (current 3.x model)
+## The Abstraction: ConsistencyProtocol
 
-`ProtocolManager`（`core/distributed/ProtocolManager.java`）从 Spring 容器取 `APProtocol` / `CPProtocol` 两个 bean（包名分别在 `com.alibaba.nacos.consistency.ap` / `com.alibaba.nacos.consistency.cp`，即独立的 `consistency` 模块），分别对应：
-
-- **`APProtocol` → `DistroProtocol`**（`core/distributed/distro/DistroProtocol.java`）：命名临时实例的 AP 弱一致同步。
-- **`CPProtocol` → `JRaftProtocol`**（`core/distributed/raft/JRaftProtocol.java`）：持久实例 + 配置的 CP 强一致复制。
-
-Raft 侧的「状态机入口」在官方注释里沿用概念名 **`LogProcessor4CP`**（consistency 模块的 `Config.java` javadoc），**具体实现类是 `NacosStateMachine`**（`core/distributed/raft/NacosStateMachine.java`，配合 `RaftConfig` / `JRaftServer`）。配置与持久实例的写请求经 `JRaftProtocol` → Raft 日志复制 → `NacosStateMachine` 应用 → 落外部 DB（Derby / MySQL / PostgreSQL 插件）。
+一致性协议最基础的两个动作是「读」与「写」。`consistency` 是 3.x 独立出来的模块（包名 `com.alibaba.nacos.consistency`），它把协议契约定死在接口上，具体实现以 SPI 插件形式接入：
 
 ```java
-// core/distributed/ProtocolManager.java（3.x 真实结构）
-public class ProtocolManager extends MemberChangeListener implements DisposableBean {
-    private CPProtocol cpProtocol;   // 实际注入 JRaftProtocol
-    private APProtocol apProtocol;   // 实际注入 DistroProtocol
+public interface ConsistencyProtocol<T extends Config, P extends RequestProcessor>
+    extends CommandOperations {
 
-    public CPProtocol getCpProtocol() { /* initCPProtocol() */ }
-    public APProtocol getApProtocol() { /* initAPProtocol()  */ }
+    void init(T config);
+
+    void addRequestProcessors(Collection<P> processors);
+
+    ProtocolMetaData protocolMetaData();
+
+    Response getData(ReadRequest request) throws Exception;
+
+    CompletableFuture<Response> aGetData(ReadRequest request);
+
+    Response write(WriteRequest request) throws Exception;
+
+    CompletableFuture<Response> writeAsync(WriteRequest request);
+
+    void memberChange(Set<String> addresses);
+
+    boolean isReady();
+
+    void shutdown();
 }
 ```
 
-## Naming v2 Client Model: How AP/CP Splits
+在这个总接口之上，AP 与 CP 只是两个几乎空的标记子接口——差异体现在泛型参数（各自的 `Config` 与 `RequestProcessor` 子类型）与 CP 独有的 `isLeader()`：
 
-3.x 命名走 **v2 Client 模型**（`naming/core/v2/client/` 下的 `Client` 抽象与 `AbstractClient`）。ephemeral / persistent 的分流**不再依赖旧 `KeyBuilder.matchEphemeralKey`**（该方法在 3.x 已删除），而是由 Client 类型与 `isEphemeral()` 决定：
+```java
+public interface APProtocol<C extends Config, P extends RequestProcessor4AP>
+    extends ConsistencyProtocol<C, P> {
 
-- **临时实例**：归属 ephemeral client，写路径走 `DistroProtocol`（AP，写本地内存 `DataStore` + 异步 Distro 责任分片同步），靠心跳保活；心跳断了被摘除，重新上报再注册。
-- **持久实例**：归属 persistent client，写路径走 `JRaftProtocol`（CP，过 Raft 落 DB）。
+}
+```
 
-落到代码，操作服务分两套：`EphemeralClientOperationServiceImpl` / `PersistentClientOperationServiceImpl`（`naming/core/v2/service/impl/`），分别对 ephemeral / persistent client 做注册、心跳、订阅推送。这就是「双协议」在 3.x 的落点——比旧 KV 层的三行 `if-else` 更内聚，也让命名模块真正只充当计算层。
+```java
+public interface CPProtocol<C extends Config, P extends RequestProcessor4CP>
+    extends ConsistencyProtocol<C, P> {
+
+    boolean isLeader(String group);
+
+}
+```
+
+> [!WARNING]
+> `Config.java` 的 javadoc 写的是「Corresponding LogProcessor sub-interface: LogProcessor4AP or LogProcessor4CP」，但这只是设计文档概念。3.2.4 全树检索 `LogProcessor4CP` 只命中两处注释（`Config.java` 的 javadoc 与 `JRaftProtocol.java` 的 ASCII 架构图），**不存在对应的 Java 类型**。不要据此描述当前实现——CP 侧的 processor 是 `RequestProcessor4CP`，状态机是 `NacosStateMachine`。
+
+## ProtocolManager: Lazy Dual Protocol
+
+`core/distributed/ProtocolManager.java` 是最上层的协议开关，持有 `APProtocol` / `CPProtocol` 各一路，外加两把锁与两个 `volatile` 初始化标志：
+
+```java
+@Component(value = "ProtocolManager")
+public class ProtocolManager extends MemberChangeListener implements DisposableBean {
+
+    private CPProtocol cpProtocol;
+
+    private APProtocol apProtocol;
+
+    private final ServerMemberManager memberManager;
+
+    private volatile boolean apInit = false;
+
+    private volatile boolean cpInit = false;
+
+    private final Object cpLock = new Object();
+
+    private final Object apLock = new Object();
+```
+
+两路协议都是**双检锁懒加载**：第一次取用时才从 Spring 容器找实现、注入成员、初始化。CP 侧如下，AP 侧 `getApProtocol()` 完全对称：
+
+```java
+public CPProtocol getCpProtocol() {
+    if (!cpInit) {
+        synchronized (cpLock) {
+            if (!cpInit) {
+                initCPProtocol();
+                cpInit = true;
+            }
+        }
+    }
+    return cpProtocol;
+}
+```
+
+初始化时通过 `ClassUtils.resolveGenericType` 解析出协议实现声明的 `Config` 泛型类型，再从容器取对应 config bean，注入成员后调用 `protocol.init(config)`：
+
+```java
+private void initCPProtocol() {
+    ApplicationUtils.getBeanIfExist(CPProtocol.class, protocol -> {
+        Class configType = ClassUtils.resolveGenericType(protocol.getClass());
+        Config config = (Config) ApplicationUtils.getBean(configType);
+        injectMembers4CP(config);
+        protocol.init(config);
+        ProtocolManager.this.cpProtocol = protocol;
+    });
+}
+```
+
+注入给两路的成员**格式不同**——AP 用每个节点的 `address`（`ip:port`），CP 用 `ip:raftPort`（raft 端口 = 主端口 − 1000，由 `MemberUtil.calculateRaftPort` 计算）：
+
+```java
+public static Set<String> toAPMembersInfo(Collection<Member> members) {
+    Set<String> nodes = new HashSet<>();
+    members.forEach(member -> nodes.add(member.getAddress()));
+    return nodes;
+}
+
+public static Set<String> toCPMembersInfo(Collection<Member> members) {
+    Set<String> nodes = new HashSet<>();
+    members.forEach(member -> {
+        final String ip = member.getIp();
+        final int raftPort = MemberUtil.calculateRaftPort(member);
+        nodes.add(ip + ":" + raftPort);
+    });
+    return nodes;
+}
+```
+
+CP 的自成员地址取自 `MemberMetaDataConstants.RAFT_PORT` 扩展字段，AP 的自成员直接是 `getSelf().getAddress()`：
+
+```java
+private void injectMembers4CP(Config config) {
+    final Member selfMember = memberManager.getSelf();
+    final String self = selfMember.getIp() + ":" + Integer
+        .parseInt(String.valueOf(selfMember.getExtendVal(MemberMetaDataConstants.RAFT_PORT)));
+    Set<String> others = toCPMembersInfo(memberManager.allMembers());
+    config.setMembers(self, others);
+}
+
+private void injectMembers4AP(Config config) {
+    final String self = memberManager.getSelf().getAddress();
+    Set<String> others = toAPMembersInfo(memberManager.allMembers());
+    config.setMembers(self, others);
+}
+```
+
+### Members Change Is Serialized per Protocol
+
+集群成员变化时 `onEvent` 不直接调协议，而是经 `ProtocolExecutor` 的两个**独立单线程池**串行投递。源码注释明确说明：不同协议间的节点变更事件不能互相阻塞，且同一协议内的多次变更要串行，避免并发冲击一致性层：
+
+```java
+@Override
+public void onEvent(MembersChangeEvent event) {
+    // Here, the sequence of node change events is very important.
+    // Node change events between different protocols should not block each other.
+    // and we use a single thread pool to inform the consistency layer of node changes,
+    // to avoid multiple tasks simultaneously carrying out the consistency layer of
+    // node changes operation
+    if (Objects.nonNull(apProtocol)) {
+        ProtocolExecutor
+            .apMemberChange(() -> apProtocol.memberChange(toAPMembersInfo(event.getMembers())));
+    }
+    if (Objects.nonNull(cpProtocol)) {
+        ProtocolExecutor
+            .cpMemberChange(() -> cpProtocol.memberChange(toCPMembersInfo(event.getMembers())));
+    }
+}
+```
+
+```java
+public final class ProtocolExecutor {
+
+    private static final ExecutorService CP_MEMBER_CHANGE_EXECUTOR = ExecutorFactory.Managed
+        .newSingleExecutorService(ClassUtils.getCanonicalName(ProtocolManager.class));
+
+    private static final ExecutorService AP_MEMBER_CHANGE_EXECUTOR = ExecutorFactory.Managed
+        .newSingleExecutorService(ClassUtils.getCanonicalName(ProtocolManager.class));
+
+    public static void cpMemberChange(Runnable runnable) {
+        CP_MEMBER_CHANGE_EXECUTOR.execute(runnable);
+    }
+
+    public static void apMemberChange(Runnable runnable) {
+        AP_MEMBER_CHANGE_EXECUTOR.execute(runnable);
+    }
+}
+```
+
+## How Naming Splits AP vs CP
+
+3.x 命名走 v2 Client 模型，**不再依赖旧 `KeyBuilder.matchEphemeralKey`**（该方法在 3.x 已删除）。分流点是 `Instance.isEphemeral()`：对外的 `ClientOperationServiceProxy` 据此选择 ephemeral 或 persistent 的 operation service：
+
+```java
+private ClientOperationService chooseClientOperationService(final Instance instance) {
+    return instance.isEphemeral() ? ephemeralClientOperationService
+        : persistentClientOperationService;
+}
+```
+
+两条写路径的落点完全不同：
+
+- **临时实例（AP）**：注册 / 心跳写入内存中的 Client，随后由 `DistroClientDataProcessor` 监听 `ClientChangedEvent` 等事件，转发给 `DistroProtocol.sync()` 做异步同步；它甚至显式跳过非 ephemeral client：
+
+```java
+private void syncToAllServer(ClientEvent event) {
+    Client client = event.getClient();
+    if (isInvalidClient(client)) {
+        return;
+    }
+    if (event instanceof ClientEvent.ClientDisconnectEvent) {
+        DistroKey distroKey = new DistroKey(client.getClientId(), TYPE);
+        distroProtocol.sync(distroKey, DataOperation.DELETE);
+    } else if (event instanceof ClientEvent.ClientChangedEvent) {
+        DistroKey distroKey = new DistroKey(client.getClientId(), TYPE);
+        distroProtocol.sync(distroKey, DataOperation.CHANGE);
+    }
+}
+
+private boolean isInvalidClient(Client client) {
+    // Only ephemeral data sync by Distro, persist client should sync by raft.
+    return null == client || !client.isEphemeral();
+}
+```
+
+- **持久实例（CP）**：构造时直接取 `getCpProtocol()` 并把自身注册为 processor，注册实例时把请求序列化成 `WriteRequest` 走 `protocol.write()` 过 Raft：
+
+```java
+public PersistentClientOperationServiceImpl(final PersistentIpPortClientManager clientManager) {
+    this.clientManager = clientManager;
+    this.protocol = ApplicationUtils.getBean(ProtocolManager.class).getCpProtocol();
+    this.protocol.addRequestProcessors(Collections.singletonList(this));
+}
+```
+
+```java
+final WriteRequest writeRequest = WriteRequest.newBuilder().setGroup(group())
+    .setData(ByteString.copyFrom(serializer.serialize(request)))
+    .setOperation(DataOperation.ADD.name())
+    .build();
+
+try {
+    protocol.write(writeRequest);
+    Loggers.RAFT.info("Client registered. service={}, clientId={}, instance={}", service,
+        clientId, instance);
+} catch (Exception e) {
+    throw new NacosRuntimeException(NacosException.SERVER_ERROR, e);
+}
+```
 
 ```dot
-digraph persistent_3x {
-  rankdir=LR;
+digraph ConsistencySplit {
+  rankdir=TB;
   node [shape=box, style=rounded];
-  Ep [label="EphemeralClient\n(临时实例)"];
-  Pe [label="PersistentClient\n(持久实例)"];
-  D  [label="DistroProtocol (AP)\n内存 DataStore + 异步同步"];
-  R  [label="JRaftProtocol (CP)\nRaft 日志 + NacosStateMachine + DB"];
-  Ep -> D;
-  Pe -> R;
+
+  subgraph cluster_entry {
+    label="业务层 / Business";
+    proxy [label="ClientOperationServiceProxy\n按 isEphemeral() 分流"];
+    cfg [label="config 模块\n(无临时/持久之分)"];
+  }
+
+  subgraph cluster_core {
+    label="内核层 / ProtocolManager";
+    pm [label="ProtocolManager\n懒加载双检锁"];
+    ap [label="APProtocol\n→ DistroProtocol"];
+    cp [label="CPProtocol\n→ JRaftProtocol"];
+  }
+
+  subgraph cluster_store {
+    label="存储 / Storage";
+    mem [label="内存 DataStore\n(异步最终一致)"];
+    db [label="Raft 日志 + NacosStateMachine\n→ 外部 DB"];
+  }
+
+  proxy -> ap [label="临时实例"];
+  proxy -> cp [label="持久实例"];
+  cfg -> cp;
+  pm -> ap; pm -> cp;
+  ap -> mem;
+  cp -> db;
 }
 ```
 
 ## Config Side: Always CP
 
-配置（config）没有「临时/持久」之分，必须强一致，因此 **config 模块只接 `CPProtocol`（`JRaftProtocol`）**，不接 Distro。配置内容、灰度、标签、历史、租户、权限全部经 Raft 复制并落外部数据库（见 [Storage](/docs/CS/Framework/nacos/storage.md)）。
+配置（config）没有「临时 / 持久」之分，必须强一致，因此 config 模块只接 `CPProtocol`（`JRaftProtocol`），不接 Distro。配置内容、灰度、标签、历史、租户、权限全部经 Raft 复制并落外部数据库（见 [Storage](/docs/CS/Framework/nacos/storage.md)）。
 
-## Why AP + CP Can Coexist
+## Why AP and CP Coexist
 
-CAP 理论针对的是「**数据的一致性**」，不是「整个组件」。Nacos 把数据按性质拆开：
+CAP 理论针对的是**数据的一致性粒度**，不是整个组件。Nacos 把数据按性质拆开：
 
 - 命名的临时实例：允许短暂分歧、分区可独立响应 → AP（Distro）。
-- 命名的持久实例 + 配置：要求读己之写、全局有序、不丢 → CP（Raft/JRaft）。
+- 命名的持久实例 + 配置：要求读己之写、全局有序、不丢 → CP（JRaft）。
 
-两套一致性策略的**数据存储互不影响**——Distro 的内存注册表与 JRaft 的日志 + DB 各管各的，所以一个组件内 AP 与 CP 并存不矛盾。这正是 Eureka（纯 AP）和 ZooKeeper（纯 CP）做不到的。
+两套策略的**存储互不影响**——Distro 的内存注册表与 JRaft 的日志 + DB 各管各的，所以一个组件内 AP 与 CP 并存并不矛盾。这正是 Eureka（纯 AP）和 ZooKeeper（纯 CP）做不到的。etcd 全程 Raft、Zab 全程强一致，不需要分流；Nacos 是「注册中心 + 配置中心」合体，才需要把可用性留给注册发现、把可靠性留给配置。
 
-## Config Side vs Naming Side
-
-- **配置（config）**：全程走 `CPProtocol`（`JRaftProtocol`）+ MySQL。配置没有「临时/持久」之分，必须强一致，因此 config 模块不接 Distro。
-- **命名（naming）**：临时实例走 Distro，持久实例走 JRaft。3.x 的 Client 模型把 naming 的写路径接到 Core 层（`DistroProtocol` / `JRaftProtocol` + `NacosStateMachine`，官方注释称 `LogProcessor4CP`），「临时 vs 持久」的分流语义不变——持久实例仍映射到 JRaft。
-
-## Comparison with etcd-raft / Zab
-
-| 维度 | Nacos (3.x) | etcd | ZooKeeper |
-| :-- | :-- | :-- | :-- |
-| 一致性范围 | AP（命名临时）+ CP（命名持久/配置）并存 | 全程 CP | 全程 CP |
-| 协议 | Distro + JRaft | etcd-raft | Zab |
-| 分流点 | Client 类型 / `isEphemeral()` | 无（全 Raft） | 无（全 Zab） |
-| 内核抽象 | `ProtocolManager` → `APProtocol`/`CPProtocol` | — | — |
-| 存储 | Distro 内存 + Raft 日志/DB（`NacosStateMachine`） | bbolt | DataTree + txnlog/snapshot |
-
-etcd / ZK 不需要分流，因为它们是「通用协调底座」，所有数据都走同一强一致协议；Nacos 是「注册中心 + 配置中心」合体，把可用性（AP）留给注册发现、把可靠性（CP）留给配置。
-
-## History: Legacy KV Consistency Layer (<=2.1, removed in 3.x)
-
-> [!NOTE]
-> 以下为 **3.x 之前（主要是 1.x / 早期 2.x）** 的架构，列在此仅供追溯演进，**3.2.4 源码中这些类均已不存在**（已用 `git grep` 全树核实：`ConsistencyService` / `DelegateConsistencyServiceImpl` / `EphemeralConsistencyService` / `DistroConsistencyServiceImpl` / `PersistentConsistencyServiceDelegateImpl` / `BasePersistentServiceProcessor` / `EmbeddedDistroProtocol` / `JRaftConsistencyServiceImpl` / `KeyBuilder.matchEphemeralKey` 全部 0 命中）。
-
-早期 Nacos 在 naming 模块内嵌了一套以 key 为粒度的 KV 存储抽象 `ConsistencyService`：
-
-- `DelegateConsistencyServiceImpl`（bean 名 `consistencyDelegate`）按 key 路由：`KeyBuilder.matchEphemeralKey(key)` 命中则走 `EphemeralConsistencyService`（`DistroConsistencyServiceImpl`，AP），否则走 `PersistentConsistencyService`（CP）。
-- 持久侧早期是老 Raft（`RaftConsistencyServiceImpl`），2.x Client 模型后用 `PersistentConsistencyServiceDelegateImpl` 经 `switchNewPersistentService` 切到 `BasePersistentServiceProcessor`，它**组合** `EmbeddedDistroProtocol`（把持久实例也同步进 Distro 内存供读）+ `JRaftConsistencyServiceImpl`（过 Raft 写 DB）——即「双写」。
-
-这套实现与 naming 逻辑强耦合，难以做到计算存储分离，因此在 3.x 被彻底下沉为 Core 层 `ProtocolManager` + `DistroProtocol` / `JRaftProtocol`，naming 改为 v2 Client 模型。理解历史有助于读老文档/老 issue，但**不要把它当作 3.x 的现状**。
+> [!WARNING]
+> 早期文档里那套 naming 内的 KV 一致性层——`ConsistencyService` / `DelegateConsistencyServiceImpl` / `EphemeralConsistencyService` / `DistroConsistencyServiceImpl` / `PersistentConsistencyServiceDelegateImpl` / `BasePersistentServiceProcessor` / `EmbeddedDistroProtocol` / `JRaftConsistencyServiceImpl` / `KeyBuilder.matchEphemeralKey`——**在 3.2.4 全树 0 命中，已整体移除**。读老 issue / 老博客时会遇到它们，但不要当作 3.x 现状。
 
 ## Links
 
-- [Registry（Distro 事件驱动层）](/docs/CS/Framework/nacos/registry.md)
+- [Nacos](/docs/CS/Framework/nacos/Nacos.md)
 - [Distro（AP 协议深潜）](/docs/CS/Framework/nacos/distro.md)
 - [JRaft（CP 共识）](/docs/CS/Framework/nacos/jraft.md)
-- [etcd Raft](/docs/CS/Framework/etcd/raft.md)
+- [Storage](/docs/CS/Framework/nacos/storage.md)
 - [etcd 横向对照](/docs/CS/Framework/etcd/compare.md)
 
 ## References
 
-- <https://nacos.io/docs/latest/manual/admin/deployment/deployment-cluster/>
+- <https://github.com/alibaba/nacos/tree/3.2.4/consistency/src/main/java/com/alibaba/nacos/consistency>
 - <https://github.com/alibaba/nacos/tree/3.2.4/core/src/main/java/com/alibaba/nacos/core/distributed>
-- <https://github.com/alibaba/nacos/tree/3.2.4/naming/src/main/java/com/alibaba/nacos/naming/core/v2/client>
+- <https://nacos.io/docs/latest/manual/admin/deployment/deployment-cluster/>

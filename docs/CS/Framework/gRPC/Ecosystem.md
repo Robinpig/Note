@@ -1,79 +1,77 @@
+# gRPC Java Ecosystem: Interceptors, Discovery, Observability
+
 ## Introduction
 
-gRPC 内核只解决"一次调用怎么走完"。真正让它在生产里可用的是外围那一圈可插拔组件：拦截器负责横切逻辑，命名解析与负载均衡负责寻址，健康检查与反射负责运维接入，网关转译负责协议互通。这些能力大多由 gRFC（gRFC = gRPC 的设计文档流程）规范化，因此跨语言行为基本一致。
+gRPC 内核只解决"一次调用怎么走完"。真正让它在生产可用的是外围那圈可插拔组件：拦截器负责横切逻辑，命名解析与负载均衡负责寻址，健康检查与反射负责运维接入，网关转译负责协议互通。这些能力大多由 gRFC 规范化，跨语言行为基本一致，但**具体实现与目标字符串格式因语言而异**。本页以 grpc-java 1.75.0 为主。
+
+> 版本基线：grpc-java 1.75.0（commit 3abc0e6）。以下结论均按该 tag 源码核实。
+
+两个反直觉点：
+
+- **服务端 interceptor 越晚注册越靠内**：for 循环逐层包裹，最后注册的 interceptor 最接近业务 handler——与客户端拦截器方向相反。
+- **xDS 是"无 sidecar"网格**：gRPC 直接实现 Envoy 控制面协议，proxyless 接入，不需要 sidecar；但它是渐进特性，逐项核对成熟度。
 
 ## Interceptors
 
-拦截器是 gRPC 的中间件机制，等价于服务端框架的 Filter 链。它分两侧：
+拦截器是 gRPC 的中间件机制，等价于服务端框架的 Filter 链，分两侧：
 
-- **Client interceptor**：包裹 `Invoke`（unary）与 `NewStream`（stream），在请求发出前注入 metadata、在响应返回后处理状态。
-- **Server interceptor**：包裹 handler 执行，可做认证、日志、限流、panic 恢复。
+- **Client interceptor**：`ClientInterceptors.intercept(channel, interceptors)` 生成 `InterceptorChannel`，包裹 `newCall` 与 `start` / `sendMessage`，注入 metadata、处理状态。
+- **Server interceptor**：在 `ServerImpl.wrapMethod` 里逐层包裹 `ServerCallHandler`：
 
-典型注入点是认证凭据（把 token 写进 metadata 的 `authorization` 头）、链路追踪上下文传播，以及统一错误处理。链式写法下，拦截器按注册顺序嵌套，最外层最先执行。
+```java
+// core/src/main/java/io/grpc/internal/ServerImpl.java
+ServerCallHandler<ReqT, RespT> handler = methodDef.getServerCallHandler();
+for (ServerInterceptor interceptor : interceptors) {
+  handler = InternalServerInterceptors.interceptCallHandlerCreate(interceptor, handler);
+}
+ServerMethodDefinition<ReqT, RespT> interceptedDef = methodDef.withServerCallHandler(handler);
+```
+
+每轮用上一轮的 handler 包当前 interceptor，所以**最后注册的最内层**。典型注入点：认证 token、trace 上下文传播、限流、panic 恢复。
 
 > [!TIP]
->
-> 认证凭据在 gRPC 里分两种实现层次：`credentials.PerRPCCredentials` 用于每次调用都携带的 token；TLS 通道则由 `credentials.TransportCredentials` 负责。两者可以叠加，不要混用概念。
+> 认证凭据分两层：`CallCredentials`（每次调用携带 token，如 JWT / OAuth）与 TLS `ChannelCredentials`（传输层）。两者可叠加，不要混用概念。Java 侧 `credentials` 包提供 `CallCredentials` / `ChannelCredentials` 抽象类。
 
 ## Name Resolution
 
-命名解析把客户端给的目标字符串（如 `dns:///my-service:8080`）解析成一组后端地址。grpc-go 内置：
+命名解析把 target 字符串（如 `dns:///my-service:8080`）解析成后端地址 + service config。grpc-java 的 `NameResolverRegistry` 按 scheme 选 `NameResolverProvider`，内置常见实现：`dns`（DNS SRV/A/AAAA）、`unix`（Unix domain socket）、`passthrough`（原样透传）、`xds`（xDS 控制面）。
 
-| Resolver | scheme | 说明 |
-| :--- | :--- | :--- |
-| DNS | `dns:` | 查询 SRV / A / AAAA 记录，生产最常用 |
-| Passthrough | `passthrough:` | 原样传给 dialer，不做解析 |
-| Unix | `unix:` | Unix domain socket |
-| xDS | `xds:` | 从 xDS 控制面获取配置 |
-
-解析结果不是"地址列表"这么简单——现代 gRPC 里 resolver 还负责产出 **service config**，其中包含负载均衡策略、重试、超时等参数。这也是为什么自定义 resolver 比想象中复杂。
+解析结果 `ResolutionResult` 不只是地址列表——还带 service config（LB 策略、重试、超时参数）。这就是自定义 resolver 比想象中复杂的原因；完整链路见 [LoadBalancing](/docs/CS/Framework/gRPC/LoadBalancing.md)。
 
 ## Load Balancing Policies
 
-gRPC 的负载均衡默认在**客户端**完成，而不是靠代理。这是它与"Nginx/LB 转发"路线的根本差异：客户端自己知道后端列表，直接挑一个建连。
+gRPC 的负载均衡默认在**客户端**完成，与 Nginx/LB 转发路线的根本差异。Java 实现分模块：
 
-grpc-go v1.84.0 的 `balancer/` 下可见的策略实现：
-
-| 策略 | 包路径 | 用途 |
+| 策略 | 实现位置 | 用途 |
 | :--- | :--- | :--- |
-| pick_first | `balancer/pickfirst` | 挑第一个可用后端并粘住，默认策略 |
-| round_robin | `balancer/roundrobin` | 轮询，最通用的无状态分发 |
-| grpclb | `balancer/grpclb` | 外部负载均衡器查询（早期方案） |
-| weighted round robin | `balancer/weightedroundrobin` | 按后端上报的权重/负载加权轮询 |
-| weighted target | `balancer/weightedtarget` | 多集群/多目标按比例分流 |
-| least request | `balancer/leastrequest` | 挑活跃请求数最少的后端 |
-| ring hash | `balancer/ringhash` | 一致性哈希，需要会话黏滞时用 |
-| RLS | `balancer/rls` | 路由查找服务，按请求内容路由 |
-| endpoint sharding | `balancer/endpointsharding` | 按 endpoint 分片 |
+| pick_first | core `PickFirstLoadBalancer` | 默认；单 subchannel 顺序尝试全部地址 |
+| round_robin | util `RoundRobinLoadBalancer` | 轮询，随机起点 |
+| xds / ring_hash / grpclb 等 | gRPC Extensions / xds 模块 | 服务网格、一致性哈希、外部 LB |
 
-默认策略是 **pick_first**：它并不做真正的"均衡"，而是连上第一个成功解析到的地址就一直用，只有该连接失败才切换。多后端场景下想真正分摊负载，必须显式切到 `round_robin`。这是个高频踩坑点。
+默认 `pick_first` 不做真正"均衡"——连上第一个可用后端就一直用；多后端要显式切 `round_robin`。详见 [LoadBalancing](/docs/CS/Framework/gRPC/LoadBalancing.md)。
 
 ## xDS and Service Mesh
 
-xDS 是 Envoy 的控制面协议族（LDS / RDS / CDS / EDS 等），gRPC 直接实现了它，从而可以**无 sidecar** 接入服务网格 —— 这就是所谓的 "proxyless" 服务网格。
-
-在 grpc-go 里，xDS 相关实现位于 `internal/xds/balancer/`（`cdsbalancer`、`clusterimpl`、`clustermanager`），依赖 `github.com/envoyproxy/go-control-plane` 与 `github.com/cncf/xds/go`。从 grpc-java v1.84.0 的 changelog 也能看到 xDS 仍在持续演进：注入自定义 LDS 资源名解析器、支持用 `SocketAddresses` 构造 `XdsServerBuilder`、RLS 的 `stale_header_data` 缓存传播、WRR 的自定义指标名预解析等。
-
-需要留意的是，xDS 在 gRPC 里是**渐进特性**：不同语言、不同版本支持程度不同，生产接入前必须逐项核对 gRFC 的成熟度标记。
+xDS 是 Envoy 的控制面协议族（LDS / RDS / CDS / EDS 等）。gRPC 直接实现它，从而**无 sidecar** 接入服务网格（"proxyless"）。guava-java 侧相关实现位于 `xds/` 模块，依赖 envoy / cncf 的 xDS proto。xDS 是**渐进特性**：不同语言、版本支持程度不同，生产接入前逐项核对 gRFC 成熟度。
 
 ## Observability
 
-可观测性有三层，建议按需求取舍：
+可观测性三层：
 
-- **channelz**：gRPC 内建的通道/子通道自省服务，能查到连接状态、调用计数、socket 信息。排障利器，但不适合做长期指标存储。
-- **OpenTelemetry 集成**：grpc-go 直接依赖 `go.opentelemetry.io/otel`，把 trace/metric 接到标准生态。配合 [Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md) 等后端即可成型。
-- **stats handler**：更底层的事件钩子，可以拿到每次调用的连接、延迟、消息字节数。
+- **channelz**：gRPC 内建的 channel / subchannel 自省服务，查连接状态、调用计数、socket 信息。排障利器，不适合长期指标存储。
+- **OpenTelemetry / census**：Java 侧通过 `census` / OpenCensus 适配层接入 trace / metric，配合 [Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md) 等后端。
+- **stats handler**：底层事件钩子，拿每次调用的连接、延迟、消息字节数。
 
 ## Health Checking and Reflection
 
 两个官方标准服务，属于运维基础设施：
 
-- **`grpc.health.v1.Health`**：标准健康检查服务。Kubernetes 的 gRPC 探针、各类 LB 都认这个接口，不要自己另造一个 `/healthz`。
-- **服务端反射**（`grpc.reflection.v1alpha.ServerReflection`）：让客户端在**没有 `.proto` 文件**的情况下也能探测服务有哪些方法、消息结构如何。典型用途是 `grpcurl` 之类的调试工具——这也是应对 HTTP/2 二进制帧不可读的主要手段。生产环境是否开启要权衡信息暴露风险。
+- **`grpc.health.v1.Health`**：标准健康检查服务。Kubernetes gRPC 探针、各类 LB 都认这个接口，不要自己另造 `/healthz`。
+- **服务端反射**：`grpc.reflection.v1alpha.ServerReflection`，让客户端在**没有 `.proto` 文件**时探测服务有哪些方法、消息结构。典型用途是 `grpcurl` 调试——应对 HTTP/2 二进制帧不可读的主要手段。生产是否开启要权衡信息暴露风险。
 
 ## Transcoding and Gateway
 
-gRPC 的一大现实问题是浏览器和普通 HTTP 客户端不能直接调。`grpc-gateway` 是主流解法：在 `.proto` 里用 `google.api.http` 注解声明 HTTP 映射，代码生成器产出一个反向代理，把 HTTP/JSON 请求转成 gRPC 调用。
+gRPC 的现实问题：浏览器和普通 HTTP 客户端不能直接调。`grpc-gateway` 是主流解法——在 `.proto` 里用 `google.api.http` 注解声明 HTTP 映射，生成反向代理把 HTTP/JSON 转成 gRPC：
 
 ```protobuf
 service Messaging {
@@ -85,25 +83,22 @@ service Messaging {
 }
 ```
 
-这样一份实现同时对外提供 gRPC 与 RESTful 两种接口，避免了手写双份契约的同步成本。当前 grpc-gateway 版本线为 **v2.32.0**（2026-10），v2.29.0 起支持 Protobuf Edition 2024、v2.31.0 起支持 Edition 2026。
-
-与此相对，[RESTful](/docs/CS/Distributed/RPC/RESTful.md) 是以资源为中心的另一种交互风格，两者并非同一抽象层——gRPC 是 RPC 实现，REST 是架构风格，转译只是让它们在接口层共存。
+一份实现同时提供 gRPC 与 RESTful 两种接口。注意 [RESTful](/docs/CS/Distributed/RPC/RESTful.md) 是架构风格、gRPC 是 RPC 实现，两者不在同一抽象层——转译只是让它们在接口层共存。
 
 ## Links
 
-- [gRPC](/docs/CS/Framework/gRPC/gRPC.md) — 框架总览与版本基线
-- [gRPC Architecture](/docs/CS/Framework/gRPC/Architecture.md) — 帧映射与 codec
-- [gRPC Streaming](/docs/CS/Framework/gRPC/Streaming.md) — 流模式与流控
+- [gRPC](/docs/CS/Framework/gRPC/gRPC.md) — 枢纽：架构与纠偏
+- [LoadBalancing](/docs/CS/Framework/gRPC/LoadBalancing.md) — Resolver 与 LB 策略
+- [ManagedChannel](/docs/CS/Framework/gRPC/ManagedChannel.md) — Channel 状态机
+- [ServerCallChain](/docs/CS/Framework/gRPC/ServerCallChain.md) — 服务端 interceptor 包裹顺序
 - [Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md) — 链路追踪后端
-- [RESTful](/docs/CS/Distributed/RPC/RESTful.md) — 网关转译的目标风格
-- [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md) — Java 生态的服务治理路线对照
+- [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md) — Java 生态服务治理对照
 
 ## References
 
-1. [gRFC: gRPC Load Balancing](https://github.com/grpc/grpc/blob/master/doc/load-balancing.md)
-2. [gRFC: gRPC Name Resolution](https://github.com/grpc/grpc/blob/master/doc/naming.md)
-3. [gRFC: Health Checking Protocol](https://github.com/grpc/grpc/blob/master/doc/health-checking.md)
-4. [gRFC: Server Reflection Protocol](https://github.com/grpc/grpc/blob/master/doc/server-reflection.md)
-5. [grpc-gateway](https://github.com/grpc-ecosystem/grpc-gateway)
-6. [gRFC A24: Load Balancing Policy Configuration](https://github.com/grpc/grpc/blob/master/doc/service_config.md)
-7. [gRPC-Java v1.84.0 Released](https://groups.google.com/g/grpc-io/c/tndfJa2o8xs)
+- [grpc-java v1.75.0 ServerImpl.java](https://github.com/grpc/grpc-java/blob/v1.75.0/core/src/main/java/io/grpc/internal/ServerImpl.java)
+- [gRFC: gRPC Load Balancing](https://github.com/grpc/grpc/blob/master/doc/load-balancing.md)
+- [gRFC: Health Checking Protocol](https://github.com/grpc/grpc/blob/master/doc/health-checking.md)
+- [gRFC: Server Reflection Protocol](https://github.com/grpc/grpc/blob/master/doc/server-reflection.md)
+- [grpc-gateway](https://github.com/grpc-ecosystem/grpc-gateway)
+- [gRFC A24: Load Balancing Policy Configuration](https://github.com/grpc/grpc/blob/master/doc/service_config.md)

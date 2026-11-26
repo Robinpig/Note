@@ -3,6 +3,12 @@
 > [!NOTE]
 > 版本基线 **Redis 8.10.2**；本页机制若与其他版本口径冲突，以 [Redis 版本基线](/docs/CS/DB/Redis/Redis.md?id=version-baseline) 为准。
 
+三个容易理解错的点：
+
+- **淘汰策略是 10 种，不是 8 种**：8.6.0 起新增 `allkeys-lrm` / `volatile-lrm`，与 LRU 同用 `lru` 字段，但**只在写时更新时间戳**，读时不更新（`src/db.c` 注释原文：`LRM policy should NOT update timestamp on reads`）。
+- **`*-max-ziplist-*` 已是历史名字**：8.10.2 的权威配置名是 `hash-max-listpack-entries` / `zset-max-listpack-entries` / `list-max-listpack-size` 等，ziplist 名只在 `config.c` 里作为兼容别名保留。
+- **淘汰与过期是两条独立路径**：`evict.c` 管内存超限时的 `maxmemory-policy` 淘汰，`expire.c` 管 TTL 到期删除；前者由 `processCommand` 触发，后者由 `serverCron` 的主动过期循环触发。
+
 Redis 是从三个方面来优化内存使用的，分别是内存分配、内存回收，以及数据替换。
 首先，在内存分配方面，Redis 支持使用不同的内存分配器，包括 glibc 库提供的默认分配器 tcmalloc、第三方库提供的 jemalloc。Redis 把对内存分配器的封装实现在了 zmalloc.h/zmalloc.c。
 其次，在内存回收上，Redis 支持设置过期 key，并针对过期 key 可以使用不同删除策略，这部分代码实现在 expire.c 文件中。同时，为了避免大量 key 删除回收内存，会对系统性能产生影响，Redis 在 lazyfree.c 中实现了异步删除的功能，所以这样，我们就可以使用后台 IO 线程来完成删除，以避免对 Redis 主线程的影响。
@@ -180,14 +186,16 @@ The following policies are available:
 
 * **noeviction** : New values aren’t saved when memory limit is reached. When a database uses replication, this applies to the primary database
 * **allkeys-lru** : Keeps most recently used keys; removes least recently used (LRU) keys
+* **allkeys-lrm** : Keeps most recently *modified* keys; removes keys whose last write is oldest (8.6.0+)
 * **allkeys-lfu** : Keeps frequently used keys; removes least frequently used (LFU) keys
 * **volatile-lru** : Removes least recently used keys with the `expire` field set to `true`.
+* **volatile-lrm** : Removes least recently *modified* keys with the `expire` field set to `true` (8.6.0+).
 * **volatile-lfu** : Removes least frequently used keys with the `expire` field set to `true`.
 * **allkeys-random** : Randomly removes keys to make space for the new data added.
 * **volatile-random** : Randomly removes keys with `expire` field set to `true`.
 * **volatile-ttl** : Removes keys with `expire` field set to `true` and the shortest remaining time-to-live (TTL) value.
 
-The policies  **volatile-lru** ,  **volatile-lfu** ,  **volatile-random** , and **volatile-ttl** behave like **noeviction** if there are no keys to evict matching the prerequisites.
+The policies  **volatile-lru** ,  **volatile-lrm** ,  **volatile-lfu** ,  **volatile-random** , and **volatile-ttl** behave like **noeviction** if there are no keys to evict matching the prerequisites.
 
 In general as a rule of thumb:
 
@@ -222,6 +230,41 @@ int performEvictions(void)
 ```
 
 `evictionPoolPopulate` called by `performEvictions`
+
+### LRU vs LRM
+
+`lru` 与 `lrm` 共用 `redisObject.lru` 的 24 位时间戳，区别只在**什么时候刷新它**：
+
+- **LRU**：读命中时刷新，读和写都算"最近使用"。
+- **LRM**（Last Recently Modified，8.6.0 新增）：只在写路径刷新，读不刷新。
+
+`src/db.c` 的读路径判断直接写明了这一点：
+
+```c
+        if (!hasActiveChildProcess() && !(flags & LOOKUP_NOTOUCH)){
+            if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
+                updateLFU(val);
+            } else if (!(server.maxmemory_policy & MAXMEMORY_FLAG_LRM)) {
+                /* LRM policy should NOT update timestamp on reads. */
+                val->lru = LRU_CLOCK();
+            }
+        }
+```
+
+写路径则在 key 被修改时显式调用 `updateLRM()`：
+
+```c
+/* Update LRM when an object is modified. */
+void updateLRM(robj *o) {
+    if (o->refcount == OBJ_SHARED_REFCOUNT)
+        return;
+    if (server.maxmemory_policy & MAXMEMORY_FLAG_LRM) {
+        o->lru = LRU_CLOCK();
+    }
+}
+```
+
+所以 LRM 的淘汰候选排序只看最后一次**写入**时间，读得再多也不会把冷键救回来。`config.c` 的枚举表与 `server.h` 的 `MAXMEMORY_*` 宏里都能查到 `volatile-lrm` / `allkeys-lrm`；≤ 8.4 与 Valkey 都只有 8 种策略，没有 `lrm`。
 
 ### Memory Fragmentation
 
@@ -295,8 +338,9 @@ evict policy:
 #define MAXMEMORY_FLAG_LRU (1<<0)
 #define MAXMEMORY_FLAG_LFU (1<<1)
 #define MAXMEMORY_FLAG_ALLKEYS (1<<2)
+#define MAXMEMORY_FLAG_LRM (1<<3)
 #define MAXMEMORY_FLAG_NO_SHARED_INTEGERS \
-    (MAXMEMORY_FLAG_LRU|MAXMEMORY_FLAG_LFU)
+    (MAXMEMORY_FLAG_LRU|MAXMEMORY_FLAG_LFU|MAXMEMORY_FLAG_LRM)
 
 #define MAXMEMORY_VOLATILE_LRU ((0<<8)|MAXMEMORY_FLAG_LRU)
 #define MAXMEMORY_VOLATILE_LFU ((1<<8)|MAXMEMORY_FLAG_LFU)
@@ -306,6 +350,8 @@ evict policy:
 #define MAXMEMORY_ALLKEYS_LFU ((5<<8)|MAXMEMORY_FLAG_LFU|MAXMEMORY_FLAG_ALLKEYS)
 #define MAXMEMORY_ALLKEYS_RANDOM ((6<<8)|MAXMEMORY_FLAG_ALLKEYS)
 #define MAXMEMORY_NO_EVICTION (7<<8)
+#define MAXMEMORY_VOLATILE_LRM ((8<<8)|MAXMEMORY_FLAG_LRM)
+#define MAXMEMORY_ALLKEYS_LRM ((9<<8)|MAXMEMORY_FLAG_LRM|MAXMEMORY_FLAG_ALLKEYS)
 ```
 
 [redisObject](/docs/CS/DB/Redis/redisDb.md?id=redisobject) has `lru:LRU_BITS` and [update access time](/docs/CS/DB/Redis/redisDb.md?id=updatelfu)
@@ -1002,12 +1048,18 @@ Since Redis 2.2 many data types are optimized to use less space up to a certain 
 
 This is completely transparent from the point of view of the user and API. Since this is a CPU / memory trade off it is possible to tune the maximum number of elements and maximum element size for special encoded types using the following redis.conf directives.
 
+> [!WARNING]
+> 下面是 8.10.2 `config.c` 的真实配置名与默认值。`*-max-ziplist-*` 只是已废弃的兼容别名（第二参数），不再是权威名字；小对象编码早已从 ziplist 换成 listpack（`OBJ_ENCODING_LISTPACK`）。
+
 ```
-hash-max-ziplist-entries 512
-hash-max-ziplist-value 64
-zset-max-ziplist-entries 128
-zset-max-ziplist-value 64
+hash-max-listpack-entries 512
+hash-max-listpack-value 64
+zset-max-listpack-entries 128
+zset-max-listpack-value 64
 set-max-intset-entries 512
+set-max-listpack-entries 128
+set-max-listpack-value 64
+list-max-listpack-size -2
 ```
 
 Bit and byte level operations

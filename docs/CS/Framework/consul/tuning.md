@@ -8,9 +8,10 @@
 | :--- | :--- | :--- |
 | `raft_multiplier` | **5** | 把 Raft 节拍（心跳/选举超时）按倍数缩放。调小（如 1）更激进、故障切换更快，但吃更多 CPU/网络；跨高延迟 DC 可调大降低心跳开销 |
 | `raft_snapshot_threshold` | **16384**（1.1.0+） | 两次快照间最少提交条目。繁忙集群 IO 高可调大（减快照频率），但恢复 replay 更长、raft.db 更占空间 |
-| `raft_snapshot_interval` | 内部节拍（约 5s 一检） | 一般不动；与 threshold 共同决定快照频率 |
+| `raft_snapshot_interval` | **30s**（每 30s 检查一次） | 一般不动；与 threshold 共同决定快照频率 |
+| `raft_logstore.backend` | `wal`（新目录）/ `boltdb` | 2.x 新增 WAL 后端（`raft/wal` 目录，自动开日志校验）；已有 `raft.db` 时自动回退 BoltDB |
 
-`-data-dir` 必须放**低延迟磁盘**（WAL 同步写），且目录需支持文件锁（VirtualBox 共享盘不合适）。WAL 与快照同目录，建议单独挂载 SSD。
+`-data-dir` 必须放**低延迟磁盘**（WAL/BoltDB 同步写），且目录需支持文件锁（VirtualBox 共享盘不合适）。WAL/BoltDB 与快照同目录（`raft/`），建议单独挂载 SSD。2.x 的 WAL 目录为 `raft/wal`，日志校验默认每分钟一次。
 
 ## Serf / gossip
 
@@ -42,8 +43,11 @@
 - 读多写少、可容忍短暂陈旧的发现场景，开 agent 缓存（默认开启，走 stale 读）；
 - 需要强一致时显式 `?consistent` 或 SDK `AllowStale=false`。
 
-## HTTP Timeout (2.0 Change)
+## Anti-Entropy Pacing (Large Clusters)
 
+- 2.x 移除了旧的批量限流器，反熵全量同步按**集群规模 log2 分级 stagger**（`agent/ae/ae.go` 的 `scaleFactor`，阈值 128）——集群翻倍、同步间隔翻倍，无需手工调参；
+- 网络坐标上报由 client 自动按 `RateScaledInterval`（rate target 64、min 15s）自适应拉长间隔，server 端总限速 128 条/秒（`CoordinateUpdateBatchSize 128 × MaxBatches 5`，周期 5s）；
+- 阻塞查询默认等待 300s、硬上限 600s（`DefaultQueryTime`/`MaxQueryTime`），配合 2.0 提到 15 分钟的 HTTP 读超时，长轮询不再需要 hack。
 - 2.0.0 起 agent 默认 `read_timeout` / `write_timeout` 提到 **15 分钟**（原 30 秒），避免长轮询阻塞查询被超时打断；`read_header_timeout`（10s）与 `idle_timeout`（120s）仍防 Slowloris；
 - 均由 `http_config` 块可调，无需为长轮询单独 hack。
 
@@ -75,10 +79,11 @@
 
 ## Links
 
-- [Consul（架构与启动流程）](/docs/CS/Framework/consul/Consul.md)
+- [Consul（枢纽与架构）](/docs/CS/Framework/consul/Consul.md)
 - [配置参考](/docs/CS/Framework/consul/config.md)
 - [Raft（共识）](/docs/CS/Framework/consul/raft.md)
 - [Serf（成员发现）](/docs/CS/Framework/consul/serf.md)
+- [数据模型（反熵）](/docs/CS/Framework/consul/data_model.md)
 - [Security（安全）](/docs/CS/Framework/consul/security.md)
 - [Cluster（集群运维）](/docs/CS/Framework/consul/cluster.md)
 - [etcd tuning](/docs/CS/Framework/etcd/tuning.md)

@@ -1,30 +1,18 @@
 # Nacos Config Center
 
 ## Introduction
-Nacos 配置管理⼀致性协议分为两个大部分， 第⼀部分是 Server 间⼀致性协议， ⼀个是 SDK 与
-Server 的⼀致性协议， 配置作为分布式系统中非强⼀致数据， 在出现脑裂的时候可用性高于⼀致性，
-因此阿里配置中心是采用 AP ⼀致性协议。  
 
-Server 间的⼀致性协议
-有 DB 模式（读写分离架构）
-⼀致性的核心是 Server 与 DB 保持数据⼀致性， 从而保证 Server 数据⼀致； Server 之间都是对
-等的。 数据写任何⼀个 Server， 优先持久化， 持久化成功后异步通知其他节点到数据库中拉取最新
-配置值， 并且通知写入成功。  
+Nacos Config Center（配置中心子系统）回答一个问题：一份配置从控制台/API 发布后，如何落库、如何扩散到集群每个节点、又如何在毫秒级通知到成千上万个客户端。它与 [Service Registry](/docs/CS/Framework/nacos/registry.md) 同进程，却选了与命名临时实例相反的强一致路径。
 
-无 DB 模式
-Server 间采用 Raft 协议保证数据⼀致性  
+> 版本基线：Nacos 3.2.4（commit 2c587c0，Java 17 / Spring Boot 3）。以下片段均取自该 tag，行号不落正文。
 
+> [!WARNING]
+> 旧笔记开篇称「配置采用 **AP** 一致性协议，脑裂时可用性高于一致性」——**这是把命名临时实例（Distro/AP）的结论张冠李戴到了配置中心**。3.x 真相是：配置写入先落外部 DB（或走 JRaft 状态机），节点间靠「落库 + 变更通知 + dump」达成最终一致，客户端靠 MD5 比对拉新。它不是 Distro 那种纯内存 AP 协议。请以本页下述链路为准。
 
+配置的一致性要分两层看，二者机制完全不同：
 
-SDK 与 Server 的⼀致性协议
-SDK 与 Server ⼀致性协议的核心是通过 MD5 值是否⼀致， 如果不⼀致就拉取最新值  
-
-Nacos2.x升级成长链接模式， 配置变更， 启动建立长链接， 配置变更服务端推送变更配置列表， 然后 SDK 拉取配置更新， 因此通信效率大幅提升。  
-
-
-
-
-
+- **Server 间**：写先持久化到 DB（集群/MySQL 模式）；主写节点落库后，通过 gRPC 通知其它节点「某 dataId 变了」，各节点各自回 DB dump 到本地磁盘。单机 Derby 模式则依靠 JRaft 保证一致。Server 之间对等，都能接受写。
+- **SDK 与 Server**：3.x 建立 gRPC 长连接并**批量注册关心的 dataId**（`ConfigBatchListenRequest`）；发布后服务端只推「变更标识」（`ConfigChangeNotifyRequest`，仅 dataId/group/tenant），客户端内部再发 `ConfigQueryRequest` 拉回内容、比对 MD5 后回调 Listener。2.x 之前的 HTTP 长轮询已整体删除。
 
 从整体上Nacos服务端的配置存储分为三层：
 
@@ -37,7 +25,49 @@ Nacos2.x升级成长链接模式， 配置变更， 启动建立长链接， 配
 
 CacheItem在Nacos服务端对应一个配置文件，缓存了配置的md5，持有一把读写锁控制访问冲突。
 
+### Publish Pipeline
 
+一次配置发布横跨「控制台 → DB → 落盘 → 集群扩散 → 客户端推送 → 回拉」六段。先把主链路画出来，后面各节逐一展开（注意推给客户端的只是「变更标识」，内容要靠客户端回拉）：
+
+```dot
+digraph ConfigFlow {
+  rankdir=TB;
+  node [shape=box, style=rounded];
+
+  subgraph cluster_publish {
+    label="发布侧 / server write";
+    ctl [label="ConfigControllerV3\n publishConfig"];
+    op [label="ConfigOperationService\n beta/tag → gray 统一"];
+    db [label="config_info / config_info_gray\n (外部 DB 或 JRaft)"];
+    evt [label="ConfigDataChangeEvent"];
+  }
+
+  subgraph cluster_dump {
+    label="落盘与集群扩散 / server";
+    async [label="AsyncNotifyService\n gRPC 通知其它节点"];
+    dumpsvc [label="DumpService → DumpProcessor\n → DumpConfigHandler"];
+    disk [label="data/config-data/{group}/{dataId}\n + ConfigCacheService.md5"];
+    local [label="LocalDataChangeEvent"];
+  }
+
+  subgraph cluster_push {
+    label="客户端推送 / gRPC";
+    ctx [label="ConfigChangeListenContext\ngroupKey → connections"];
+    push [label="RpcConfigChangeNotifier\nConfigChangeNotifyRequest\n(仅标识)"];
+    client [label="ClientWorker\n置 receiveNotifyChanged"];
+    query [label="ConfigQueryRequest\n回拉内容 + 比对 MD5"];
+    cb [label="Listener.receiveConfigInfo"];
+  }
+
+  ctl -> op -> db -> evt;
+  evt -> async [label="节点间 gRPC"];
+  evt -> dumpsvc [label="本节点"];
+  async -> dumpsvc [label="远端节点 dump"];
+  dumpsvc -> disk -> local;
+  local -> ctx -> push -> client;
+  client -> query -> cb;
+}
+```
 
 > [!WARNING]
 > 下面这版 `CacheItem`（`md5` / `lastModifiedTs` / `isBeta` / `md54Beta`）是 **2.x 形态**。
@@ -279,14 +309,14 @@ if (event instanceof ConfigDataChangeEvent) {
 
 
 
-```java
+3.2.4 的 `RpcConfigChangeNotifier` 签名已简化为 `(groupKey, dataId, group, tenant)`——**没有 `isBeta` / `betaIps` / `tag`，也没有 tag 比对分支**：灰度选择下推到了服务端 `ConfigCacheService.isUptodate` 与客户端 connection meta，`ConfigChangeNotifyRequest` 本身只携带 dataId/group/tenant 三个标识：
 
+```java
 @Component(value = "rpcConfigChangeNotifier")
 public class RpcConfigChangeNotifier extends Subscriber<LocalDataChangeEvent> {
 
- public void configDataChanged(String groupKey, String dataId, String group, String tenant, boolean isBeta,
-            List<String> betaIps, String tag) {
-        
+    public void configDataChanged(String groupKey, String dataId, String group, String tenant) {
+
         Set<String> listeners = configChangeListenContext.getListeners(groupKey);
         if (CollectionUtils.isEmpty(listeners)) {
             return;
@@ -297,26 +327,39 @@ public class RpcConfigChangeNotifier extends Subscriber<LocalDataChangeEvent> {
             if (connection == null) {
                 continue;
             }
-            
+            boolean ifNamespaceTransfer = configChangeListenContext
+                .getConfigListenState(client, groupKey).isNamespaceTransfer();
+            if (ifNamespaceTransfer) {
+                tenant = null;
+            }
             ConnectionMeta metaInfo = connection.getMetaInfo();
             String clientIp = metaInfo.getClientIp();
-            String clientTag = metaInfo.getTag();
-            
-            //tag check
-            if (StringUtils.isNotBlank(tag) && !tag.equals(clientTag)) {
-                continue;
-            }
-            
-            ConfigChangeNotifyRequest notifyRequest = ConfigChangeNotifyRequest.build(dataId, group, tenant);
-            
+
+            ConfigChangeNotifyRequest notifyRequest =
+                ConfigChangeNotifyRequest.build(dataId, group, tenant);
+
             RpcPushTask rpcPushRetryTask = new RpcPushTask(notifyRequest,
-                    ConfigCommonConfig.getInstance().getMaxPushRetryTimes(), client, clientIp, metaInfo.getAppName());
+                ConfigCommonConfig.getInstance().getMaxPushRetryTimes(), client, clientIp,
+                metaInfo.getAppName());
             push(rpcPushRetryTask, connectionManager);
             notifyClientCount++;
         }
         Loggers.REMOTE_PUSH.info("push [{}] clients, groupKey=[{}]", notifyClientCount, groupKey);
     }
+
+    @Override
+    public void onEvent(LocalDataChangeEvent event) {
+        String groupKey = event.groupKey;
+        String[] strings = GroupKey.parseKey(groupKey);
+        String dataId = strings[0];
+        String group = strings[1];
+        String tenant = strings.length > 2 ? strings[2] : "";
+        configDataChanged(groupKey, dataId, group, tenant);
+    }
+}
 ```
+
+反直觉点：`LocalDataChangeEvent` 里也只有 `groupKey`，没有内容；`onEvent` 现场把它拆成 dataId/group/tenant 再拼成 `ConfigChangeNotifyRequest`。**推给客户端的永远只是「哪个 dataId 变了」，不含新值**——客户端收到后要自己回拉（见 `Config Refresh` 一节）。
 
 
 
@@ -326,100 +369,116 @@ public class RpcConfigChangeNotifier extends Subscriber<LocalDataChangeEvent> {
 ### dump
 
 
+> [!WARNING]
+> Nacos 2.x 的 `dumpOperate(DumpProcessor, DumpAllProcessor, DumpAllBetaProcessor, DumpAllTagProcessor)` 依赖 `DumpAllBetaProcessor` / `DumpAllTagProcessor` / `BETA_TABLE_NAME` / `DiskUtil.clearAllBeta()` / `DiskUtil.clearAllTag()` 这一整套 beta/tag 灰度 processor，这些类在 3.2.4 中已删除；beta 与 tag 灰度被统一的 **gray 灰度**（数据库表 `config_info_gray` / `ConfigInfoGrayPersistService`，磁盘处理器 `DumpAllGrayProcessor`，任务 `DumpAllGrayTask`）取代，`dumpOperate()` 也已变为无参方法。下方给出 3.2.4 的真实实现，请勿再把已删除的 beta/tag processor 当作现行代码。
+
 ```java
-protected void dumpOperate(DumpProcessor processor, DumpAllProcessor dumpAllProcessor,
-            DumpAllBetaProcessor dumpAllBetaProcessor, DumpAllTagProcessor dumpAllTagProcessor) throws NacosException {
-        String dumpFileContext = "CONFIG_DUMP_TO_FILE";
-        TimerContext.start(dumpFileContext);
-        try {
-            LogUtil.DEFAULT_LOG.warn("DumpService start");
-            
-            Runnable dumpAll = () -> dumpAllTaskMgr.addTask(DumpAllTask.TASK_ID, new DumpAllTask());
-            
-            Runnable dumpAllBeta = () -> dumpAllTaskMgr.addTask(DumpAllBetaTask.TASK_ID, new DumpAllBetaTask());
-            
-            Runnable dumpAllTag = () -> dumpAllTaskMgr.addTask(DumpAllTagTask.TASK_ID, new DumpAllTagTask());
-            
-            Runnable clearConfigHistory = () -> {
-                LOGGER.warn("clearConfigHistory start");
-                if (canExecute()) {
-                    try {
-                        Timestamp startTime = getBeforeStamp(TimeUtils.getCurrentTime(), 24 * getRetentionDays());
-                        int pageSize = 1000;
-                        LOGGER.warn("clearConfigHistory, getBeforeStamp:{}, pageSize:{}", startTime, pageSize);
-                        persistService.removeConfigHistory(startTime, pageSize);
-                    } catch (Throwable e) {
-                        LOGGER.error("clearConfigHistory error : {}", e.toString());
-                    }
-                }
-            };
-            
-            try {
-                dumpConfigInfo(dumpAllProcessor);
-                
-                // update Beta cache
-                LogUtil.DEFAULT_LOG.info("start clear all config-info-beta.");
-                DiskUtil.clearAllBeta();
-                if (persistService.isExistTable(BETA_TABLE_NAME)) {
-                    dumpAllBetaProcessor.process(new DumpAllBetaTask());
-                }
-                // update Tag cache
-                LogUtil.DEFAULT_LOG.info("start clear all config-info-tag.");
-                DiskUtil.clearAllTag();
-                if (persistService.isExistTable(TAG_TABLE_NAME)) {
-                    dumpAllTagProcessor.process(new DumpAllTagTask());
-                }
-                
-                // add to dump aggr
-                List<ConfigInfoChanged> configList = persistService.findAllAggrGroup();
-                if (configList != null && !configList.isEmpty()) {
-                    total = configList.size();
-                    List<List<ConfigInfoChanged>> splitList = splitList(configList, INIT_THREAD_COUNT);
-                    for (List<ConfigInfoChanged> list : splitList) {
-                        MergeAllDataWorker work = new MergeAllDataWorker(list);
-                        work.start();
-                    }
-                    LOGGER.info("server start, schedule merge end.");
-                }
-            } catch (Exception e) {
-                LogUtil.FATAL_LOG
-                        .error("Nacos Server did not start because dumpservice bean construction failure :\n" + e);
-                throw new NacosException(NacosException.SERVER_ERROR,
-                        "Nacos Server did not start because dumpservice bean construction failure :\n" + e.getMessage(),
-                        e);
-            }
-            if (!EnvUtil.getStandaloneMode()) {
-                Runnable heartbeat = () -> {
-                    String heartBeatTime = TimeUtils.getCurrentTime().toString();
-                    // write disk
-                    try {
-                        DiskUtil.saveHeartBeatToDisk(heartBeatTime);
-                    } catch (IOException e) {
-                        LogUtil.FATAL_LOG.error("save heartbeat fail" + e.getMessage());
-                    }
-                };
-                
-                ConfigExecutor.scheduleConfigTask(heartbeat, 0, 10, TimeUnit.SECONDS);
-                
-                long initialDelay = new Random().nextInt(INITIAL_DELAY_IN_MINUTE) + 10;
-                LogUtil.DEFAULT_LOG.warn("initialDelay:{}", initialDelay);
-                
-                ConfigExecutor.scheduleConfigTask(dumpAll, initialDelay, DUMP_ALL_INTERVAL_IN_MINUTE, TimeUnit.MINUTES);
-                
-                ConfigExecutor
-                        .scheduleConfigTask(dumpAllBeta, initialDelay, DUMP_ALL_INTERVAL_IN_MINUTE, TimeUnit.MINUTES);
-                
-                ConfigExecutor
-                        .scheduleConfigTask(dumpAllTag, initialDelay, DUMP_ALL_INTERVAL_IN_MINUTE, TimeUnit.MINUTES);
-            }
-            
-            ConfigExecutor.scheduleConfigTask(clearConfigHistory, 10, 10, TimeUnit.MINUTES);
-        } finally {
-            TimerContext.end(dumpFileContext, LogUtil.DUMP_LOG);
-        }
-        
+/**
+ * config history clear.
+ */
+class DumpAllProcessorRunner implements Runnable {
+
+    @Override
+    public void run() {
+        dumpAllTaskMgr.addTask(DumpAllTask.TASK_ID, new DumpAllTask());
     }
+}
+
+/**
+ * dump all gray processor runner.
+ */
+class DumpAllGrayProcessorRunner implements Runnable {
+
+    @Override
+    public void run() {
+        dumpAllTaskMgr.addTask(DumpAllGrayTask.TASK_ID, new DumpAllGrayTask());
+    }
+}
+
+protected void dumpOperate() throws NacosException {
+    String dumpFileContext = "CONFIG_DUMP_TO_FILE";
+    TimerContext.start(dumpFileContext);
+    try {
+        LogUtil.DEFAULT_LOG.warn("DumpService start");
+
+        Timestamp currentTime = new Timestamp(System.currentTimeMillis());
+
+        try {
+            dumpAllConfigInfoOnStartup(dumpAllProcessor);
+            dumpAllGrayConfigInfoOnStartup(dumpAllGrayProcessor);
+        } catch (Exception e) {
+            LogUtil.FATAL_LOG.error(
+                "Nacos Server did not start because dumpservice bean construction failure :\n"
+                    + e);
+            throw new NacosException(NacosException.SERVER_ERROR,
+                "Nacos Server did not start because dumpservice bean construction failure :\n"
+                    + e.getMessage(),
+                e);
+        }
+        if (!EnvUtil.getStandaloneMode()) {
+
+            long initialDelay =
+                ThreadLocalRandom.current().nextInt(INITIAL_DELAY_IN_MINUTE) + 10;
+            LogUtil.DEFAULT_LOG.warn("initialDelay:{}", initialDelay);
+
+            ConfigExecutor.scheduleConfigTask(new DumpAllProcessorRunner(), initialDelay,
+                DUMP_ALL_INTERVAL_IN_MINUTE, TimeUnit.MINUTES);
+            ConfigExecutor.scheduleConfigTask(new DumpAllGrayProcessorRunner(), initialDelay,
+                DUMP_ALL_INTERVAL_IN_MINUTE, TimeUnit.MINUTES);
+
+            ConfigExecutor.scheduleConfigChangeTask(
+                new DumpChangeConfigWorker(this.configInfoPersistService,
+                    this.historyConfigInfoPersistService,
+                    this.configMigrateService,
+                    currentTime),
+                ThreadLocalRandom.current()
+                    .nextInt((int) PropertyUtil.getDumpChangeWorkerInterval()),
+                TimeUnit.MILLISECONDS);
+            ConfigExecutor.scheduleConfigChangeTask(
+                new DumpChangeGrayConfigWorker(this.configInfoGrayPersistService, currentTime,
+                    this.historyConfigInfoPersistService, this.configMigrateService),
+                ThreadLocalRandom.current()
+                    .nextInt((int) PropertyUtil.getDumpChangeWorkerInterval()),
+                TimeUnit.MILLISECONDS);
+        }
+
+        HistoryConfigCleaner cleaner = HistoryConfigCleanerManager.getHistoryConfigCleaner(
+            HistoryConfigCleanerConfig.getInstance().getActiveHistoryConfigCleaner());
+        ConfigExecutor.scheduleConfigTask(new ConfigHistoryClear(cleaner), 10, 10,
+            TimeUnit.MINUTES);
+
+    } finally {
+        TimerContext.end(dumpFileContext, LogUtil.DUMP_LOG);
+    }
+
+}
+
+private void dumpAllConfigInfoOnStartup(DumpAllProcessor dumpAllProcessor) {
+
+    try {
+        LogUtil.DEFAULT_LOG.info("start clear all config-info.");
+        ConfigDiskServiceFactory.getInstance().clearAll();
+        dumpAllProcessor.process(new DumpAllTask(true));
+    } catch (Exception e) {
+        LogUtil.FATAL_LOG.error("dump config fail" + e.getMessage());
+        throw e;
+    }
+}
+
+private void dumpAllGrayConfigInfoOnStartup(DumpAllGrayProcessor dumpAllGrayProcessor) {
+    try {
+        LogUtil.DEFAULT_LOG.info("start to clear all gray-config-info on startup.");
+        ConfigDiskServiceFactory.getInstance().clearAllGray();
+        dumpAllGrayProcessor.process(new DumpAllGrayTask());
+    } catch (Exception e) {
+        LogUtil.FATAL_LOG
+            .error("failed to dump all gray-config-info on startup." + e.getMessage());
+        throw e;
+    }
+}
 ```
+
+以上片段来自 `config/src/main/java/com/alibaba/nacos/config/server/service/dump/DumpService.java`，涉及 `dumpOperate()`、`DumpAllProcessorRunner`、`DumpAllGrayProcessorRunner`、`dumpAllConfigInfoOnStartup()` 与 `dumpAllGrayConfigInfoOnStartup()`。
 
 
 ```java
@@ -781,39 +840,77 @@ public class ClientWorker implements Closeable {
      * groupKey -> cacheData.
      */
     private final AtomicReference<Map<String, CacheData>> cacheMap =
-            new AtomicReference<>(new HashMap<>());
+        new AtomicReference<>(new HashMap<>());
 
     private final ConfigFilterChainManager configFilterChainManager;
+
+    private final ConfigFuzzyWatchGroupKeyHolder configFuzzyWatchGroupKeyHolder;
 
     /** 3.x：传输层统一为 gRPC，不再是 HttpAgent。 */
     private final ConfigRpcTransportClient agent;
 
     public ClientWorker(final ConfigFilterChainManager configFilterChainManager,
-            ConfigServerListManager serverListManager, final NacosClientProperties properties)
-            throws NacosException {
+        ConfigServerListManager serverListManager, final NacosClientProperties properties)
+        throws NacosException {
         this.configFilterChainManager = configFilterChainManager;
-
         init(properties);
-
         agent = new ConfigRpcTransportClient(properties, serverListManager);
-
         configFuzzyWatchGroupKeyHolder = new ConfigFuzzyWatchGroupKeyHolder(agent, uuid);
-
         ThreadPoolExecutor executor = instantiateClientExecutor(properties);
         agent.setExecutor(executor);
-
         agent.start();
         configFuzzyWatchGroupKeyHolder.start();
     }
+}
+```
 
-    public void addTenantListeners(String dataId, String group, List<? extends Listener> listeners)
-            throws NacosException {
-        // 监听注册到 cacheMap 里的 CacheData，变更由 agent 推送驱动
+收到服务端推送后，客户端**只标记脏、不更新内容**——`handleConfigChangeNotifyRequest` 把对应 `CacheData` 的 `receiveNotifyChanged` 置真、`consistentWithServer` 置假，再唤醒监听线程：
+
+```java
+ConfigChangeNotifyResponse handleConfigChangeNotifyRequest(
+    ConfigChangeNotifyRequest configChangeNotifyRequest,
+    String clientName) {
+    LOGGER.info("[{}] [server-push] config changed. dataId={}, group={},tenant={}",
+        clientName,
+        configChangeNotifyRequest.getDataId(), configChangeNotifyRequest.getGroup(),
+        configChangeNotifyRequest.getTenant());
+    String groupKey = GroupKey.getKeyTenant(configChangeNotifyRequest.getDataId(),
+        configChangeNotifyRequest.getGroup(), configChangeNotifyRequest.getTenant());
+
+    CacheData cacheData = cacheMap.get().get(groupKey);
+    if (cacheData != null) {
+        synchronized (cacheData) {
+            cacheData.getReceiveNotifyChanged().set(true);
+            cacheData.setConsistentWithServer(false);
+            notifyListenConfig();
+        }
     }
+    return new ConfigChangeNotifyResponse();
+}
+```
 
-    /** 3.x 新增：模糊监听（按 dataId/group 模式匹配）。 */
-    public ConfigFuzzyWatchContext addTenantFuzzyWatcher(String dataIdPattern, String groupPattern,
-            List<? extends Listener> listeners) { ... }
+真正的内容拉取走 `ConfigQueryRequest`，成功后写本地快照并回填 md5，再由上层比对触发 Listener：
+
+```java
+ConfigResponse queryConfigInner(RpcClient rpcClient, String dataId, String group,
+    String tenant,
+    long readTimeouts, boolean notify) throws NacosException {
+    ConfigQueryRequest request = ConfigQueryRequest.build(dataId, group, tenant);
+    request.putHeader(NOTIFY_HEADER, String.valueOf(notify));
+
+    ConfigQueryResponse response =
+        (ConfigQueryResponse) requestProxy(rpcClient, request, readTimeouts);
+
+    ConfigResponse configResponse = new ConfigResponse();
+    if (response.isSuccess()) {
+        LocalConfigInfoProcessor.saveSnapshot(this.getName(), dataId, group, tenant,
+            response.getContent());
+        configResponse.setContent(response.getContent());
+        configResponse.setMd5(response.getMd5());
+        // ... 推断 configType、处理 encryptedDataKey
+        return configResponse;
+    }
+    // ... 失败分支读本地快照 / 抛异常
 }
 ```
 
@@ -1075,19 +1172,29 @@ public static boolean configDump(ConfigDumpEvent event) {
 
 ## Summary
 
-1. use ScheduledThreadPool.scheduleWithFixedDelay and longPoll
+以 3.2.4 为准，配置中心的完整链路可归纳为：
+
+1. **发布**：`ConfigOperationService.publishConfig` 写 DB（`config_info` / `config_info_gray`，beta/tag 统一为 gray），成功后发 `ConfigDataChangeEvent`。
+2. **扩散与落盘**：`AsyncNotifyService` 通过 gRPC 通知其它节点；各节点 `DumpService → DumpProcessor → DumpConfigHandler` 从 DB 回读、写本地磁盘 `data/config-data/{group}/{dataId}`，并更新 `ConfigCacheService` 的 md5、发 `LocalDataChangeEvent`。
+3. **推送**：`RpcConfigChangeNotifier` 查 `ConfigChangeListenContext` 的订阅连接，推 `ConfigChangeNotifyRequest`（仅 dataId/group/tenant 标识）。
+4. **回拉**：客户端 `ClientWorker` 标记脏后发 `ConfigQueryRequest` 拉内容、比对 md5、回调 Listener。**全程无 HTTP 长轮询**。
 
 > [!WARNING]
-> 这条小结是 **2.0 之前**的结论。以 3.2.4 为准应为：
-> ① **客户端不再长轮询**——`LongPollingRunnable` / `checkConfigInfo` / `checkUpdateDataIds` 已删除，改由 gRPC 长连接接收服务端 `ConfigChangeNotifyRequest` 推送；
+> 旧的「use ScheduledThreadPool.scheduleWithFixedDelay and longPoll」小结是 **2.0 之前**的结论，已废弃：
+> ① **客户端不再长轮询**——`LongPollingRunnable` / `checkConfigInfo` / `checkUpdateDataIds` 已删除（`configs/listener` 的 HTTP 长轮询路由 0 命中，`ConfigControllerV3` 里残留的 `GET /listener` 是「查询订阅该配置的客户端」的运维端点，不是监听接口）；
 > ② **服务端仍保留 `scheduleWithFixedDelay`**——`NacosDelayTaskExecuteEngine` 处理 dump 任务，`DumpService` 的 `DUMP_ALL_INTERVAL_IN_MINUTE = 6 * 60`（每 6 小时全量 dump 一次）依然成立；
 > ③ **节点间通知只剩 gRPC**——HTTP 的 `/dataChange` 回调端点已移除。
+> ④ **dump 路径无 `worker_${port}`**——3.2.4 的落盘目录是 `${nacos.home}/data/config-data/{group}/{dataId}`（见 `ConfigRawDiskService.targetFile`），`worker_${port}` 子目录是 2.x 形态。
 
 
 
 ## Links
 
 - [Nacos](/docs/CS/Framework/nacos/Nacos.md)
+- [Nacos Service Registry](/docs/CS/Framework/nacos/registry.md)
+- [Nacos Storage and Persistence](/docs/CS/Framework/nacos/storage.md)
+- [Nacos Client SDK and Best Practices](/docs/CS/Framework/nacos/client.md)
+- [Nacos Config Push](/docs/CS/Framework/nacos/config-push.md)
 
 
 ## References

@@ -1,6 +1,38 @@
 ## Introduction
 
-cc-haha 的核心卖点之一是 **BYO 模型（Bring Your Own Model）**：不锁定任何厂商。模型清单与供应商由**服务端配置驱动**（不是硬编码在客户端），客户端 `modelsApi` 只负责向本地服务端请求 `/api/models`、当前 provider、目录与 effort 等级（`desktop/src/api/models.ts:9-34`）。这与 [OpenCode](/docs/CS/AI/LLM/Agent/Product/OpenCode/OpenCode.md) / [Pi](/docs/CS/AI/LLM/Agent/Product/Pi/Pi.md) 的「模型无关」路线一致，但 cc-haha 额外内置了多家厂商的登录与预设。
+cc-haha 的核心卖点之一是 **BYO 模型（Bring Your Own Model）**：不锁定任何厂商。模型清单与供应商由**服务端配置驱动**（不是硬编码在客户端），客户端 `modelsApi` 只负责向本地服务端请求 `/api/models`、当前 provider、目录与 effort 等级（`desktop/src/api/models.ts`）。这与 [OpenCode](/docs/CS/AI/LLM/Agent/Product/OpenCode/OpenCode.md) / [Pi](/docs/CS/AI/LLM/Agent/Product/Pi/Pi.md) 的「模型无关」路线一致，但 cc-haha 额外内置了多家厂商的登录与预设。
+
+`modelsApi` 的全部方法原样摘自 `desktop/src/api/models.ts`：
+
+```ts
+export const modelsApi = {
+  list() {
+    return api.get<ModelsResponse>('/api/models')
+  },
+
+  /** Models one built-in OAuth provider's account offers, whether or not it is the active provider. */
+  catalog(providerId: string, options?: { forceRefresh?: boolean }) {
+    const refresh = options?.forceRefresh ? '&refresh=true' : ''
+    return api.get<ModelCatalogResponse>(`/api/models/catalog?provider=${encodeURIComponent(providerId)}${refresh}`)
+  },
+
+  getCurrent() {
+    return api.get<CurrentModelResponse>('/api/models/current')
+  },
+
+  setCurrent(modelId: string) {
+    return api.put<{ ok: true; model: string }>('/api/models/current', { modelId })
+  },
+
+  getEffort() {
+    return api.get<EffortResponse>('/api/effort')
+  },
+
+  setEffort(level: EffortLevel) {
+    return api.put<{ ok: true; level: EffortLevel }>('/api/effort', { level })
+  },
+}
+```
 
 > [!WARNING]
 > 模型服务费用由对应供应商计收；本地模型免费但需本机运行推理。
@@ -26,7 +58,26 @@ cc-haha 的核心卖点之一是 **BYO 模型（Bring Your Own Model）**：不�
 
 ## Effort Levels
 
-模型还暴露 **effort 等级**（`/api/effort` 取可用列表与当前值，`models.ts:27-33`），与 Anthropic 的思考 / 努力预算概念对应。
+模型还暴露 **effort 等级**（`/api/effort` 取可用列表与当前值），与 Anthropic 的思考 / 努力预算概念对应。
+
+`EffortResponse` 类型与两个 effort 方法原样摘自 `desktop/src/api/models.ts`：
+
+```ts
+type ModelsResponse = { models: ModelInfo[]; provider: { id: string; name: string } | null }
+type ModelCatalogResponse = { models: ModelInfo[] }
+type CurrentModelResponse = { model: ModelInfo }
+type EffortResponse = { level: EffortLevel; available: EffortLevel[] }
+```
+
+```ts
+  getEffort() {
+    return api.get<EffortResponse>('/api/effort')
+  },
+
+  setEffort(level: EffortLevel) {
+    return api.put<{ ok: true; level: EffortLevel }>('/api/effort', { level })
+  },
+```
 
 ## Links
 

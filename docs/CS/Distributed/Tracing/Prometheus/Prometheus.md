@@ -68,6 +68,9 @@ curl -X POST http://localhost:9090/-/reload
 
 ## Architecture
 
+> [!NOTE]
+> 本子树已推到源码级：[Scrape](/docs/CS/Distributed/Tracing/Prometheus/Scrape.md)（服务发现 + 抓取循环）、[TSDB](/docs/CS/Distributed/Tracing/Prometheus/Tsdb.md)（Head/WAL/压缩/Remote Write 分片）、[PromQL Engine](/docs/CS/Distributed/Tracing/Prometheus/Promql.md)（查询管线与限流）、[Rules](/docs/CS/Distributed/Tracing/Prometheus/Rules.md)（规则调度与告警状态机）、[Wal](/docs/CS/Distributed/Tracing/Prometheus/Wal.md)（WAL 帧/Checkpoint/回放）、[Index](/docs/CS/Distributed/Tracing/Prometheus/Index.md)（倒排索引与查询路径）、[Chunk](/docs/CS/Distributed/Tracing/Prometheus/Chunk.md)（Gorilla/XOR 编码）、[Remote](/docs/CS/Distributed/Tracing/Prometheus/Remote.md)（Remote Write/Read 两端）、[Storage](/docs/CS/Distributed/Tracing/Prometheus/Storage.md)（fanout/Agent 模式/Exemplar）。代码事实基于 `prometheus/prometheus` **v3.16.0**（commit `e2e28adeee2c5883d000fc82aca6008cfbf7e96d`），讲解直接贴真实源码、不标行号。
+
 Prometheus 主要包含下面几个组件：
 
 - Prometheus Server：用于拉取 metrics 信息并将数据存储在时间序列数据库
@@ -80,7 +83,88 @@ Prometheus 主要包含下面几个组件：
 
 ![](https://prometheus.ac.cn/assets/docs/architecture.svg)
 
-Prometheus 直接或通过中间 Pushgateway（用于短期任务）从已插桩的任务中抓取指标。它在本地存储所有抓取的样本，并对这些数据运行规则，以从现有数据中聚合和记录新的时间序列，或者生成告警。可以使用 Grafana 或其他 API 消费者来将收集到的数据可视化。
+### Assembly Chain
+
+进程入口是 `cmd/prometheus/main.go`。所有常驻组件不是 microservice，而是在**一个进程里用 `oklog/run.Group` 编排的 actor 集合**：每个组件一个 goroutine + 一个 interrupt 函数，任何一个出错就整体退出。查询引擎与规则管理器只在 server 模式创建（Agent 模式只有抓取）：
+
+```go
+	scrapeManager, err := scrape.NewManager(
+		&cfg.scrape,
+		logger.With("component", "scrape manager"),
+		logging.NewJSONFileLogger,
+		nil, fanoutStorage,
+		prometheus.DefaultRegisterer,
+	)
+	if err != nil {
+		logger.Error("failed to create a scrape manager", "err", err)
+		os.Exit(1)
+	}
+
+	var (
+		tracingManager = tracing.NewManager(logger)
+
+		queryEngine *promql.Engine
+		ruleManager *rules.Manager
+	)
+
+	if !agentMode {
+		// ...
+		queryEngine = promql.NewEngine(opts)
+
+		ruleManager = rules.NewManager(&rules.ManagerOptions{
+			NameValidationScheme:   cfgFile.GlobalConfig.MetricNameValidationScheme,
+			AppendableV2:           fanoutStorage,
+			Queryable:              localStorage,
+			QueryFunc:              rules.EngineQueryFunc(queryEngine, fanoutStorage),
+			NotifyFunc:             rules.SendAlerts(notifierManager, cfg.web.ExternalURL.String()),
+			Context:                ctxRule,
+			ExternalURL:            cfg.web.ExternalURL,
+			// ...
+		})
+	}
+```
+
+run.Group 里的启动顺序依赖有两个细节值得注意：规则管理器与抓取管理器都要 `<-reloadReady.C` 等配置加载完成才开跑（否则抓取目标会拿到旧配置）；scrape manager 必须在 TSDB 关闭**之前**停止，注释写明了原因：
+
+```go
+	{
+		// Scrape manager.
+		g.Add(
+			func() error {
+				// When the scrape manager receives a new targets list
+				// it needs to read a valid config for each job.
+				// It depends on the config being in sync with the discovery manager so
+				// we wait until the config is fully loaded.
+				<-reloadReady.C
+
+				err := scrapeManager.Run(discoveryManagerScrape.SyncCh())
+				logger.Info("Scrape manager stopped")
+				return err
+			},
+			func(error) {
+				// Scrape manager needs to be stopped before closing the local TSDB
+				// so that it doesn't try to write samples to a closed storage.
+				// We should also wait for rule manager to be fully stopped to ensure
+				// we don't trigger any false positive alerts for rules using absent().
+				logger.Info("Stopping scrape manager...")
+				scrapeManager.Stop()
+			},
+		)
+	}
+```
+
+数据流闭环：`discoveryManagerScrape.SyncCh()` → `scrapeManager.Run` → 各 job 的 scrapePool → scrapeLoop 周期抓取 → `Appender` 写入 `fanoutStorage`（本地 TSDB + remote write 的扇出）。配置热更新走统一的 `reloadConfig`：读文件 → 校验 → 依次调用各组件注册的 `reloader`（scrapeManager.ApplyConfig、ruleManager.Update、remote write ApplyConfig 等），任一步失败保留旧配置继续运行。
+
+### Key Source Files
+
+继续深挖按下面路径直接打开仓库（相对 `prometheus/prometheus` 根）：
+
+- **装配与生命周期**：`cmd/prometheus/main.go`（run.Group 编排、reloadConfig、readyStorage）
+- **发现与抓取**：`discovery/manager.go`、`scrape/manager.go`、`scrape/scrape.go`（scrapePool / scrapeLoop / scrapeCache）
+- **存储**：`tsdb/db.go`（Open/Compact/Querier）、`tsdb/head.go`（Head/stripeSeries）、`tsdb/head_append.go`（Appender/WAL log）、`tsdb/compact.go`（LeveledCompactor）、`tsdb/wlog/wlog.go`（WAL 段）
+- **查询**：`promql/engine.go`（Engine/evaluator）、`web/api/v1/api.go`（HTTP 端点）、`web/federate.go`
+- **规则与告警**：`rules/group.go`（调度/评估/stale 清理）、`rules/alerting.go`（状态机）、`notifier/notifier.go`（Alertmanager 客户端）
+- **远端存储**：`storage/remote/write.go`（WriteStorage）、`storage/remote/queue_manager.go`（队列与动态分片）
 
 它的工作流程大致是：
 
@@ -541,6 +625,9 @@ Prometheus 的本地 TSDB 把数据拆成 Head、WAL、persistent blocks 和索�
 Block 目录包含 `chunks/`、`index`、`meta.json`，删除序列时还会有 `tombstones/`。后台 compaction 把多个小 block 合并为更大的 block；源 block 与新 block 会短暂共存，因此磁盘峰值可以超过 `retention.size`。
 
 ### Query Path
+> 源码级实现（Head 结构、WAL 先行的写入事务、压缩分层、乱序窗口、查询合并路径）见 [TSDB](/docs/CS/Distributed/Tracing/Prometheus/Tsdb.md)。
+
+本地存储不适合长期保存。长期存储推荐使用 Remote Storage（如 Thanos、Mimir、VictoriaMetrics），或对象存储方案。
 
 查询不是“按 metric name 扫全部样本”，而是先缩小 series 范围：
 
@@ -944,12 +1031,17 @@ receivers:
 
 ## Links
 
-- [Tracing](/docs/CS/Distributed/Tracing/Tracing.md)
+- [Scrape](/docs/CS/Distributed/Tracing/Prometheus/Scrape.md)
+- [TSDB](/docs/CS/Distributed/Tracing/Prometheus/Tsdb.md)
+- [PromQL Engine](/docs/CS/Distributed/Tracing/Prometheus/Promql.md)
+- [Rules](/docs/CS/Distributed/Tracing/Prometheus/Rules.md)
+- [Wal](/docs/CS/Distributed/Tracing/Prometheus/Wal.md)
+- [Index](/docs/CS/Distributed/Tracing/Prometheus/Index.md)
+- [Chunk](/docs/CS/Distributed/Tracing/Prometheus/Chunk.md)
+- [Remote](/docs/CS/Distributed/Tracing/Prometheus/Remote.md)
+- [Storage](/docs/CS/Distributed/Tracing/Prometheus/Storage.md)
+- [Deploy](/docs/CS/Distributed/Tracing/Prometheus/Deploy.md)
 - [Grafana](/docs/CS/Distributed/Tracing/Grafana.md)
-- [Loki](/docs/CS/Distributed/Tracing/Loki.md)
-- [Tempo](/docs/CS/Distributed/Tracing/Tempo.md)
-- [Grafana Alloy](/docs/CS/Distributed/Tracing/Alloy.md)
-- [Jaeger](/docs/CS/Distributed/Tracing/Jaeger.md)
 
 ## References
 

@@ -12,7 +12,7 @@ Pi 核心刻意保持极小——默认只启用四个工具（`read` / `bash` /
 | 接不支持的模型服务 | Custom provider |
 | 把上述资源一起分发 | Pi package |
 
-Theme（终端配色）是第五种资源形态，与四者并列但不改变行为。本页按「Skills → Prompt Templates → Packages → Extensions」展开；信任与加载门槛在 [Security](/docs/CS/AI/LLM/Agent/Product/Pi/Security.md)。
+Theme（终端配色）是第五种资源形态，与四者并列但不改变行为。本页按 v1.5.2（commit `b4afdddf`，2026-11-10 发布）源码核验重写；这一版 workspace 共 **12 个包**，较 v1.3.0 新增 `pi-schema`（无 eval 的 JSON Schema 校验，供工具参数与结构化输出复用）。本页按「Skills → Prompt Templates → Packages → Extensions」展开；信任与加载门槛在 [Security](/docs/CS/AI/LLM/Agent/Product/Pi/Security.md)。
 
 ## Skills
 
@@ -26,9 +26,35 @@ pdf-tools/
 └── assets/template.json
 ```
 
-加载机制是两阶段：启动时只把每个 skill 的 `name`、`description`、路径注入系统提示；任务匹配时模型才去读 `SKILL.md` 全文——详细指令不进上下文，直到需要为止。模型可能漏载相关 skill，用 `/skill:name`（参数追加在指令后当 user 请求）强制加载；frontmatter 里 `disable-model-invocation: true` 则只许显式命令触发。
+加载是**两阶段**的：启动时只读 frontmatter，把 `name` / `description` / `location` 注入系统提示的 `<available_skills>`，全文不进上下文；任务匹配时模型才用 `read` 工具按需读全文。`formatSkillsForPrompt()` 的源码把这场裁剪写得很直白（`src/core/skills.ts`）：
 
-frontmatter 字段：`name`（命令与显示名）、`description`（路由描述，**决定模型何时考虑加载**——要同时写清做什么和何时用）、`license`、`compatibility`、`metadata`、`allowed-tools`（实验性预批准工具表）、`disable-model-invocation`。命名限小写字母/数字/连字符（≤64 字符），description ≤1024；畸形 `SKILL.md` 与缺 description 的不加载，撞名保留首个并告警。
+```typescript
+	for (const skill of visibleSkills) {
+		lines.push("  <skill>");
+		lines.push(`    <name>${escapeXml(skill.name)}</name>`);
+		lines.push(`    <description>${escapeXml(skill.description)}</description>`);
+		lines.push(`    <location>${escapeXml(skill.filePath)}</location>`);
+		lines.push("  </skill>");
+	}
+
+	lines.push("</available_skills>");
+
+	return lines.join("\n");
+}
+```
+
+模型可能漏载相关 skill，用 `/skill:name`（参数追加在指令后当 user 请求）强制加载；frontmatter 里 `disable-model-invocation: true` 的 skill 被 `visibleSkills` 过滤掉，**不进提示、只能显式调用**：
+
+```typescript
+export function formatSkillsForPrompt(skills: Skill[], fileReadTool: "read" | "bash" | "indirect" = "read"): string {
+	const visibleSkills = skills.filter((s) => !s.disableModelInvocation);
+
+	if (visibleSkills.length === 0) {
+		return "";
+	}
+```
+
+frontmatter 字段：`name`（命令与显示名）、`description`（路由描述，**决定模型何时考虑加载**——要同时写清做什么和何时用）、`license`、`compatibility`、`metadata`、`allowed-tools`（实验性预批准工具表）、`disable-model-invocation`。命名限小写字母/数字/连字符，`MAX_NAME_LENGTH = 64`、`MAX_DESCRIPTION_LENGTH = 1024`；畸形 `SKILL.md` 与缺 description 的不加载，撞名保留首个并告警。
 
 发现位置：agent 目录 `skills/`、项目 `.pi/skills/`（递归）、以及规范位置 `~/.agents/skills/` 与 `.agents/skills/`（项目侧从工作目录向上直到仓库根）。
 
@@ -58,6 +84,37 @@ pi list / pi remove <source> / pi update --extensions
 pi config                                # 交互式挑加载哪些资源
 ```
 
+`PackageManager.parseSource()` 把安装源解析成三路——`npm:` 规范、本地路径、git URL，其余字符串按本地路径兜底（`src/core/package-manager.ts`）：
+
+```typescript
+	private parseSource(source: string): ParsedSource {
+		if (source.startsWith("npm:")) {
+			const spec = source.slice("npm:".length).trim();
+			const { name, version } = this.parseNpmSpec(spec);
+			return {
+				type: "npm",
+				spec,
+				name,
+				version,
+				range: getNpmVersionRange(version),
+				pinned: isExactNpmVersion(version),
+			};
+		}
+
+		if (isLocalPath(source)) {
+			return { type: "local", path: source };
+		}
+
+		// Try parsing as git URL
+		const gitParsed = parseGitUrl(source);
+		if (gitParsed) {
+			return gitParsed;
+		}
+
+		return { type: "local", path: source };
+	}
+```
+
 要点：
 
 - **版本固定**：npm 版本号、git tag/commit 都会钉死；`pi update` 对账 checkout 但不移动已配置的 ref。
@@ -69,7 +126,20 @@ pi config                                # 交互式挑加载哪些资源
 
 ## Extensions (TypeScript)
 
-Extension 是最高形态：跑在 Pi 进程内、与 Pi 同权限的 TS 模块，能注册工具、命令、快捷键、provider、MCP server、虚拟模型、事件处理器、渲染器与终端 UI。用 jiti 运行时加载，本地 TS 免编译。
+Extension 是最高形态：跑在 Pi 进程内、与 Pi 同权限的 TS 模块，能注册工具、命令、快捷键、provider、MCP server、虚拟模型、事件处理器、渲染器与终端 UI。用 jiti 运行时加载，本地 TS 免编译——loader 直接 `createJiti(...)` 再 `jiti.import`：
+
+```typescript
+	const jiti = createJitiImpl(import.meta.url, {
+		moduleCache: false,
+		...resolutionOptions,
+	});
+
+	const module = await jiti.import(canonicalizePath(extensionPath), { default: true });
+	const factory = module as ExtensionFactory;
+	if (typeof factory !== "function") {
+		return undefined;
+	}
+```
 
 ### Lifecycle
 
@@ -89,6 +159,13 @@ Extension 是最高形态：跑在 Pi 进程内、与 Pi 同权限的 TS 模块�
 | 按请求路由模型 | `pi.registerVirtualModel()` |
 | 终端渲染 | 渲染器注册 + `ctx.ui` |
 
+事件名是 `tool_call` / `tool_result`（**不是**旧文里常见的 `beforeToolCall` / `afterToolCall`），二者在 `ExtensionAPI.on()` 上的签名真实定义如下（`src/core/extensions/types.ts`）：
+
+```typescript
+	on(event: "tool_call", handler: ExtensionHandler<ToolCallEvent, ToolCallEventResult>): () => void;
+	on(event: "tool_result", handler: ExtensionHandler<ToolResultEvent, ToolResultEventResult>): () => void;
+```
+
 处理器按扩展加载顺序跑，`pi.on()` 返回退订函数。关键语义：`tool_call` 可改写输入或阻断（**处理器失败 = 阻断**，fail-safe）；`tool_result` 多个处理器串联，后者看到前者的修改；`before_agent_start` 按 `event.messageType` 区分 user/custom 启动，可改提示分区或整体替换（`forceSystemPrompt`）；`turn_end` 与 `agent_before_settle` 是可行动边界，能挂 `custom`/`context_edit`/`compaction` 条目并请求**一次**续跑（要防无条件续跑死循环）；`agent_settled` 只读通知；`user_bash` 处理器返回 `undefined` 放行、返回 `operations`/`result` 截断、失败即阻断。
 
 ### Tool Contract
@@ -99,17 +176,63 @@ Extension 是最高形态：跑在 Pi 进程内、与 Pi 同权限的 TS 模块�
 
 ### Tool Exposure
 
-`exposure` 控制模型如何 reaching 一个工具：
+`exposure` 控制模型如何 reaching 一个工具。v1.5.2 的**五态真实定义**在 `src/core/extensions/types.ts`，连同注释原文：
+
+```typescript
+ * - `direct`: declared to the model while active, and callable while active.
+ * - `model-only`: declared to the model while active, never callable. Use it for orchestrating or
+ *   interactive tools.
+ * - `codemode`: callable whenever registered. Not declared to the model unless explicitly
+ *   activated. Codemode tools list it in their description.
+ * - `deferred`: like `codemode`, but codemode tools do not list it; tool search can find it.
+ * - `hidden`: registered but unreachable. Activating it has no effect.
+ *
+ * `direct` and `model-only` tools are activated when they are registered; the others are not.
+ * The active tool set (`getActiveTools`/`setActiveTools`) is the set declared to the model.
+ */
+export type ToolExposure = "direct" | "model-only" | "codemode" | "deferred" | "hidden";
+```
 
 | 值 | 语义 |
 | :--- | :--- |
 | `direct`（默认） | 活跃时声明给模型，也可被别的工具调 |
 | `model-only` | 只声明给模型，永不可被调（编排型/问用户型工具） |
-| `codemode` | 一注册即可被调、被 codemode 列出，但不声明给模型 |
-| `deferred` | 同 codemode，但 codemode 也不列——只有 `tool_search` 能找到 |
+| `codemode` | 注册即可调、被 codemode 列出，但不声明给模型 |
+| `deferred` | 同 codemode 但不被列出——只有 `tool search` 能找到 |
 | `hidden` | 注册但不可达（工具不能注销，重新注册为 hidden 即撤回） |
 
-配套机制：`namespace` 给一组工具分组（MCP server 风格，脚本用 `describeNamespace(name)` 读长说明）；`annotations` 带 MCP 式四个 hint（`readOnlyHint`/`destructiveHint`/`idempotentHint`/`openWorldHint`，缺省按「非只读、可能破坏、开放世界」），权限扩展可据此决定弹不弹确认；`reachesTools(input)` 声明一次调用可能 reaching 哪些工具；`prepareLoadout` 让编排型工具改写活跃工具集的声明与隐藏。`pi.setActiveTools()` 做动态激活——工具集变化会记入转录，不能表达这种变迁的 provider 会拿到完整检查点（可能击穿缓存前缀）。
+`direct` 和 `model-only` **注册即激活**，其余三态注册不激活。配套机制：`namespace` 给一组工具分组（MCP server 风格，脚本用 `describeNamespace(name)` 读长说明）；`annotations` 带 MCP 式四个 hint（`readOnlyHint`/`destructiveHint`/`idempotentHint`/`openWorldHint`，缺省按「非只读、可能破坏、开放世界」），权限扩展可据此决定弹不弹确认；`reachesTools(input)` 声明一次调用可能 reaching 哪些工具；`prepareLoadout` 让编排型工具改写活跃工具集的声明与隐藏。`pi.setActiveTools()` 做动态激活——工具集变化会记入转录，不能表达这种变迁的 provider 会拿到完整检查点（可能击穿缓存前缀）。
+
+### Discovery and Loading
+
+扩展发现按**项目 → 全局 → 显式路径**三级优先级，先到先得、去重（`discoverAndLoadExtensions()`，`src/core/extensions/loader.ts`）：
+
+```typescript
+	// 1. Project-local extensions: cwd/${CONFIG_DIR_NAME}/extensions/
+	const localExtDir = path.join(resolvedCwd, CONFIG_DIR_NAME, "extensions");
+	addPaths(discoverExtensionsInDir(localExtDir));
+
+	// 2. Global extensions: agentDir/extensions/
+	const globalExtDir = path.join(resolvedAgentDir, "extensions");
+	addPaths(discoverExtensionsInDir(globalExtDir));
+
+	// 3. Explicitly configured paths
+	for (const p of configuredPaths) {
+		const resolved = resolvePath(p, resolvedCwd, { normalizeUnicodeSpaces: true });
+		if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
+			const entries = resolveExtensionEntries(resolved);
+			if (entries) {
+				addPaths(entries);
+				continue;
+			}
+			addPaths(discoverExtensionsInDir(resolved));
+			continue;
+		}
+		addPaths([resolved]);
+	}
+```
+
+`addPaths` 用 `seen` 集合按绝对路径去重，因此项目级同名扩展会压过全局级。加载走 jiti 即时编译，工厂函数缓存进 `extensionCache`，`/reload` 通过失效缓存 token 换掉整个运行时。
 
 ### State and UI
 
@@ -119,26 +242,22 @@ Extension 是最高形态：跑在 Pi 进程内、与 Pi 同权限的 TS 模块�
 
 ### Community Packages
 
-社区包生态（2026-08/09 文章快照，持续变动，装前过源码）：状态栏（`statusline-pi`）、代码审查（`review`）、会话管理（`sessions`/`session-breakdown`）、文件浏览（`files`/`/readfiles`/`/code`）、任务拆解（`todos`/`loop`/`pi-delegator`）、上下文压缩（`headroom`/`pi-vcc`）、工作流（`workflow`/`handoff`/`wf`）、provider 接入（`claude-code-pi`/`grok-pi`/`opencode-pi`/`apple-fm-pi`）与独立能力包（Tavily 搜索、Context7、`pi-notify`、`pi-1password`、`pi-steward`、`pi-relay`）。
+社区包生态（持续变动，装前过源码）：状态栏（`statusline-pi`）、代码审查（`review`）、会话管理（`sessions`/`session-breakdown`）、文件浏览（`files`/`/readfiles`/`/code`）、任务拆解（`todos`/`loop`/`pi-delegator`）、上下文压缩（`headroom`/`pi-vcc`）、工作流（`workflow`/`handoff`/`wf`）、provider 接入（`claude-code-pi`/`grok-pi`/`opencode-pi`/`apple-fm-pi`）与独立能力包（Tavily 搜索、Context7、`pi-notify`、`pi-1password`、`pi-steward`、`pi-relay`）。
 
 ## Links
 
 - [Pi 枢纽](/docs/CS/AI/LLM/Agent/Product/Pi/Pi.md)
-- [Context：上下文与压缩](/docs/CS/AI/LLM/Agent/Product/Pi/Context.md) — Skill 指令如何进入系统提示
-- [Security：信任与隔离](/docs/CS/AI/LLM/Agent/Product/Pi/Security.md) — 扩展与包的信任门槛
-- [Skill 理论](/docs/CS/AI/LLM/Agent/Theory/Skill.md) — Agent Skills 概念的通用机制
-- [MCP](/docs/CS/AI/LLM/Protocol/MCP.md) — Pi 内置 MCP 客户端与 tool exposure 的配合
-- [CodeMode：codemode 实现机制](/docs/CS/AI/LLM/Agent/Product/Pi/CodeMode.md) — 本页 `codemode` 暴露态与 `reachesTools` 在沙箱里的落地
-- [Tools：工具系统](/docs/CS/AI/LLM/Agent/Product/Pi/Tools.md) — 默认工具与 `operations` 接缝的落地实现
-- [Providers：Provider 与模型目录](/docs/CS/AI/LLM/Agent/Product/Pi/Providers.md) — 工具经此调用模型、沙箱 `models.*` 全局来源
-- [Events：扩展事件 / 钩子总表](/docs/CS/AI/LLM/Agent/Product/Pi/Events.md) — `pi.on()` 全事件与 handler 组合模式的总入口
-- [Env：远程执行环境](/docs/CS/AI/LLM/Agent/Product/Pi/Env.md) — 扩展经 `operations` 把工具 I/O 路由到 SSH daemon 远端
-- [Durable：持久化 Agent 框架](/docs/CS/AI/LLM/Agent/Product/Pi/Durable.md) — 扩展任务如何并入 `BUILTIN_TASKS` 之外的注册表
+- [Skill 理论](/docs/CS/AI/LLM/Agent/Theory/Skill.md)
+- [MCP](/docs/CS/AI/LLM/Protocol/MCP.md)
+- [CodeMode：codemode 实现机制](/docs/CS/AI/LLM/Agent/Product/Pi/CodeMode.md)
+- [Events：扩展事件 / 钩子总表](/docs/CS/AI/LLM/Agent/Product/Pi/Events.md)
+- [Tools：工具系统](/docs/CS/AI/LLM/Agent/Product/Pi/Tools.md)
 
 ## References
 
-- [Pi Extensions](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md)
-- [Pi Skills](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/skills.md)
-- [Pi Packages](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/packages.md)
-- [Pi Prompt Templates](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/prompt-templates.md)
+- [Pi Extensions 源码（v1.5.2）](https://github.com/earendil-works/pi/blob/v1.5.2/packages/coding-agent/docs/extensions.md)
+- [ToolExposure / ExtensionAPI 类型定义（v1.5.2）](https://github.com/earendil-works/pi/blob/v1.5.2/packages/coding-agent/src/core/extensions/types.ts)
+- [Skill 两阶段加载（v1.5.2）](https://github.com/earendil-works/pi/blob/v1.5.2/packages/coding-agent/src/core/skills.ts)
+- [扩展发现与 jiti 加载（v1.5.2）](https://github.com/earendil-works/pi/blob/v1.5.2/packages/coding-agent/src/core/extensions/loader.ts)
+- [Pi Package parseSource（v1.5.2）](https://github.com/earendil-works/pi/blob/v1.5.2/packages/coding-agent/src/core/package-manager.ts)
 - [Agent Skills Specification](https://agentskills.io/specification)

@@ -1,7 +1,7 @@
 ## Introduction
 
 > [!NOTE]
-> 版本基线 **Redis 8.10.2**；本页机制若与其他版本口径冲突，以 [Redis 版本基线](/docs/CS/DB/Redis/Redis.md?id=version-baseline) 为准。
+> 版本基线：Redis 8.10.2（commit 498ecd0d）。本页机制若与其他版本口径冲突，以 [Redis 版本基线](/docs/CS/DB/Redis/Redis.md?id=version-baseline) 为准。
 
 At the base of Redis replication (excluding the high availability features provided as an additional layer by Redis Cluster or Redis Sentinel) there is a *leader follower* (master-replica) replication that is simple to use and configure.
 It allows replica Redis instances to be exact copies of master instances.
@@ -66,6 +66,41 @@ Identifies an exact version of the dataset of a master.
 When replicas connect to masters, they use the `PSYNC` command to send their old master replication ID and the offsets they processed so far.
 This way the master can send just the incremental part needed.
 However if there is not enough *backlog* in the master buffers, or if the replica is referring to an history (replication ID) which is no longer known, then a full resynchronization happens: in this case the replica will get a full copy of the dataset, from scratch.
+
+两条分支的状态流（PSYNC 请求发出后由 master 的 `masterTryPartialResynchronization` 判决，replica 侧由 `slaveTryPartialResynchronization` 解析回复）：
+
+```dot
+digraph ReplicationSync {
+  rankdir=TB;
+  node [shape=box, style=rounded];
+
+  subgraph cluster_handshake {
+    label="连接建立 / Handshake";
+    conn [label="REPLICAOF\nreplicationSetMaster → connectWithMaster"];
+    psync [label="slaveTryPartialResynchronization\n发送 PSYNC replid offset"];
+  }
+
+  subgraph cluster_partial {
+    label="部分重同步 / Partial";
+    hit [label="masterTryPartialResynchronization\nreplid 匹配 + offset 在 backlog 内"];
+    cont [label="+CONTINUE\naddReplyReplicationBacklog"];
+  }
+
+  subgraph cluster_full {
+    label="全量重同步 / Full";
+    miss [label="+FULLRESYNC replid offset\nstartBgsaveForReplication"];
+    rdb [label="RDB 传输 + replication buffer 追平"];
+  }
+
+  conn -> psync;
+  psync -> hit [label="命中"];
+  hit -> cont;
+  psync -> miss [label="replid 不符 / backlog 不足"];
+  miss -> rdb;
+  cont -> conn [label="进入命令传播", style=dashed];
+  rdb -> conn [label="进入命令传播", style=dashed];
+}
+```
 
 This is how a full synchronization works in more details:
 
@@ -177,6 +212,8 @@ this way their data set will remain synchronized with the one in the master.
 
 Set replication to the specified master address and port.
 
+8.10.2 不再在这里 `disconnectSlaves()` 强制下级重新同步（注释明确改为「等真正换 replid 或 RDB 加载完再通知」），并新增两个连接重试计数：
+
 ```c
 // replication.c
 void replicationSetMaster(char *ip, int port) {
@@ -198,9 +235,12 @@ void replicationSetMaster(char *ip, int port) {
     /* Update oom_score_adj */
     setOOMScoreAdj(-1);
 
-    /* Force our slaves to resync with us as well. They may hopefully be able
-     * to partially resync with us, but we can notify the replid change. */
-    disconnectSlaves();
+    /* Here we don't disconnect with replicas, since they may hopefully be able
+     * to partially resync with us. We will disconnect with replicas and force
+     * them to resync with us when changing replid on partially resync with new
+     * master, or finishing transferring RDB and preparing loading DB on full
+     * sync with new master. */
+
     cancelReplicationHandshake(0);
     /* Before destroying our master state, create a cached master using
      * our own parameters, to later PSYNC with the new master. */
@@ -221,6 +261,8 @@ void replicationSetMaster(char *ip, int port) {
                               NULL);
 
     server.repl_state = REPL_STATE_CONNECT;
+    server.repl_current_sync_attempts = 0;
+    server.repl_total_sync_attempts = 0;
     serverLog(LL_NOTICE,"Connecting to MASTER %s:%d",
         server.masterhost, server.masterport);
     connectWithMaster();
@@ -232,9 +274,11 @@ void replicationSetMaster(char *ip, int port) {
 ```c
 // replication.c
 int connectWithMaster(void) {
-    server.repl_transfer_s = server.tls_replication ? connCreateTLS() : connCreateSocket();
+    server.repl_current_sync_attempts++;
+    server.repl_total_sync_attempts++;
+    server.repl_transfer_s = connCreate(server.el, connTypeOfReplication());
     if (connConnect(server.repl_transfer_s, server.masterhost, server.masterport,
-                NET_FIRST_BIND_ADDR, syncWithMaster) == C_ERR) {
+                server.bind_source_addr, syncWithMaster) == C_ERR) {
         serverLog(LL_WARNING,"Unable to connect to MASTER: %s",
                 connGetLastError(server.repl_transfer_s));
         connClose(server.repl_transfer_s);
@@ -333,18 +377,35 @@ This function handles the PSYNC command from the point of view of a master recei
 
 On success return C_OK, otherwise C_ERR is returned and we proceed with the usual full resync.
 
+8.10.2 里 PSYNC 的入口时序变了：`syncCommand()` 先解析 offset（解析失败直接报错返回，不再走 `goto need_full_resync`），再调用 `masterTryPartialResynchronization(c, psync_offset)`；函数签名因此多了一个参数。另外 backlog 从平铺字段改成结构体（`server.repl_backlog->offset` / `->histlen`），`repl_put_online_on_ack` 改名为 `repl_start_cmd_stream_on_ack`。
+
+先看 `syncCommand` 中 PSYNC 的分支：
+
 ```c
-int masterTryPartialResynchronization(client *c) {
-    long long psync_offset, psync_len;
+// replication.c — syncCommand()
+    if (!strcasecmp(c->argv[0]->ptr,"psync")) {
+        long long psync_offset;
+        if (getLongLongFromObjectOrReply(c, c->argv[2], &psync_offset, NULL) != C_OK) {
+            serverLog(LL_WARNING, "Replica %s asks for synchronization but with a wrong offset",
+                      replicationGetSlaveName(c));
+            return;
+        }
+
+        if (masterTryPartialResynchronization(c, psync_offset) == C_OK) {
+            server.stat_sync_partial_ok++;
+            return; /* No full resync needed, return. */
+        } else {
+```
+
+判决逻辑本体：
+
+```c
+// replication.c
+int masterTryPartialResynchronization(client *c, long long psync_offset) {
+    long long psync_len;
     char *master_replid = c->argv[1]->ptr;
     char buf[128];
     int buflen;
-
-    /* Parse the replication offset asked by the slave. Go to full sync
-     * on parse error: this should never happen but we try to handle
-     * it in a robust way compared to aborting. */
-    if (getLongLongFromObjectOrReply(c,c->argv[2],&psync_offset,NULL) !=
-       C_OK) goto need_full_resync;
 
     /* Is the replication ID of this master the same advertised by the wannabe
      * slave via PSYNC? If the replication ID changed this master has a
@@ -371,16 +432,17 @@ int masterTryPartialResynchronization(client *c) {
                     "up to %lld", psync_offset, server.second_replid_offset);
             }
         } else {
-            serverLog(LL_NOTICE,"Full resync requested by replica %s",
-                replicationGetSlaveName(c));
+            serverLog(LL_NOTICE,"Full resync requested by replica %s %s",
+                replicationGetSlaveName(c),
+                c->flags & CLIENT_REPL_RDB_CHANNEL ? "(rdb-channel)" : "");
         }
         goto need_full_resync;
     }
 
     /* We still have the data our slave is asking for? */
     if (!server.repl_backlog ||
-        psync_offset < server.repl_backlog_off ||
-        psync_offset > (server.repl_backlog_off + server.repl_backlog_histlen))
+        psync_offset < server.repl_backlog->offset ||
+        psync_offset > (server.repl_backlog->offset + server.repl_backlog->histlen))
     {
         serverLog(LL_NOTICE,
             "Unable to partial resync with replica %s for lack of backlog (Replica request was: %lld).", replicationGetSlaveName(c), psync_offset);
@@ -398,7 +460,7 @@ int masterTryPartialResynchronization(client *c) {
     c->flags |= CLIENT_SLAVE;
     c->replstate = SLAVE_STATE_ONLINE;
     c->repl_ack_time = server.unixtime;
-    c->repl_put_online_on_ack = 0;
+    c->repl_start_cmd_stream_on_ack = 0;
     listAddNodeTail(server.slaves,c);
     /* We can't use the connection buffers since they are used to accumulate
      * new commands at this stage. But we are sure the socket send buffer is
@@ -566,6 +628,13 @@ int slaveTryPartialResynchronization(connection *conn, int read_reply) {
 
     /* Reading half */
     reply = receiveSynchronousResponse(conn);
+    /* Master did not reply to PSYNC */
+    if (reply == NULL) {
+        connSetReadHandler(conn, NULL);
+        serverLog(LL_WARNING, "Master did not reply to PSYNC, will try later");
+        return PSYNC_TRY_LATER;
+    }
+
     if (sdslen(reply) == 0) {
         /* The master may send empty newlines after it receives PSYNC
          * and before to reply, just to keep the connection alive. */
@@ -602,10 +671,28 @@ int slaveTryPartialResynchronization(connection *conn, int read_reply) {
                 server.master_replid,
                 server.master_initial_offset);
         }
-        /* We are going to full resync, discard the cached master structure. */
-        replicationDiscardCachedMaster();
         sdsfree(reply);
         return PSYNC_FULLRESYNC;
+    }
+
+    if (!strncmp(reply, "+RDBCHANNELSYNC", strlen("+RDBCHANNELSYNC"))) {
+        char *client_id = strchr(reply,' ');
+        if (client_id)
+            client_id++;
+
+        if (!client_id) {
+            serverLog(LL_WARNING,
+                      "Master replied with wrong +RDBCHANNELSYNC syntax: %s", reply);
+            sdsfree(reply);
+            return PSYNC_NOT_SUPPORTED;
+        }
+        server.repl_main_ch_client_id = strtoll(client_id, NULL, 10);;
+        /* A response of +RDBCHANNELSYNC from the master implies that partial
+         * synchronization is not possible and that the master supports full
+         * sync using dedicated RDB channel. Full sync will continue that way.*/
+        serverLog(LL_NOTICE, "PSYNC is not possible, initialize RDB channel.");
+        sdsfree(reply);
+        return PSYNC_FULLRESYNC_RDBCHANNEL;
     }
 
     if (!strncmp(reply,"+CONTINUE",9)) {
@@ -614,7 +701,7 @@ int slaveTryPartialResynchronization(connection *conn, int read_reply) {
             "Successful partial resynchronization with master.");
 
         /* Check the new replication ID advertised by the master. If it
-         * changed, we need to set the new ID as primary ID, and set or
+         * changed, we need to set the new ID as primary ID, and set
          * secondary ID as the old master ID up to the current offset, so
          * that our sub-slaves will be able to PSYNC with us after a
          * disconnection. */
@@ -628,7 +715,7 @@ int slaveTryPartialResynchronization(connection *conn, int read_reply) {
 
             if (strcmp(new,server.cached_master->replid)) {
                 /* Master ID changed. */
-                serverLog(LL_WARNING,"Master replication ID changed to %s",new);
+                serverLog(LL_NOTICE,"Master replication ID changed to %s",new);
 
                 /* Set the old ID as our ID2, up to the current offset+1. */
                 memcpy(server.replid2,server.cached_master->replid,
@@ -683,7 +770,6 @@ int slaveTryPartialResynchronization(connection *conn, int read_reply) {
             "error state (reply: %s)", reply);
     }
     sdsfree(reply);
-    replicationDiscardCachedMaster();
     return PSYNC_NOT_SUPPORTED;
 }
 ```
@@ -692,12 +778,17 @@ Propagate write commands to slaves, and populate the replication backlog as well
 This function is used if the instance is a master: we use the commands received by our clients in order to create the replication stream.
 Instead if the instance is a slave and has sub-slaves attached, we use replicationFeedSlavesFromMasterStream()
 
+8.10.2 的 `replicationFeedSlaves()` 已重写：不再逐个 slave 拼 RESP reply，而是用 `replBufWriter` 一次性写复制缓冲区（backlog 与每个 replica 的输出缓冲共享同一份编码结果），并新增 `prepareReplicasToWrite()` 与 cluster slot 统计的抵消逻辑：
+
 ```c
+// replication.c
 void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
-    listNode *ln;
-    listIter li;
     int j, len;
     char llstr[LONG_STR_SIZE];
+
+    /* In case we propagate a command that doesn't touch keys (PING, REPLCONF) we
+     * pass dbid=-1 that indicate there is no need to replicate `select` command. */
+    serverAssert(dictid == -1 || (dictid >= 0 && dictid < server.dbnum));
 
     /* If the instance is not a top level master, return ASAP: we'll just proxy
      * the stream of data we receive from our master instead, in order to
@@ -705,18 +796,34 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
      * advertise the same replication ID as the master (since it shares the
      * master replication history and has the same backlog and offsets). */
     if (server.masterhost != NULL) return;
-```
 
-If there aren't slaves, and there is no backlog buffer to populate, we can return ASAP.
+    /* If current client is marked as master, we will proxy the command stream
+     * to our slaves instead of replicating them, that also happens when being
+     * in atomic slot migration. */
+    if (server.current_client && server.current_client->flags & CLIENT_MASTER) return;
 
-```c
-    if (server.repl_backlog == NULL && listLength(slaves) == 0) return;
+    /* If there aren't slaves, and there is no backlog buffer to populate,
+     * we can return ASAP. */
+    if (server.repl_backlog == NULL && listLength(slaves) == 0) {
+        /* We increment the repl_offset anyway, since we use that for tracking AOF fsyncs
+         * even when there's no replication active. This code will not be reached if AOF
+         * is also disabled. */
+        server.master_repl_offset += 1;
+        return;
+    }
 
     /* We can't have slaves attached and no backlog. */
     serverAssert(!(listLength(slaves) != 0 && server.repl_backlog == NULL));
 
+    /* Update the time of sending replication stream to replicas. */
+    server.repl_stream_lastio = server.unixtime;
+
+    /* Must install write handler for all replicas first before feeding
+     * replication stream. */
+    prepareReplicasToWrite();
+
     /* Send SELECT command to every slave if needed. */
-    if (server.slaveseldb != dictid) {
+    if (dictid != -1 && server.slaveseldb != dictid) {
         robj *selectcmd;
 
         /* For a few DBs we have pre-computed SELECT command. */
@@ -732,75 +839,49 @@ If there aren't slaves, and there is no backlog buffer to populate, we can retur
                 dictid_len, llstr));
         }
 
-        /* Add the SELECT command into the backlog. */
-        if (server.repl_backlog) feedReplicationBacklogWithObject(selectcmd);
+        feedReplicationBuffer(selectcmd->ptr, sdslen(selectcmd->ptr));
 
-        /* Send it to slaves. */
-        listRewind(slaves,&li);
-        while((ln = listNext(&li))) {
-            client *slave = ln->value;
-
-            if (!canFeedReplicaReplBuffer(slave)) continue;
-            addReply(slave,selectcmd);
-        }
+        /* Although the SELECT command is not associated with any slot,
+         * its per-slot network-bytes-out accumulation is made by the above function call.
+         * To cancel-out this accumulation, below adjustment is made. */
+        clusterSlotStatsDecrNetworkBytesOutForReplication(sdslen(selectcmd->ptr));
 
         if (dictid < 0 || dictid >= PROTO_SHARED_SELECT_CMDS)
             decrRefCount(selectcmd);
+
+        server.slaveseldb = dictid;
     }
-    server.slaveseldb = dictid;
 
-    /* Write the command to the replication backlog if any. */
-    if (server.repl_backlog) {
-        char aux[LONG_STR_SIZE+3];
+    /* Write the command to the replication buffer if any. */
+    char aux[LONG_STR_SIZE+3];
+    replBufWriter wr;
+    replBufWriterBegin(&wr);
 
-        /* Add the multi bulk reply length. */
-        aux[0] = '*';
-        len = ll2string(aux+1,sizeof(aux)-1,argc);
-        aux[len+1] = '\r';
-        aux[len+2] = '\n';
-        feedReplicationBacklog(aux,len+3);
+    /* Write the multi bulk count */
+    replBufWriterAppendBulkLen(&wr, '*', argc);
 
-        for (j = 0; j < argc; j++) {
-            long objlen = stringObjectLen(argv[j]);
+    for (j = 0; j < argc; j++) {
+        /* Write the bulk count */
+        long objlen = stringObjectLen(argv[j]);
+        replBufWriterAppendBulkLen(&wr, '$', objlen);
 
-            /* We need to feed the buffer with the object as a bulk reply
-             * not just as a plain string, so create the $..CRLF payload len
-             * and add the final CRLF */
-            aux[0] = '$';
-            len = ll2string(aux+1,sizeof(aux)-1,objlen);
-            aux[len+1] = '\r';
-            aux[len+2] = '\n';
-            feedReplicationBacklog(aux,len+3);
-            feedReplicationBacklogWithObject(argv[j]);
-            feedReplicationBacklog(aux+len+1,2);
+        /* Write the bulk data */
+        if (argv[j]->encoding == OBJ_ENCODING_INT) {
+            len = ll2string(aux, sizeof(aux), (long)argv[j]->ptr);
+            replBufWriterAppend(&wr, aux, len);
+        } else {
+            replBufWriterAppend(&wr, argv[j]->ptr, objlen);
         }
+        replBufWriterAppend(&wr, "\r\n", 2);
     }
 
-    /* Write the command to every slave. */
-    listRewind(slaves,&li);
-    while((ln = listNext(&li))) {
-        client *slave = ln->value;
-
-        if (!canFeedReplicaReplBuffer(slave)) continue;
-
-        /* Feed slaves that are waiting for the initial SYNC (so these commands
-         * are queued in the output buffer until the initial SYNC completes),
-         * or are already in sync with the master. */
-
-        /* Add the multi bulk length. */
-        addReplyArrayLen(slave,argc);
-
-        /* Finally any additional argument that was not stored inside the
-         * static buffer if any (from j to argc). */
-        for (j = 0; j < argc; j++)
-            addReplyBulk(slave,argv[j]);
-    }
+    replBufWriterEnd(&wr);
 }
 ```
 
 ### startBgsaveForReplication
 
-从服务刚启动或因网络原因，与主服务长时间断开，重连后发现主从数据已经严重不匹配了，主服务需要将内存数据保存成 rdb 二进制压缩文件，传送给这些重新链接的服务
+从服务刚启动或因网络原因，与主服务长时间断开，重连后发现主从数据已经严重不匹配了，主服务需要将内存数据保存成 rdb 二进制压缩文件，传送给这些重新链接的服务。8.10.2 在此增加了 slot 迁移快照（`SLAVE_REQ_SLOTS_SNAPSHOT`）、专用 RDB 通道（`SLAVE_REQ_RDB_CHANNEL`）与 fork 后调试暂停钩子。
 
 ```c
 int startBgsaveForReplication(int mincapa, int req) {
@@ -816,8 +897,10 @@ int startBgsaveForReplication(int mincapa, int req) {
     /* `SYNC` should have failed with error if we don't support socket and require a filter, assert this here */
     serverAssert(socket_target || !(req & SLAVE_REQ_RDB_MASK));
 
-    serverLog(LL_NOTICE,"Starting BGSAVE for SYNC with target: %s",
-        socket_target ? "replicas sockets" : "disk");
+    int slots_req = req & SLAVE_REQ_SLOTS_SNAPSHOT;
+    serverLog(LL_NOTICE,"Starting BGSAVE for SYNC with target: %s%s",
+        socket_target ? (slots_req ? "slot migration destination socket" : "replicas sockets") : "disk",
+        (req & SLAVE_REQ_RDB_CHANNEL) ? " (rdb-channel)" : "");
 
     rdbSaveInfo rsi, *rsiptr;
     rsiptr = rdbPopulateSaveInfo(&rsi);
@@ -830,6 +913,8 @@ int startBgsaveForReplication(int mincapa, int req) {
             /* Keep the page cache since it'll get used soon */
             retval = rdbSaveBackground(req, server.rdb_filename, rsiptr, RDBFLAGS_REPLICATION | RDBFLAGS_KEEP_CACHE);
         }
+        if (server.repl_debug_pause & REPL_DEBUG_AFTER_FORK)
+            debugPauseProcess();
     } else {
         serverLog(LL_WARNING,"BGSAVE for replication: replication information not available, can't generate the RDB file right now. Try later.");
         retval = C_ERR;
@@ -916,8 +1001,8 @@ replica-ignore-maxmemory no
 两个典型的坑。
 
 - 主从数据不一致。Redis 采用的是异步复制，所以无法实现强一致性保证（主从数据时时刻刻保持一致），数据不一致是难以避免的。我给你提供了应对方法：保证良好网络环境，以及使用程序监控从库复制进度，一旦从库复制进度超过阈值，不让客户端连接从库。
-- 对于读到过期数据，这是可以提前规避的，一个方法是，使用 Redis 3.2 及以上版本；另外，你也可以使用 EXPIREAT/PEXPIREAT 命令设置过期时间，避免从库上的数据过期时间滞后。
-  不过，这里有个地方需要注意下，因为 EXPIREAT/PEXPIREAT 设置的是时间点，所以，主从节点上的时钟要保持一致，具体的做法是，让主从节点和相同的 NTP 服务器（时间服务器）进行时钟同步
+- 对于读到过期数据：**「升级到 3.2 及以上版本即可规避」是老口径**（3.2 只是让副本用逻辑时钟在读操作时隐藏已逻辑过期的 key，主从时钟漂移导致的误差并未根除）。8.x 的做法已在本文 [Expire Keys](#expire-keys) 节给出——副本自己不主动过期，master 过期或淘汰 key 时合成 `DEL` 传播给所有副本；副本仅在**不破坏一致性的读操作**上用逻辑时钟屏蔽已过期 key。因此 8.10.2 无需靠 3.2 这个版本门槛来规避。
+  若仍要用 `EXPIREAT/PEXPIREAT` 设绝对时间点，主从时钟保持一致仍是有益的（让 master 合成的 `DEL` 时机更贴合预期），做法是让主从节点与同一 NTP 服务器同步。
 
 
 > Redis 中的 slave-serve-stale-data 配置项设置了从库能否处理数据读写命令，你可以把它设置为 no。这样一来，从库只能服务 INFO、SLAVEOF 命令，这就可以避免在从库中读到不一致的数据了

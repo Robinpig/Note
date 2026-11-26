@@ -65,6 +65,27 @@ Tigera 维护、最成熟的策略型 CNI。两套典型部署：
 
 `NetworkPolicy` 是 K8s 的 API 对象（声明"允许谁访问谁"），见 [NetworkPolicy](/docs/CS/Container/k8s/NetworkPolicy.md)；**CNI 是它的实现者**。只有支持策略的 CNI（Calico/Cilium/Antrea/Weave）才会真正执行——Flannel 写了 NetworkPolicy 也不生效。这也是 NetworkPolicy 最常见的"配了不拦"根因。
 
+## How a Pod Gets Networked: The Invocation Chain
+
+"谁在什么时候调用 CNI 插件"值得从源码层面说清（以 containerd v2.4.2 为准）。CNI 二进制的调用方不是 kubelet 进程本身，而是**容器运行时**——kubelet 通过 CRI 声明"这个 Pod 要用哪个网络配置目录"，运行时负责找到 CNI 二进制并执行 ADD：
+
+```
+kubelet（CRI RunPodSandbox 请求）
+  → containerd CRI 插件（sandbox controller）
+      → cni 库加载 /etc/cni/net.d/*.conf（按字典序，取第一个）
+      → exec /opt/cni/bin/<plugin> ADD（stdin 传 JSON 配置）
+      → CNI 插件创建 veth、挂接网桥、调 IPAM 分配 Pod IP
+  → Pod IP 写入 Sandbox 状态，kubelet 从 PodSandboxStatus 拿到它
+```
+
+containerd 的 CRI 服务里能看到三处直接证据：
+
+1. **每个运行时配置可以有自己的 CNI 配置目录**——`criService` 持有 `netPlugin map[string]cni.CNI`（默认配置之外的 runtime 可单独指定 `NetworkPluginConfDir`），`NewCRIService` 里为每个非空目录建一个 `cniNetConfSyncer`。
+2. **配置目录有监视器**——`criService.Run` 里为每个 syncer 起 `h.syncLoop()` goroutine，CNI 配置文件变化（运维改了 conf）会同步到运行时持有的 CNI 实例，**已有 Sandbox 不受影响，新 Sandbox 才用新配置**。
+3. **CNI 调用发生在 Sandbox 阶段**——Pod 的网络命名空间归 pause 容器，CNI ADD 的目标就是它；业务容器 `CreateContainer` 时加入同一网络命名空间，**不再调用 CNI**。这就是"Pod IP 属于 Sandbox 而非容器"的执行层原因，见 [Pod 的 Pause 容器](/docs/CS/Container/k8s/Pod.md?id=sandbox-and-the-pause-container)。
+
+两个实操推论：CNI 配置目录里**字典序第一个合法 conf 生效**（放两个文件进去不会报错，只会静默用第一个，这是排障高频坑）；CNI 二进制缺失或 ADD 失败时 Sandbox 起不来，Pod 卡在 `ContainerCreating`，`crictl pods` 看到的 Sandbox 状态是 `NotReady`，错误要翻 kubelet/运行时日志。
+
 ## Links
 
 - [NetworkPolicy](/docs/CS/Container/k8s/NetworkPolicy.md)

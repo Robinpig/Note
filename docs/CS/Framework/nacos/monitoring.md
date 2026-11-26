@@ -2,9 +2,16 @@
 
 ## Introduction
 
-Nacos 的监控分两类：**Server 自身指标**（JVM / HTTP / gRPC / 配置 / 服务发现）与 **健康检查端点**（liveness / readiness）。指标通过 Spring Boot Actuator 暴露为 Prometheus 格式，Grafana 做可视化。
+Nacos 的监控分两类：**Server 自身指标**（JVM / HTTP / gRPC / 配置 / 服务发现）与**健康检查端点**（liveness / readiness）。前者经 Spring Boot Actuator 暴露为 Prometheus 格式，后者给 LB / K8s 探针用。
 
-注意：默认 `application.properties` 里 Actuator 暴露是**注释状态**，需要显式开启；否则 `/actuator/prometheus` 404。
+> 版本基线：Nacos 3.2.4（commit 2c587c0）。片段取自 `prometheus` / `core` / `client` 模块；Nacos server 自身指标由 Micrometer 暴露，Go SDK 侧不在本仓库。
+
+反直觉点：
+
+- 默认 `application.properties` 里 Actuator 暴露是**注释状态**，不显式开启 `/actuator/prometheus` 就是 404。
+- 3.x 支持**反向集成**——Prometheus 可以把 Nacos 当服务发现源（`http_sd_configs`），这件事由独立的 `prometheus` 应用完成，不是 Actuator 上的路径。
+- v3 的 `/listener` 是**管理员查「谁在监听」**，不是 HTTP 长轮询端点；3.x 里 HTTP 长轮询已是死代码。
+- 客户端指标只有 4 个，早期文档常见的 `configListenSize` / `subServiceCount` / `pubServiceCount` 在 3.2.4 全树 0 命中。
 
 ## Enable Metrics Exposure
 
@@ -12,43 +19,88 @@ Nacos 的监控分两类：**Server 自身指标**（JVM / HTTP / gRPC / 配置 
 
 ```properties
 management.endpoints.web.exposure.include=prometheus
-# 若已暴露其他端点，把 prometheus 加入列表即可；不要误写成 include=*
 ```
 
-重启后访问：
-
-```
-http://{nacos-server-host}:8848/nacos/actuator/prometheus
-```
-
-`/nacos` 前缀来自默认 `nacos.server.contextPath`；若改了服务端上下文路径，URL 要同步调整。
-
-## Prometheus Scraping
+重启后访问 `http://{host}:8848/nacos/actuator/prometheus`。`/nacos` 前缀来自默认 `nacos.server.contextPath`，改过上下文路径就同步调整。端口 / 路径变化也要改 Prometheus 的 `targets` 与 `metrics_path`：
 
 ```yaml
 scrape_configs:
   - job_name: nacos
     metrics_path: /nacos/actuator/prometheus
     static_configs:
-      - targets:
-          - 10.0.0.1:8848
-          - 10.0.0.2:8848
-          - 10.0.0.3:8848
+      - targets: [10.0.0.1:8848, 10.0.0.2:8848, 10.0.0.3:8848]
 ```
-
-端口 / 上下文路径变化就改 `targets` 与 `metrics_path`。Grafana 用 Prometheus 作数据源，社区维护的 Dashboard 模板（nacos-template）可直接导入，分核心监控、曲线、告警三个模块。
 
 ## Prometheus Service Discovery (reverse integration)
 
-上面是「Prometheus 抓 Nacos 自己的指标」；3.2.4 还支持**反向**用法——**让 Prometheus 把 Nacos 当作服务发现源**，自动发现注册在 Nacos 里的业务实例并抓取它们。这件事由独立的 `prometheus` 模块（`PrometheusApp` + `PrometheusController`）承担，不是 Actuator：
+`prometheus` 模块是一个**独立 Spring Boot 应用**（`PrometheusApp`），对外提供 Prometheus HTTP Service Discovery：
 
-| 端点 | 起始版本 | 返回 |
-| :-- | :-- | :-- |
-| `/prometheus` | 2.2.0 | 全命名空间全部实例 |
-| `/prometheus/namespaceId/{namespaceId}` | 2.3.0 | 指定命名空间下的实例 |
-| `/prometheus/namespaceId/{namespaceId}/service/{service}` | 2.3.0 | 指定服务下的实例 |
+```java
+@EnableScheduling
+@SpringBootApplication(scanBasePackages = {"com.alibaba.nacos"})
+public class PrometheusApp {
+    
+    public static void main(String[] args) {
+        SpringApplication.run(PrometheusApp.class, args);
+    }
+}
+```
 
-返回体是 Prometheus **HTTP SD** 格式的 JSON 数组（由 `PrometheusUtils.assembleArrayNodes` 组装 target 与 label），配置侧用 `http_sd_configs` 消费：
+它返回的是「Nacos 里注册了谁」，与前面「Nacos 自己跑得怎么样」是两件事。三个端点由 `ApiConstants` 定义：
+
+```java
+public static final String PROMETHEUS_CONTROLLER_PATH = "/prometheus";
+
+public static final String PROMETHEUS_CONTROLLER_NAMESPACE_PATH =
+    "/prometheus/namespaceId/{namespaceId}";
+
+public static final String PROMETHEUS_CONTROLLER_SERVICE_PATH =
+    "/prometheus/namespaceId/{namespaceId}/service/{service}";
+```
+
+全量端点先遍历所有 namespace 的单例服务，再取实例，最后交给 `PrometheusUtils.assembleArrayNodes` 组装成 HTTP SD 的 JSON 数组：
+
+```java
+@Since("2.2.0")
+@GetMapping(value = ApiConstants.PROMETHEUS_CONTROLLER_PATH,
+    produces = "application/json; charset=UTF-8")
+public ResponseEntity<String> metric() throws NacosException {
+    ArrayNode arrayNode = JacksonUtils.createEmptyArrayNode();
+    Set<Instance> targetSet = new HashSet<>();
+    Set<String> allNamespaces = serviceManager.getAllNamespaces();
+    for (String namespace : allNamespaces) {
+        Set<Service> singletons = serviceManager.getSingletons(namespace);
+        for (Service service : singletons) {
+            
+            List<? extends Instance> instances = instanceServiceV2.listAllInstances(namespace,
+                service.getGroupedServiceName());
+            
+            targetSet.addAll(instances);
+            
+        }
+    }
+    
+    PrometheusUtils.assembleArrayNodes(targetSet, arrayNode);
+    return ResponseEntity.ok().body(arrayNode.toString());
+}
+```
+
+`assembleArrayNodes` 把实例 metadata 提升为 Prometheus label（键里的 `.` 与 `-` 被替换成 `_`）：
+
+```java
+public static void assembleArrayNodes(Set<Instance> targetSet, ArrayNode arrayNode) {
+    Map<String, List<Instance>> groupingInsMap =
+        targetSet.stream().collect(groupingBy(Instance::getClusterName));
+    groupingInsMap.forEach((key, value) -> {
+        for (Instance instance : value) {
+            ObjectNode jsonNode = assembleInstanceToArrayNode(key, instance);
+            arrayNode.add(jsonNode);
+        }
+    });
+}
+```
+
+消费侧用 `http_sd_configs`：
 
 ```yaml
 scrape_configs:
@@ -59,7 +111,7 @@ scrape_configs:
 ```
 
 > [!NOTE]
-> `prometheus` 模块是**独立应用**，自带 `PrometheusAuthFilter` 与 `PrometheusSecurityConfiguration`——开启鉴权后访问这些端点同样要过鉴权，不是在 Nacos 主端口上顺带开放的路径。它与上面 `/nacos/actuator/prometheus` 是两件事：**前者暴露「Nacos 里注册了谁」，后者暴露「Nacos 自己跑得怎么样」**。
+> `PrometheusController` 带 `@ConditionalOnProperty(name = "nacos.prometheus.metrics.enabled", havingValue = "true")`，**必须显式开启**才注册。它还有自己的 `PrometheusAuthFilter` 与 `PrometheusSecurityConfiguration`——开鉴权后这些端点同样要过鉴权，不是在 Nacos 主端口上顺带开放的路径。
 
 ## Key Metrics
 
@@ -71,7 +123,6 @@ scrape_configs:
 | :-- | :-- |
 | `nacos_monitor{module="config",name="getConfig"}` | 配置查询统计 |
 | `nacos_monitor{module="config",name="publish"}` | 配置发布统计 |
-| `nacos_monitor{module="config",name="longPolling"}` | 配置长轮询连接数 |
 | `nacos_monitor{module="config",name="configCount"}` | 配置总数 |
 | `nacos_monitor{module="config",name="notifyTask"}` | 配置通知任务堆积 |
 | `nacos_monitor{module="config",name="notifyClientTask"}` | 客户端通知任务堆积 |
@@ -79,54 +130,72 @@ scrape_configs:
 | `nacos_timer{module="config",name="notifyRt"}` | 通知时延 |
 | `nacos_timer{module="config",name="dumpRt"}` | 落盘时延 |
 
-**服务发现（module=naming）**
+**服务发现（module=naming）**：`serviceCount`、`ipCount`、`subscriberCount`、`totalPush`、`failedPush`、`avgPushCost`、`maxPushCost`（均挂在 `nacos_monitor` 上）。
 
-| 指标 | 含义 |
-| :-- | :-- |
-| `nacos_monitor{module="naming",name="serviceCount"}` | 服务数 |
-| `nacos_monitor{module="naming",name="ipCount"}` | 实例数 |
-| `nacos_monitor{module="naming",name="subscriberCount"}` | 订阅数 |
-| `nacos_monitor{module="naming",name="totalPush"}` | 推送总次数 |
-| `nacos_monitor{module="naming",name="failedPush"}` | 推送失败数 |
-| `nacos_monitor{module="naming",name="avgPushCost"}` | 平均推送时延 |
-| `nacos_monitor{module="naming",name="maxPushCost"}` | 最大推送时延 |
+**核心与异常**：`nacos_monitor{module="core",name="longConnection"}` 是各模块 gRPC 长连接数；`nacos_monitor_summary` 汇总 Raft read index / leader read / apply；`nacos_exception{name=...}` 覆盖 `db` / `configNotify` / `unhealth` / `disk` / `leaderSendBeatFailed`。
 
-**核心与异常**
+**请求与 JVM**：`http_server_requests_seconds`、`grpc_server_requests`（带 requestClass / success / errorCode / module）、`grpc_server_executor`（active / pool / queued）、`system_cpu_usage`、`jvm_memory_used_bytes`、`jvm_gc_pause_seconds_*`。
 
-| 指标 | 含义 |
-| :-- | :-- |
-| `nacos_monitor{module="core",name="longConnection"}` | 各模块 gRPC 长连接数 |
-| `nacos_monitor_summary` | Raft read index / leader read / apply 汇总 |
-| `nacos_exception{name="db"}` | 数据库异常 |
-| `nacos_exception{name="configNotify"}` | 配置通知失败 |
-| `nacos_exception{name="unhealth"}` | 节点间健康异常 |
-| `nacos_exception{name="disk"}` | 命名写磁盘异常 |
-| `nacos_exception{name="leaderSendBeatFailed"}` | Leader 发心跳失败 |
+**客户端侧**：`client/src/main/java/com/alibaba/nacos/client/monitor/MetricsMonitor.java` 只注册了三个 Collector——一个 Gauge（`nacos_monitor`，两个 label 组合）、一个 Histogram（`nacos_client_request`）、一个 Counter（`nacos_client_naming_request_failed_total`）：
 
-**请求与 JVM**：`http_server_requests_seconds`（HTTP 次数 / 时延）、`grpc_server_requests`（gRPC 时延，带 requestClass / success / errorCode / module）、`grpc_server_executor`（gRPC 线程池 active / pool / queued）、`system_cpu_usage` / `jvm_memory_used_bytes` / `jvm_gc_pause_seconds_*` / `jvm_threads_daemon`。
+```java
+private static final Gauge NACOS_MONITOR_GAUGE =
+    Gauge.build().name("nacos_monitor").labelNames("module", "name")
+        .help("nacos_monitor").register();
 
-**客户端侧**（3.2.4 `client/monitor/MetricsMonitor.java`，只有下面这几个）：
+private static final Histogram NACOS_CLIENT_REQUEST_HISTOGRAM = Histogram.build()
+    .labelNames("module", "method", "url", "code").name("nacos_client_request")
+    .help("nacos_client_request")
+    .register();
 
-| 指标 | 含义 |
-| :-- | :-- |
-| `nacos_monitor{module="config",name="listenConfigCount"}` | 客户端监听的配置数 |
-| `nacos_monitor{module="naming",name="serviceInfoMapSize"}` | 客户端缓存的服务数 |
-| `nacos_client_request{module,method,url,code}` | 客户端请求直方图（config / naming） |
-| `nacos_client_naming_request_failed_total{module,req_class,res_status,res_code,err_class}` | naming 请求失败计数 |
+private static final Counter NACOS_CLIENT_NAMING_REQUEST_FAILED_TOTAL = Counter.build()
+    .name("nacos_client_naming_request_failed_total")
+    .help("nacos_client_naming_request_failed_total")
+    .labelNames("module", "req_class", "res_status", "res_code", "err_class").register();
+
+public static Gauge.Child getServiceInfoMapSizeMonitor() {
+    return NACOS_MONITOR_GAUGE.labels("naming", "serviceInfoMapSize");
+}
+
+public static Gauge.Child getListenConfigCountMonitor() {
+    return NACOS_MONITOR_GAUGE.labels("config", "listenConfigCount");
+}
+```
 
 > [!WARNING]
-> 早期文档里常见的客户端指标 **`configListenSize` / `subServiceCount` / `pubServiceCount` 在 3.2.4 全树 0 命中**
-> ——正确写法分别是 `listenConfigCount`（配置监听数）与 `serviceInfoMapSize`（服务缓存数）。
+> 正确的客户端指标写法是 `listenConfigCount`（配置监听数）与 `serviceInfoMapSize`（服务缓存数）；`configListenSize` / `subServiceCount` / `pubServiceCount` 在 3.2.4 源码里不存在。
 
 > [!WARNING]
-> 上表的 `longPolling` 指标字段虽然在 3.2.4 的 `MetricsMonitor` 里还在，但**实际恒为 0**——HTTP 长轮询在 3.x 已是死代码：
-> 路由 `configs/listener` 全树 **0 命中**，`ConfigServletInner` **没有任何调用方**（只有它自己和单测引用 `LongPollingService`）。
-> v3 的 `/listener` 是**管理员查询「哪些客户端在监听」的接口**（`ConfigControllerV3.getListeners`），不是长轮询端点。
-> 所以这条指标不要拿来做告警，见 [config-push](/docs/CS/Framework/nacos/config-push.md)。
+> Server 侧 `MetricsMonitor` 里仍有 `longPolling` 字段，但**实际恒为 0**：v1 长轮询路由常量虽保留，`config` 模块已无对应 controller 映射；唯一的 `@GetMapping("/listener")` 在 `ConfigControllerV3`，语义是管理员查询「哪些客户端在监听」。所以这条指标不要拿来做告警，见 [Config Push](/docs/CS/Framework/nacos/config-push.md)。
 
 ## 3.x Health Check Interface
 
-适合给负载均衡、K8s 探针、巡检系统用：
+`ServerStateController` 把三个探针放在统一上下文 `/v3/admin/core/state` 下，liveness 恒返回 ok，readiness 则真正调用模块健康检查器：
+
+```java
+@RestController
+@RequestMapping(NACOS_ADMIN_CORE_CONTEXT_V3 + "/state")
+public class ServerStateController {
+    
+    @Since("3.0.0")
+    @GetMapping("/liveness")
+    public Result<String> liveness() {
+        return Result.success("ok");
+    }
+    
+    @Since("3.0.0")
+    @GetMapping("/readiness")
+    public Result<String> readiness() throws NacosException {
+        ReadinessResult result = ModuleHealthCheckerHolder.getInstance().checkReadiness();
+        if (result.isSuccess()) {
+            return Result.success("ok");
+        }
+        return Result.failure(result.getResultMessage());
+    }
+}
+```
+
+`NACOS_ADMIN_CORE_CONTEXT_V3 = NACOS_SERVER_VERSION_V3 + "/admin/core"`，即 `/v3/admin/core`。完整端点表：
 
 | 端点 | 用途 |
 | :-- | :-- |
@@ -136,27 +205,21 @@ scrape_configs:
 | `/v3/console/health/liveness` | 独立 Console 存活 |
 | `/v3/console/health/readiness` | 独立 Console 就绪 |
 
-改了 `nacos.server.contextPath` / `nacos.console.contextPath` 要相应调整 URL 前缀。
-
 ## Suggested Alert Items
 
-从指标反推「Nacos 是不是要挂了」：
-
-- **`notifyTask` / `dumpTask` 持续上涨**：配置变更堆积，DB 写慢或 dump 线程瓶颈 → 查 DB 与磁盘 IO。
-- **`failedPush` 升高 / `avgPushCost` 变大**：服务发现推送跟不上，客户端连接多或网络差 → 看长连接数与 `grpc_server_executor` 队列。
-- **`nacos_exception{name="db"}` 非零**：MySQL 异常（连接 / 慢 SQL / 锁）→ 查 MySQL 与连接池。
-- **`leaderStatus` 频繁变**：CP 侧 Leader 切换，JRaft 端口 7848 不通或节点抖动 → 见 [JRaft](/docs/CS/Framework/nacos/jraft.md) 与 [Troubleshooting](/docs/CS/Framework/nacos/troubleshooting.md)。
-- **`longConnection` 逼近单机上限**（8C16G 约 9000）：长连接过多，需扩容或限流（[运维与调优](/docs/CS/Framework/nacos/tuning.md) 有 nginx 限流示例与黑名单配置）。
+- **`notifyTask` / `dumpTask` 持续上涨**：配置变更堆积，DB 写慢或磁盘 IO 瓶颈。
+- **`failedPush` 升高 / `avgPushCost` 变大**：服务发现推送跟不上，客户端连接多或网络差 → 看 `longConnection` 与 `grpc_server_executor` 队列。
+- **`nacos_exception{name="db"}` 非零**：MySQL 连接 / 慢 SQL / 锁问题。
+- **Leader 频繁切换**：CP 侧 JRaft 端口 7848 不通或节点抖动，见 [JRaft](/docs/CS/Framework/nacos/jraft.md)。
+- **`longConnection` 逼近单机上限**（8C16G 约 9000，运维经验值而非源码常量）：需扩容或在前置 Nginx 限流（见 [Tuning](/docs/CS/Framework/nacos/tuning.md)）。
 
 ## Links
 
 - [Nacos](/docs/CS/Framework/nacos/Nacos.md)
 - [JRaft](/docs/CS/Framework/nacos/jraft.md)
+- [Config Push](/docs/CS/Framework/nacos/config-push.md)
 - [Troubleshooting](/docs/CS/Framework/nacos/troubleshooting.md)
-- [etcd 监控对照](/docs/CS/Framework/etcd/monitoring.md)
 
 ## References
 
 - <https://nacos.io/docs/latest/manual/admin/monitor/>
-- <https://nacos.io/zh-cn/docs/monitor-guide.html>
-- <https://nacos-group.github.io/en/docs/next/manual/admin/monitor/>

@@ -122,6 +122,7 @@ egress:
 - **`namespaceSelector` 忘记 AND 语义**：`namespaceSelector` + `podSelector` 在同一 `from` 条目里是 AND（跨 ns 的某标签 Pod），不是 OR。要"或"，拆成两个 `from` 条目。
 - **CNI 不支持导致静默失效**：写完先用 `kubectl describe networkpolicy` 确认，再用 `netshoot` 之类容器实测连通性，不要只信 YAML 通过校验。
 - **L7 限制缺位**：需要按 HTTP 方法/路径/域名限制时，NetworkPolicy 无能为力，转向 Cilium 或服务网格。
+- **集群作用域策略在 k8s 主仓库之外**：`AdminNetworkPolicy` / `BaselineAdminNetworkPolicy`（集群管理员批量下发策略）由 [sig-network-policy-api](https://github.com/kubernetes-sigs/network-policy-api) 独立仓库维护，v1.37.2 的 `pkg/features/kube_features.go` 与 API 里没有任何相关定义——主仓库的 NetworkPolicy 只有 namespace 作用域。
 
 ## Links
 

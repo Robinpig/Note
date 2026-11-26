@@ -1,90 +1,101 @@
+# Redis Quicklist: Source Deep Dive
+
 ## Introduction
 
-quicklistNode是一个双向链表, 链表每个节点都是 ziplist
+Quicklist 是 List 类型的底层实现，本质是一个**双向链表，每个节点是一个 listpack**（PACKED 容器），以此在「连续内存的高 locality」与「大块 realloc 的成本」之间折中。旧资料通篇说「节点是 ziplist、container ZIPLIST=2、调用 `ziplistPush`」，那是 7.x 口径：8.10.2 的容器枚举里已经没有 ZIPLIST，节点字段也从 `zl` 改名为 `entry`，插入走 `lpPrepend` / `lpAppend`。
 
-quicklist is a 40 byte struct (on 64-bit systems) describing a quicklist.
+> 版本基线：Redis 8.10.2（commit 498ecd0d）。以下片段均取自该 tag，路径为 `src/` 相对路径。
 
-- 'count' is the number of total entries.
-- 'len' is the number of quicklist nodes.
-- 'compress' is: 0 if compression disabled, otherwise it's the number of quicklistNodes to leave uncompressed at ends of quicklist.
-- 'fill' is the user-requested (or default) fill factor.
-- 'bookmakrs are an optional feature that is used by realloc this struct, so that they don't consume memory when not used.
+三个关键纠偏点：
+
+- **节点容器是 `PACKED`（listpack）与 `PLAIN`（单元素裸字节数组），没有 ZIPLIST**。头文件注释原文：`container: 2 bits, PLAIN=1 (a single item as char array), PACKED=2 (listpack with multiple items)`。
+- **超大元素单独成 `PLAIN` 节点**。`isLargeElement()` 为真时不进 listpack，而是调 `__quicklistInsertPlainNode()` 存成独立 `char array`，避免撑爆某个 listpack。
+- **配置项已改名**。`list-max-listpack-size` 是主名，`list-max-ziplist-size` 退化为旧名别名，默认值仍是 `-2`（每个节点约 8 KB）。
+
+## Structure: quicklist / quicklistNode
+
+`quicklist` 描述整条链表；`quicklistNode` 描述单个节点。8.10.2 在 `quicklist` 里多了 `alloc_size`（内存追踪用），在 `quicklistNode` 里把 `zl` 改名为 `entry`、`sz` 升为 `size_t`，并新增 `dont_compress` 位（阻止后续会复用节点的压缩）。
+
+```dot
+digraph QuicklistStruct {
+  rankdir=TB;
+  node [shape=box, style=rounded];
+
+  subgraph cluster_ql {
+    label="quicklist（40 字节 / 64 位）";
+    h [label="head / tail\n双向链表两端"];
+    meta [label="count 总元素数 / len 节点数\nfill 填充因子 / compress 压缩深度"];
+    bm [label="bookmarks[]\n按需 realloc，不用时不占内存"];
+  }
+
+  subgraph cluster_node {
+    label="quicklistNode（32 字节）";
+    links [label="prev / next"];
+    entry [label="entry\nPACKED=listpack 或 PLAIN=裸字节"];
+    bits [label="count:16 / encoding:2 (RAW|LZF)\ncontainer:2 (PLAIN|PACKED)\nrecompress / dont_compress / extra:9"];
+  }
+
+  h -> links;
+  entry -> bits;
+}
+```
+
+`quicklist` 结构（`alloc_size` 是 8.x 新增的内存追踪字段）：
 
 ```c
 typedef struct quicklist {
     quicklistNode *head;
     quicklistNode *tail;
-    unsigned long count;        /* total count of all entries in all ziplists */
+    unsigned long count;        /* total count of all entries in all listpacks */
     unsigned long len;          /* number of quicklistNodes */
-    int fill : QL_FILL_BITS;              /* fill factor for individual nodes */
+    size_t alloc_size;          /* total allocated memory (in bytes) */
+    signed int fill : QL_FILL_BITS;       /* fill factor for individual nodes */
     unsigned int compress : QL_COMP_BITS; /* depth of end nodes not to compress;0=off */
     unsigned int bookmark_count: QL_BM_BITS;
     quicklistBookmark bookmarks[];
 } quicklist;
 ```
 
-
-
-quicklistNode is a 32 byte struct describing a ziplist for a quicklist.
-We use bit fields keep the quicklistNode at 32 bytes.
-- count: 16 bits, max 65536 (max zl bytes is 65k, so max count actually < 32k).
-- encoding: 2 bits, RAW=1, LZF=2.
-- container: 2 bits, NONE=1, ZIPLIST=2.
-- recompress: 1 bit, bool, true if node is temporary decompressed for usage.
-- attempted_compress: 1 bit, boolean, used for verifying during testing.
-- extra: 10 bits, free for future use; pads out the remainder of 32 bits
+`quicklistNode` 结构与容器枚举：注意 `entry` 字段与 `container : 2 /* PLAIN==1 or PACKED==2 */`。
 
 ```c
 typedef struct quicklistNode {
     struct quicklistNode *prev;
     struct quicklistNode *next;
-    unsigned char *zl;
-    unsigned int sz;             /* ziplist size in bytes */
-    unsigned int count : 16;     /* count of items in ziplist */
+    unsigned char *entry;
+    size_t sz;             /* entry size in bytes */
+    unsigned int count : 16;     /* count of items in listpack */
     unsigned int encoding : 2;   /* RAW==1 or LZF==2 */
-    unsigned int container : 2;  /* NONE==1 or ZIPLIST==2 */
+    unsigned int container : 2;  /* PLAIN==1 or PACKED==2 */
     unsigned int recompress : 1; /* was this node previous compressed? */
     unsigned int attempted_compress : 1; /* node can't compress; too small */
-    unsigned int extra : 10; /* more bits to steal for future usage */
+    unsigned int dont_compress : 1; /* prevent compression of entry that will be used later */
+    unsigned int extra : 9; /* more bits to steal for future usage */
 } quicklistNode;
 ```
 
-从数据结构上看 quicklist 的设计重点在于控制每个 ziplist 的大小和元素个数 有效减少了在 ziplist 中新增或修改元素后，发生连锁更新的情况
-
-- 单个 ziplist 的过小就会退化成 linkedlist
-- 单个 ziplist 过大极端情况下只有一个 ziplist 同样无法避免级联更新
-
-
-Lists are also encoded in a special way to save a lot of space.
-The number of entries allowed per internal list node can be specified as a fixed maximum size or a maximum number of elements.
-For a fixed maximum size, use -5 through -1, meaning:
-
-- -5: max size: 64 Kb  <-- not recommended for normal workloads
-- -4: max size: 32 Kb  <-- not recommended
-- -3: max size: 16 Kb  <-- probably not recommended
-- -2: max size: 8 Kb   <-- good
-- -1: max size: 4 Kb   <-- good
-
-Positive numbers mean store up to _exactly_ that number of elements per list node.
-The highest performing option is usually -2 (8 Kb size) or -1 (4 Kb size), but if your use case is unique, adjust the settings as necessary.
-
-```conf
-list-max-ziplist-size -2
+```c
+/* quicklist node container formats */
+#define QUICKLIST_NODE_CONTAINER_PLAIN 1
+#define QUICKLIST_NODE_CONTAINER_PACKED 2
 ```
 
+## Creation: quicklistCreate
 
-## quicklistCreate
+新建空 quicklist，`fill` 默认 `-2`。相比旧版多了 `zmalloc_usable()` 取实际可用字节数写入 `alloc_size`。
 
 ```c
-// quicklist.c
-// Create a new quicklist. Free with quicklistRelease().
+/* Create a new quicklist.
+ * Free with quicklistRelease(). */
 quicklist *quicklistCreate(void) {
     struct quicklist *quicklist;
+    size_t quicklist_sz;
 
-    quicklist = zmalloc(sizeof(*quicklist));
+    quicklist = zmalloc_usable(sizeof(*quicklist), &quicklist_sz);
     quicklist->head = quicklist->tail = NULL;
     quicklist->len = 0;
     quicklist->count = 0;
+    quicklist->alloc_size = quicklist_sz;
     quicklist->compress = 0;
     quicklist->fill = -2;
     quicklist->bookmark_count = 0;
@@ -92,86 +103,57 @@ quicklist *quicklistCreate(void) {
 }
 ```
 
-convertFromZiplist in rdb.c
+## Insertion: quicklistPushHead / quicklistPushTail
+
+入队先判 `isLargeElement()`：超大元素直接建 `PLAIN` 节点；否则用 `_quicklistNodeAllowInsert()` 判断 head/tail 节点能否再塞一个元素，能则 `lpPrepend` / `lpAppend`，不能则 `lpNew(0)` 新建一个 listpack 节点再插入链表。
 
 ```c
-// t_list.c
-
-/* The function pushes an element to the specified list object 'subject',
- * at head or tail position as specified by 'where'.
- *
- * There is no need for the caller to increment the refcount of 'value' as
- * the function takes care of it if needed. */
-void listTypePush(robj *subject, robj *value, int where) {
-    if (subject->encoding == OBJ_ENCODING_QUICKLIST) {
-        int pos = (where == LIST_HEAD) ? QUICKLIST_HEAD : QUICKLIST_TAIL;
-        if (value->encoding == OBJ_ENCODING_INT) {
-            char buf[32];
-            ll2string(buf, 32, (long)value->ptr);
-            quicklistPush(subject->ptr, buf, strlen(buf), pos);
-        } else {
-            quicklistPush(subject->ptr, value->ptr, sdslen(value->ptr), pos);
-        }
-    } else {
-        serverPanic("Unknown list encoding");
-    }
-}
-```
-
-call [ziplistPush](/docs/CS/DB/Redis/struct/zset.md)
-
-```c
-//quicklist.c
-
-/* Wrapper to allow argument-based switching between HEAD/TAIL pop */
-void quicklistPush(quicklist *quicklist, void *value, const size_t sz,
-                   int where) {
-    if (where == QUICKLIST_HEAD) {
-        quicklistPushHead(quicklist, value, sz);
-    } else if (where == QUICKLIST_TAIL) {
-        quicklistPushTail(quicklist, value, sz);
-    }
-}
-
-/* Add new entry to head node of quicklist.
- *
- * Returns 0 if used existing head.
- * Returns 1 if new head created. */
 int quicklistPushHead(quicklist *quicklist, void *value, size_t sz) {
     quicklistNode *orig_head = quicklist->head;
+
+    if (unlikely(isLargeElement(sz, quicklist->fill))) {
+        __quicklistInsertPlainNode(quicklist, quicklist->head, value, sz, 0);
+        return 1;
+    }
+
     if (likely(
             _quicklistNodeAllowInsert(quicklist->head, quicklist->fill, sz))) {
-        quicklist->head->zl =
-            ziplistPush(quicklist->head->zl, value, sz, ZIPLIST_HEAD);
+        size_t oldsize = quicklist->head->sz;
+        quicklist->head->entry = lpPrepend(quicklist->head->entry, value, sz);
         quicklistNodeUpdateSz(quicklist->head);
+        quicklistUpdateAllocSize(quicklist, quicklist->head->sz, oldsize);
     } else {
-        quicklistNode *node = quicklistCreateNode();
-        node->zl = ziplistPush(ziplistNew(), value, sz, ZIPLIST_HEAD);
-
+        quicklistNode *node = quicklistCreateNode(quicklist);
+        node->entry = lpPrepend(lpNew(0), value, sz);
         quicklistNodeUpdateSz(node);
+        quicklistUpdateAllocSize(quicklist, node->sz, 0);
         _quicklistInsertNodeBefore(quicklist, quicklist->head, node);
     }
     quicklist->count++;
     quicklist->head->count++;
     return (orig_head != quicklist->head);
 }
+```
 
-/* Add new entry to tail node of quicklist.
- *
- * Returns 0 if used existing tail.
- * Returns 1 if new tail created. */
+```c
 int quicklistPushTail(quicklist *quicklist, void *value, size_t sz) {
     quicklistNode *orig_tail = quicklist->tail;
+    if (unlikely(isLargeElement(sz, quicklist->fill))) {
+        __quicklistInsertPlainNode(quicklist, quicklist->tail, value, sz, 1);
+        return 1;
+    }
+
     if (likely(
             _quicklistNodeAllowInsert(quicklist->tail, quicklist->fill, sz))) {
-        quicklist->tail->zl =
-            ziplistPush(quicklist->tail->zl, value, sz, ZIPLIST_TAIL);
+        size_t oldsize = quicklist->tail->sz;
+        quicklist->tail->entry = lpAppend(quicklist->tail->entry, value, sz);
         quicklistNodeUpdateSz(quicklist->tail);
+        quicklistUpdateAllocSize(quicklist, quicklist->tail->sz, oldsize);
     } else {
-        quicklistNode *node = quicklistCreateNode();
-        node->zl = ziplistPush(ziplistNew(), value, sz, ZIPLIST_TAIL);
-
+        quicklistNode *node = quicklistCreateNode(quicklist);
+        node->entry = lpAppend(lpNew(0), value, sz);
         quicklistNodeUpdateSz(node);
+        quicklistUpdateAllocSize(quicklist, node->sz, 0);
         _quicklistInsertNodeAfter(quicklist, quicklist->tail, node);
     }
     quicklist->count++;
@@ -180,7 +162,7 @@ int quicklistPushTail(quicklist *quicklist, void *value, size_t sz) {
 }
 ```
 
-当插入一个新的元素时，quicklist 首先就会检查插入位置的 ziplist 是否能容纳该元素，这是通过 _quicklistNodeAllowInsert 函数来完成判断
+`_quicklistNodeAllowInsert()` 用 `SIZE_ESTIMATE_OVERHEAD` 高估单条目开销（宁可低估填充度，也不让节点低于 4 KB 下限），再交给 `quicklistNodeExceedsLimit(fill, new_sz, node->count + 1)` 按 fill 规则裁决：
 
 ```c
 REDIS_STATIC int _quicklistNodeAllowInsert(const quicklistNode *node,
@@ -199,27 +181,37 @@ REDIS_STATIC int _quicklistNodeAllowInsert(const quicklistNode *node,
     size_t new_sz = node->sz + sz + SIZE_ESTIMATE_OVERHEAD;
     if (unlikely(quicklistNodeExceedsLimit(fill, new_sz, node->count + 1)))
         return 0;
-    retur
+    return 1;
+}
 ```
-
-
-
-
-
-
-
-
-
 
 ## Tuning
 
-quicklist 解决了单个 ziplist 过大 缩小连锁更新的范围
+`fill` 取值语义（配置名已改为 `list-max-listpack-size`，旧名 `list-max-ziplist-size` 仍作为别名接受）：
 
+- `-5` ~ `-1`：按节点字节数上限（`-5`=64 KB、`-4`=32 KB、`-3`=16 KB、`-2`=8 KB、`-1`=4 KB），`-2` / `-1` 是常用推荐。
+- 正数：每个节点**恰好**存该数量的元素。
 
+```c
+createIntConfig("list-max-listpack-size", "list-max-ziplist-size", MODIFIABLE_CONFIG, INT_MIN, INT_MAX, server.list_max_listpack_size, -2, INTEGER_CONFIG, NULL, NULL),
+```
+
+控制节点大小的意义：既避免节点过小退化成「链表套单元素 listpack」而浪费指针，也避免节点过大回到接近单块连续内存、让修改又触发大范围内存拷贝。由于 listpack 本身**没有 ziplist 的级联更新问题**，这里控制粒度纯粹是为了 realloc 成本与迭代局部性，而非旧资料强调的「缩小级联更新范围」。
+
+## Summary
+
+- Quicklist 是 listpack 的双向链表；节点容器只有 `PACKED`（listpack）与 `PLAIN`（单元素），ZIPLIST 枚举已不存在。
+- 插入走 `lpPrepend` / `lpAppend`；超大元素单独成 `PLAIN` 节点。
+- `fill` 默认 `-2`，主配置名 `list-max-listpack-size`，旧名作为别名兼容。
 
 ## Links
 
+- [List（命令层与 listTypePush）](/docs/CS/DB/Redis/struct/list.md)
+- [Listpack](/docs/CS/DB/Redis/struct/listpack.md)
+- [Ziplist（历史）](/docs/CS/DB/Redis/struct/ziplist.md)
 
 ## References
 
-1. [Redis quicklist.c](https://github.com/redis/redis/blob/unstable/src/quicklist.c)
+- <https://github.com/redis/redis/blob/8.10.2/src/quicklist.c>
+- <https://github.com/redis/redis/blob/8.10.2/src/quicklist.h>
+- <https://github.com/redis/redis/blob/8.10.2/src/config.c>

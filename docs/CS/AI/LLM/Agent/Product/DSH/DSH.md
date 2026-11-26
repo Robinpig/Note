@@ -1,222 +1,358 @@
-> 版本基线：核实于 2026-10-06。架构 / 权限 / 沙箱 / 工具细节以官方子系统文档与 `deepseek-harness` 源码（`main` 分支）为准；base bundle 共 94 个插件条目。
-
 ## Introduction
 
-DeepSeek AI 开发的开源 agent harness（智能体框架）。构建于**一切皆插件**的架构之上，由 [Cordis](https://github.com/cordiverse/cordis) 驱动，设计论文：[*A Programming Paradigm for Spatiotemporal Composability*](https://arxiv.org/abs/2608.25512)
+DeepSeek Harness（`dsh`）是一个**"一切皆插件"的 AI 编程 Agent harness**：它把模型、工具、会话日志、沙箱乃至驱动 Agent 运转的主循环都做成可替换插件，由自研 Cordis 运行时按一份层层叠加的配置树装配出实际运行的系统。
 
-> 一句话理解：Cordis 维护一张**运行时插件图**（系统现在由什么组成），Session 维护一份**追加式事件流**（系统刚才做过什么）；Agent loop 位于两者之间——从插件图取能力，写回事件流。
+> 版本基线：v0.2.2-rc.3（`E:/Projects/deepseek-harness-dsh-v0.2.2-rc.3`，package.json `version=0.2.2-rc.3`，release 源码快照无 `.git`）。
 
-DSH 是 Agent 产品里**架构哲学最激进**的一个——没有特权内核，连驱动 Agent 运转的主循环都只是默认插件实现之一。这种设计使得同一套运行时可以组合出不同产品形态（`web` / `headless` 进程形态 × `standard` / `code` / `minimal` / `cordis` 会话预设），但也带来了较高的理解和调试成本。
+几个反直觉的点：
+
+- **没有"特权内核"可以打补丁，但"一切皆插件"有边界**：Cordis 自己在构造根 Context 时直接 `new Fiber/ReflectService/RegistryService/EventsService/LoggerService`（见 `vendor/cordis/src/context.ts`），这些元层机制不是插件、也无法被插件卸载。可替换的是产品能力，不是让插件得以存在的运行时。
+- **"配置"不是描述最终状态，而是装配意图**：每次启动都把 profile 根 `cordis.yml` 重写回空条目 `[]`，真正的系统是 bundle + 多层 patch 现叠出来的。静态代码 ≠ 实际系统，排障入口是 `dsh --profile web --dump-config`。
+- **追加事件成功 ≠ 已落盘**：`session.append()` 把事件 push 进内存 log 即 committed，持久化是另一个异步、带 flush 检查点的通道。崩溃可能丢未 flush 的尾部，于是有 `interrupted` 补写。
+
+## What DSH Is
+
+把 DSH 理解成三个平面的协作：
+
+- **运行时插件图**：Cordis 维护"系统现在由什么组成"——谁提供 `ctx.llm`、谁注册工具、哪个 agent loop 在驱动。
+- **追加式事件流**：Session 维护"系统刚才做过什么"——一份不可变日志，模型历史、fork、回放、遥测都从它派生。
+- **装配配置**：profile / bundle / patch 决定"启动时把哪些插件叠成那张图"。
+
+Agent loop 夹在图与日志之间：从插件图取能力（工具、模型、上下文），把事实写回日志。之所以这样切，是因为同一套运行时要同时服务 Web、headless、SDK、ACP、Desktop 五种形态，还要支持会话中途换工具/提示词而不打断已缓存前缀——把"组成"外置成配置、把"历史"外置成日志，才能让能力替换和崩溃恢复都变成数据操作而不是改代码。
 
 ## Installation
 
-### Run via npm
-
-安装 Node.js 后：
+安装 Node.js 后免安装运行（本机默认监听 `http://127.0.0.1:3080` 并打开浏览器，SSH 下只打印宿主机 URL，`--no-open` 只起服务器）：
 
 ```sh
-npm install -g @deepseek-ai/dsh   # 或免安装直接 npx
 npx @deepseek-ai/dsh web
 ```
 
-- 默认在 `http://127.0.0.1:3080` 启动 Web UI，本机启动时会自动用默认浏览器打开页面
-- 通过 SSH 启动时只打印宿主机 URL（本地转发地址由 SSH 客户端或编辑器持有）
-- `--no-open`：仅运行服务器，不打开浏览器
-- `dsh --dump-config`：输出最终的插件配置树——这才是该机器实际运行的系统（排障入口）
+从源码运行：`pnpm install && pnpm run build && pnpm dsh web`。`pnpm run build` 只准备产物，`pnpm dsh web` 直接用已构建产物、不重新构建。
 
-### Run from Source
+排障时看实际装配出的插件树：
 
 ```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
-cd deepseek-harness
-pnpm install
-pnpm run build
-pnpm dsh web
+dsh --profile web --dump-config
 ```
 
-`pnpm run build` 准备仓库产物；`pnpm dsh web` 直接使用已构建产物，不重新构建。
+## Architecture
 
-## Architecture Overview
+### Layered Architecture
 
-DeepSeek Harness 的架构采用**"一切皆插件"（Everything is a Plugin）**的设计哲学，核心公式：**Model + Harness = Agent**。整体架构可以从以下几个层次来理解。
+```dot
+digraph DshArch {
+  rankdir=TB;
+  node [shape=box, style=rounded];
 
-### Cordis Microkernel Layer
+  subgraph cluster_dist {
+    label="发布与启动 / Launch";
+    cli [label="dsh CLI\napps/cli args.ts + bin.ts"];
+    boot [label="app-boot\nprofile → bundle → patch 装配"];
+  }
 
-最底层是 DeepSeek 自研的 Cordis 插件框架，只负责三件事：
+  subgraph cluster_front {
+    label="前端 / Frontends（薄壳，仅翻译协议）";
+    web [label="Web host + client\nsession/event 流转 remote 事件"];
+    sdk [label="SDK JSON-RPC / ACP\nstdio 表示层适配器"];
+    desktop [label="Desktop\ndesktop profile = Web + IPC"];
+  }
 
-1. 插件生命周期管理（加载 / 卸载 / 依赖解析）
-2. 依赖注入
-3. 全局事件总线
+  subgraph cluster_api {
+    label="接入 / Gateway";
+    gateway [label="typert-gateway + session-controller\n$events 流 + @Remote 控制面"];
+  }
 
-Cordis 不含任何模型、工具或 UI 逻辑；支持热重载与副作用自动回收——插件卸载时，其注册的服务和事件会被自动回滚。
+  subgraph cluster_spine {
+    label="核心脊柱 / Core Spine（均可替换）";
+    loop [label="agent-loop\n默认 turn/step driver"];
+    sess [label="session\nappend-only 事件日志"];
+    tools [label="tools + system-prompt\n工具管线 + 提示词装配"];
+    llm [label="llm\nadapter seam + 两段式 prepareCall"];
+  }
 
-但"一切皆插件"有一个前提：**一切*产品能力*皆由插件贡献，Cordis 自身仍保留插件得以存在的机制**（上下文代理、Fiber 状态机、服务存储、事件总线、Loader 属于元层）。更准确的说法是：内核不拥有模型、工具和循环等产品特权。
+  subgraph cluster_seam {
+    label="能力接缝 / Capability Seams";
+    seam [label="fs / shell / sandbox / subagent\nDefinition → Provider → Consumer"];
+  }
 
-> Cordis 的完整运行时模型（Context、Fiber、isolate/realm、effect、事件分派五模式）见 [DSH Cordis](/docs/CS/AI/LLM/Agent/Product/DSH/Cordis.md)。
+  subgraph cluster_kernel {
+    label="内核 / Cordis 元层（不可被插件卸载）";
+    kernel [label="Context(Fiber/Registry/Events/Reflect)\neffect 回滚 + 五模式事件 + isolate realm"];
+  }
 
-### Seven-Layer Onion Model
+  subgraph cluster_infra {
+    label="基础设施 / Infra";
+    infra [label="subprocess-local / fs-local / sandbox-local\n进程树收割 + bwrap/Landlock/Seatbelt"];
+  }
 
-架构从外到内依次为七层，**各层仅依赖内层**：
+  cli -> boot;
+  boot -> kernel [label="按配置挂载插件树"];
+  web -> gateway;
+  sdk -> gateway;
+  desktop -> web [label="同一 Web 组合 + IPC"];
+  gateway -> loop [label="agent.steer/create"];
+  gateway -> sess [label="follow/page 流"];
+  loop -> tools;
+  loop -> llm;
+  loop -> sess [label="append 事实"];
+  tools -> seam;
+  seam -> infra;
+  llm -> infra;
+  loop -> kernel;
+  sess -> kernel;
+  seam -> kernel;
+}
+```
 
-| 层 | 职责 |
-| --- | --- |
-| 应用表面层 | Web UI / CLI / Headless 等入口 |
-| Profile 组合层 | 决定启动哪种产品形态 |
-| 能力接缝层（Capability Seam） | 服务定义 → Provider → Consumer 的三角色模式 |
-| 核心脊柱层 | Session、System Prompt、Tools、Agent、Agent Loop、Scope 六大核心包 |
-| Cordis 框架层 | 插件引擎 |
-| 基础设施层 | 文件系统、子进程、Jobs 等 |
-| 外部运行时层 | 沙箱、MCP、LSP 等外部协议 |
+### The Launcher: `dsh` Is a Profile Selector
 
-能力接缝层的三角色模式（capability seam）是替换能力的关键：
+`dsh <name>` 不是独立命令，而是 `--profile <name>` 的语法糖；`plugin` 是保留名，需要写 `dsh --profile plugin`。CLI 解析后交给 `runProfile`，按 mode 分发（文件 `apps/cli/src/args.ts`、`apps/cli/src/bin.ts`）：
 
-- **Service Definition**（服务定义）：稳定调用协议，如"文件能力 = 读取/列目录/写入/编辑"
-- **Service Provider**（提供方）：接入本地目录、远程沙箱等具体实现
-- **Consumer（消费方）**：把能力变成模型可见工具（read/write/edit）
+```ts
+    const expanded = first !== undefined && !first.startsWith('-') && first !== 'plugin'
+      ? ['--profile', ...argv]
+      : argv
+    program.parse(expanded, { from: 'user' })
+```
 
-底层从本机文件系统换成沙箱时，模型工具和 Agent Loop 都不用变化；未来换远程环境同样只需替换 Provider。
+```ts
+  switch (invocation.mode) {
+    case 'profile': {
+      const { runProfile } = await import('./profile-boot.ts')
+      try {
+        await runProfile({
+          environment: loadLayeredEnv('dsh'),
+          profile: invocation.profile,
+```
 
-### Eight-Layer Pluggable Business Plane (HPA Model)
+内置 profile 只是一张"堆哪些 bundle"的表（`packages/util/official-bundles/src/bundles.ts`）：
 
-在业务层面，所有 Agent 能力均被拆分为独立插件：
+```ts
+export const PROFILE_TEMPLATES: Record<string, ProfileTemplate> = {
+  acp: {
+    bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-acp-app'],
+  },
+  web: {
+    bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'],
+  },
+  headless: {
+    bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless'],
+  },
+  sdk: {
+    bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-sdk-app'],
+  },
+  'sdk-minimal': {
+    bundles: ['@deepseek-ai/dsh-sdk-minimal'],
+  },
+}
+```
 
-| 层 | 说明 |
-| --- | --- |
-| 模型层（Model） | 支持 DeepSeek V4 Pro/Flash 及近 40 家模型提供方，通过适配器插件切换 |
-| 工具层（Tool） | 文件系统、Shell、MCP 等能力通过工具注册表管理 |
-| 技能层（Skill） | 以 YAML/Markdown 定义的多步骤流程封装 |
-| 会话层（Session） | 管理多轮上下文，含压缩、裁剪策略 |
-| 沙箱层（Sandbox） | 文件效果隔离（read-only / workspace-write / danger-full-access），网络与进程可见性不在其词汇内 |
-| 存储层（Storage） | Agent 记忆与状态持久化 |
-| 主循环层（Loop） | Agent Loop 本身也是可替换插件 |
-| 调度层（Scheduling） | 任务编排、子 Agent 协作与并发控制 |
-
-当前仓库的基础配置一次加入 **94 个插件条目**（`packages/bundle/base/cordis.patch.yml`，仓库 pushed 2026-10-03；早期记录写的 78 已过期），覆盖模型、会话、工具、文件系统、沙箱、审批、Skill、子 Agent、工作流、压缩和遥测等能力。
+注意 `sdk-minimal` 是唯一例外：它不叠 `dsh-base`，自带一整棵显式最小树。Python SDK 也没有独立运行器——`python/sdk-runtime/runtime-bootstrap.mjs` 直接 `import('@deepseek-ai/dsh/lib/bin.js').runCli()`，客户端只是多传一段 `--profile sdk`。
 
 ### Configuration Is Assembly
 
-DSH 不只是开发时扩展，更具备**部署时装配**能力。三层配置概念：
+boot 读 profile 声明的每个 bundle 的 `dsh.bundle`，把它的 patch 文件逐层解析成 layer，再叠加 profile 层、home 层、`--patch` overlay（`packages/boot/app-boot/src/profile.ts`、`packages/boot/app-boot/src/profile-context.ts`）：
 
-- **Bundle**：分发一组 Cordis 配置和对应插件代码
-- **Profile**：决定进程堆叠哪些 Bundle（内置 `web` 与 `headless`）
-- **Patch**：替换或插入配置行，用于用户配置和命令行覆盖
-
-Loader 加载顺序（非模糊合并，后层按 id **整块替换**或插入）：
-
-```
-空 entry list
-→ Profile 声明的 Bundle
-→ Profile 自身 cordis.patch.yml
-→ Harness home 下的 patch
-→ 命令行 --patch
-→ （关 telemetry 时）launcher 叠加 override
+```ts
+      const bundle = bundleManifest.dsh?.bundle
+      if (bundle === undefined) {
+        throw new Error(`${binName}: profile bundle ${JSON.stringify(packageName)} declares no dsh.bundle in its package.json`)
+      }
+      const patchPaths = bundlePatchPaths(packageDir, bundle)
+      const patches = patchPaths.flatMap(patchPath => loadOverlayPatches(binName, patchPath))
+      layers.push({ packageName, packageDir, patchPaths, patches })
 ```
 
-整块替换要求用户重述保留字段，略显笨重，却避免深度合并规则在数组、表达式和删除语义上制造歧义。配置热更新失败时，Loader 会恢复**最后一棵可用的插件树**（Group 并发启动收集全部结果，一项失败即删除新增项并重建旧配置）——接近配置事务，但不等同于数据库事务（外部副作用无法回滚）。
+```ts
+  const patches = structuredClone([
+    ...readBundlePatches(binName, context, initialProfile),
+    ...(initialProfile?.patches ?? loadOptionalPatches(binName, context.patchPath) ?? []),
+    ...(loadOptionalPatches(binName, join(context.home, PROFILE_PATCH_FILENAME)) ?? []),
+    ...context.overlays,
+  ])
+```
 
-### Two Independent Composition Axes
+patch 的核心算法是**按 id 整块替换**，不是深度合并（`vendor/include/src/patch.ts`）：
 
-- **Runtime Profile**（进程级）：`web`（Web 应用）/ `headless`（一次性 runner）
-- **Agent Preset**（会话级）：`standard` / `code` / `minimal` / `cordis` 四种内置
+```ts
+    const target = entryMap.get(id)
+    if (!target) {
+      warn('patch: entry %C not found', id)
+      continue
+    }
+    for (const [key, value] of Object.entries(overrides)) {
+      if (key === 'id') continue
+      target[key] = value
+    }
+```
 
-两者是**正交的两条轴**：一个 Web 进程可同时承载不同 preset 的会话。Preset id 写入 Session header，恢复会话必须重组合同一组合。官方"四种模式"（Standard/PTC/Minimal/Creation）属于 per-session preset，不是互斥的进程启动方案。
+`target[key] = value` 对 `config` 是整体赋值。利：可预测、可审计、每层只声明自己拥有的完整值。弊：值若随 mode 变化就必须在每个 mode bundle 里整段重述，用户 override 一个键也要重述整段 `config`。
 
-四种 preset 的精确差异：
+于是有两条**正交的组合轴**：进程轴是 profile（web/headless/sdk/acp/sdk-minimal + bundles），会话轴是 agent preset（standard/ptc/minimal/cordis）——同一个 Web 进程可服务不同 preset 的会话，preset 改变的是会话内层 agent realm，不改 host/transport/端口。详见 [Boot & Frontends](/docs/CS/AI/LLM/Agent/Product/DSH/BootAndFrontends.md)。
 
-| Preset | 内容 |
-| --- | --- |
-| `standard` | 完整 coding agent 工具组合 |
-| `code`（PTC） | 保留标准工具，增加 `tool-presentation` 以 Code Mode 暴露——模型看 `run_code` 与 TS SDK；是协议层改变，不是第二套调度循环 |
-| `minimal` | 完整 persona，仅持久 Bash 与 `str_replace_editor`；不加载 compaction。⚠️ **2026-10-05 核实：`minimal.patch.yml` 里已完全没有 fs 相关插件**（早期记录说它提供裸 `fs-local` 已失效），且 base 配置已改用 `fs-sandbox` 而非 `fs-local` |
-| `cordis` | 标准之上增运行时检查与临时插件管理；动态 package 存于共享进程内存，重启消失；执行生成 JS 近 Shell 权限，非安全隔离 |
+### The Kernel: Cordis
 
-### Key Design Mechanisms
+根 Context 的构造直接创建元层服务，并把核心方法 mixin 到 `ctx`（`vendor/cordis/src/context.ts`）：
 
-- **事件溯源会话**：仅追加（Append-only）日志记录全链路，支持恢复、Fork 与回放；**"模型可见即已记录"（Model-visible means logged）**——进入模型请求的输入必须能从 session log 重建，插件不能偷偷改 prompt 而不留会话事实
-- **分层叠加配置**：官方 Bundle → Profile Patch → 机器级 Patch → 命令行 Patch，逐层覆盖（见上文"配置即装配"）
-- **四种预设模式**：本质是加载不同的插件组合（见上文 Preset 表）
-- **多 Agent 编排**：Supervisor-Worker 层级，Fork（继承历史上下文）与 Spawn（新建上下文）两种子 Agent 派生机制
-- **动态不毁缓存**：插件重装只要 system prompt、tool schema、历史前缀不变，LLM 前缀缓存依然命中；surface 变化（工具集改、提示词改写、模型切换、compaction）会让失效，但 compaction 是**局部**失效——只从第一个被替换的历史 token 起失效，该范围之前的前缀仍可复用
+```ts
+  constructor() {
+    this[symbols.isolate] = Object.create(null)
+    this[symbols.intercept] = Object.create(null)
+    const self = new Proxy<this>(this, ReflectService.handler)
+    this.root = self
+    this.fiber = new Fiber(self, {}, Object.create(null), null, () => [])
+    this.reflect = new ReflectService(self)
+    this.registry = new RegistryService(self)
+    this.events = new EventsService(self)
+    this.logger = new LoggerService(self)
+    this.fiber._disposables.clear()
+    return self
+  }
+```
 
-### Core Differentiators
+**注册本身就是 effect**：`ctx.provide()` 返回一个 effect wrapper，登记进 fiber 的 `DisposableList`；fiber 卸载时先等 dependents 清空，再逆序执行所有 disposer（`vendor/cordis/src/reflect.ts`、`vendor/cordis/src/fiber.ts`）：
 
-与传统 Agent 框架"稳定核心 + 扩展插件"的模式不同，DeepSeek Harness 的核心本身也被完全拆解——**没有特权内核**（There is no privileged core to patch），连驱动 Agent 运转的主循环也只是默认插件实现之一。这种设计使得同一套运行时可以组合出不同产品形态，但也带来了较高的理解和调试成本。
+```ts
+  provide(name: string, value?: any, check?: () => boolean) {
+    return this.ctx.fiber.effect(() => {
+      this.ctx.root[symbols.isolate][name] ??= Symbol(name)
+      const key = this.ctx[symbols.isolate][name]
+      const impl: Impl = { uid: ++this._implCounter, name, value, ctx: this.ctx, check, isolate: key, dependents: new Set() }
+      this.store[key] = impl
+      this.ctx.fiber.provisions.add(impl)
+      // ...
+      return async () => {
+        if (this.store[impl.isolate] === impl) delete this.store[impl.isolate]
+        // wait for retired binding's dependents to finish cleanup
+      }
+    }, `ctx.provide(${JSON.stringify(name)})`)
+  }
+```
 
-**"一切皆插件"的边界**：Cordis 根 Context 构造时直接创建根 Fiber、Reflect、Registry、Events、Logger service；Session 运行对象、Boot、部分 UI 启动代码不能由尚未建立的插件图解释。它描述的是应用能力的组织方式，不是递归的字面事实。
+事件分派有五种模式，其中 `waterfall` 是 Koa 式洋葱模型——最后一个参数是内层 `next`，不调用即否决整条链，调用两次抛错（`vendor/cordis/src/events.ts`）：
 
-**收益**：组合方式统一；生命周期成为一等问题；依赖晚绑定按位置替换（realm 级隔离）；模式是组合而非主程序分叉；运行时可检查、可试验。
+```ts
+  waterfall(...args: any[]) {
+    const [thisArg, callbacks] = this._resolve('waterfall', args)
+    const inner = args.pop()
+    const dispatch = () => {
+      const callback = callbacks.shift()
+      if (!callback) return inner()
+      let called = false
+      const next = () => {
+        if (called) throw new Error('next() called multiple times')
+        called = true
+        return dispatch()
+      }
+      return Reflect.apply(callback, thisArg, [...args, next])
+    }
+    return dispatch()
+  }
+```
 
-**成本**：静态代码 ≠ 实际系统（需看最终配置树排障）；动态依赖放大因果链（Provider 变化触发 Consumer 卸载重载交错）；可逆 ≠ 事务；插件化 ≠ 安全（`inject` 不阻同进程直导 Node API）；vendor Cordis 带来元框架维护成本；性能代价缺量化基准。
+这解释了 DSH 扩展点的分野：`agent/pre-step`、`agent/request`、`llm/stream`、`tools/execute` 是 waterfall（可改写/否决），`agent/turn-stopping` 是 serial（数据驱动、无布尔返回），`tools/result` 是 emit（只读）。内核全貌见 [Cordis](/docs/CS/AI/LLM/Agent/Product/DSH/Cordis.md)。
 
-## Knowledge Map
+### The Core Spine: Loop Between Graph and Log
 
-下表把 DSH 的核心主题分布到各子文件中。如果是第一次接触 DSH，建议按从上到下的顺序读——Cordis 是底座，Agent Loop 是主流程，Permission 和 Subprocess 是最容易出 bug 的两块。
+核心脊柱是六个包：`core/session`、`core/system-prompt`、`core/tools`、`core/agent`、`core/agent-loop`、`llm/llm`。默认 driver 是一个可被替换的服务（`packages/core/agent-loop/src/index.ts`、`packages/core/agent-loop/src/agent.ts`）：
 
-| 主题 | 覆盖内容 | 文件 |
-| --- | --- | --- |
-| **Cordis 微内核** | Context/Fiber/isolate/effect/事件分派五模式、与 Eclipse/OSGi/DI 容器对比、TypeScript 必需知识点 | [Cordis.md](/docs/CS/AI/LLM/Agent/Product/DSH/Cordis.md) |
-| **Agent Loop & Session** | 五层结束语义边界、Turn/Step 状态机、工具收口 OR 聚合、Goal 外循环、Session 持久化事件溯源、9 个扩展点事件 | [AgentLoop.md](/docs/CS/AI/LLM/Agent/Product/DSH/AgentLoop.md) |
-| **Context / Memory / Knowledge** | 四类上下文装配、Compaction（压缩机制与热前缀缓存）、知识获取（无统一向量库、文件引用分层、检索四层逻辑、Web 三层） | [Context.md](/docs/CS/AI/LLM/Agent/Product/DSH/Context.md) |
-| **Permission & Sandbox** | ApprovalSubsystem（`allowed-once` 唯一授权、fail-closed 兜底）、fs-sandbox 策略围栏 vs sandbox-local 内核边界、Permission Preset 层 | [Permission.md](/docs/CS/AI/LLM/Agent/Product/DSH/Permission.md) |
-| **Subprocess Management** | 进程树收割六类死法、负 pid 组信号、pid 复用不可逆边界、诊断尾部 spill 文件、PTY `isStdinWaiting`、宿主退出 prependListener | [Subprocess.md](/docs/CS/AI/LLM/Agent/Product/DSH/Subprocess.md) |
-| **Tool Layer** | 14 个 `dsh-tool-*` 插件逐一分组说明、ToolDefinition Pipeline、read-before-write 观测策略 | [Tools.md](/docs/CS/AI/LLM/Agent/Product/DSH/Tools.md) |
-| **Plugin Development** | 三种插件形态、`ctx.effect()` 生命周期管理、inject 依赖声明、Patch YAML 装配、minimal preset 文件系统组合示例、完整开发工作流 | [Plugin.md](/docs/CS/AI/LLM/Agent/Product/DSH/Plugin.md) |
+```ts
+/** Concrete agent factory and driver service. */
+export class AgentLoop extends Service implements AgentFactory {
+  static inject = ['agents', 'sessions', 'llm', 'tools', 'systemPrompt', 'sessionProjections']
+```
 
-## Reading Source: Three Clues
+```ts
+  private async kick(): Promise<void> {
+    try {
+      while (await this.turn()) {}
+    } catch (_error) {
+      // Reported failures and cancellation are contained at the driver boundary.
+    } finally {
+      if (this.phase.kind === 'running') {
+        const { turn, wakeRequested } = this.phase
+        this.setPhase({ kind: 'idle', lastTurn: turn })
+        if (wakeRequested && this.inbox.hasPending) this.wakeDriver()
+      }
+    }
+  }
+```
 
-lencx 建议的三条源码阅读路径：
+一个 **step** 是一次模型请求 + 它调用的工具批次；一个 **turn** 是零到多个 step，从 `turn/start` 到 `turn/end`。turn 的结束由两件事共同决定：模型不欠回复（无未收口 tool call）、inbox 无待处理输入。`max-tokens` 是粘性的，`agent/turn-stopping` 无布尔返回——监听器只能 `agent.steer()` 往 inbox 写消息表示继续。详见 [Agent Loop](/docs/CS/AI/LLM/Agent/Product/DSH/AgentLoop.md)。
 
-1. 看 Loader 输出的配置树（`dsh --dump-config`）
-2. 追踪 `provide`/`inject`、Context realm、Fiber effect
-3. 沿 Session event 到 `deriveMessages()`，检查模型实际所见
+### The Session Log: Single Source of Model Context
 
-## Engineering Adoption Recommendations
+Session 是纯类（不是 Service），核心是 append-only 日志（`packages/core/session/src/index.ts`）：
 
-自建类似架构前先确认三个条件：①能力确实需要独立替换（存在两个生产提供方或明确外部扩展需求）②同一进程需要多套组合并存，或运行期间需要可靠更新 ③团队愿意为卸载、回滚和真实组合测试持续付费。缺这些条件，插件框架容易沦为复杂的工厂模式。
+```ts
+export class Session {
+  private log: SessionEvent[] = []
+  // ...
+  /** The next event's sequence number — always the log length (the `seq = log.length` contiguity contract). */
+  get seq(): SessionLogOffset {
+    return SessionLogOffset(this.log.length)
+  }
+```
 
-设计纪律：**先问如何撤销，再问如何注册；先证明局部挂载不会泄漏，再讨论全局复用；先定义失败后保留哪棵树，再讨论热更新速度。**
+`seq = log.length` 让 seq 同时是数组下标，回放、fork、修复、投影共享同一坐标。发给模型的 `request.messages` 没有任何旁路数组，就是 `session.deriveMessages()`——这就是"model-visible means logged"的字面实现。fork 用 `inheritedEventCount` 标记复制前缀，JSONL 后端用 `session.vN.jsonl` 代际文件 + 排他发布做到"永不覆盖已提交代际"。详见 [Session & Persistence](/docs/CS/AI/LLM/Agent/Product/DSH/SessionPersistence.md)。
 
-## Positioning Differences from Similar Products
+### Capability Seams: Swap Provider, Not Loop
 
-DSH 与其它 coding agent harness 的核心差异在「内核是否可被插件替换」与「审批 / 沙箱的保守程度」，细节见各产品笔记：
+能力接缝由三角色构成：Service Definition（接口 + 事件词汇）、Service Provider（实现）、Consumer（模型可见工具）。以工具执行器为例，`ctx.tools` 只认契约、在 dispatch 时才按作用域链解析 provider（`packages/core/tools/src/index.ts`）：
 
-| 维度 | DSH 的立场 | 详见 |
-| --- | --- | --- |
-| 架构 | 没有特权内核——连 Agent Loop、UI 都是可替换插件（Cordis） | [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) |
-| 审批 | 类型层面只有 `allowed-once`，永久授权不存在（四家里最保守） | [Permission 理论](/docs/CS/AI/LLM/Agent/Theory/Permission.md) |
-| 沙箱 | fs-sandbox（策略围栏）+ sandbox-local（bwrap / Landlock / Seatbelt / ACL 内核边界）双形态 | 同上 |
-| 工具收口 | OR 聚合（任一 concluded 即收口），`agent/turn-stopping` 无布尔返回、数据驱动 | [Pi](/docs/CS/AI/LLM/Agent/Product/Pi/Pi.md)（AND 聚合对照） |
-| 压缩 | `pressure` 前瞻 + `context-overflow` 兜底双入口 | [Compaction](/docs/CS/AI/LLM/Agent/Theory/Compaction.md) |
-| 长期记忆 | 无完整跨会话系统，仅 Compaction 服务当前会话 | [ClaudeCode](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/ClaudeCode.md)（CLAUDE.md 对照） |
+```ts
+  private selectExecutor(scope?: ScopeKey): ToolExecutor {
+    let record: Registration | undefined
+    for (const key of scopeChainOf(scope)) {
+      record = this.scoped.get(key)
+      if (record !== undefined) break
+    }
+    record ??= this.root
+    const executor = record?.executor
+    if (executor === undefined) throw new ToolExecutorUnavailableError()
+    return executor
+  }
+
+  async execute(input: ToolBatchInput): Promise<ToolBatchResult> {
+    return this.selectExecutor(input.agent).execute(input)
+  }
+```
+
+把 YAML 里的 native executor 换成 PTC executor，loop 代码零改动——PTC 只是把 `describe` 改成只暴露 `run_code` 并生成 SDK，共享流水线与审批/guard 原样复用。同一模式贯穿 fs（fs-local / fs-sandbox）、shell（bash-local / bash-sandbox）、sandbox（bwrap / Landlock / Seatbelt）、subagent（spawn / fork / codex / acp）。详见 [Tools & Capability Seams](/docs/CS/AI/LLM/Agent/Product/DSH/Tools.md)。
+
+### Why This Shape
+
+把上面几层串起来，DSH 长成"元内核 + 配置装配 + 事件日志 + 能力接缝"是几个约束共同决定的：
+
+- **同运行时多形态**：Web/headless/SDK/ACP/Desktop 要复用同一套 agent 逻辑，于是把前端做成"协议翻译薄壳"、把能力做成晚绑定服务，load 哪套取决于 profile。
+- **能力要独立替换**：同一进程并存多套组合、运行期可热更新，于是提供/消费分离成 capability seam，注册动作收敛成 effect（可撤销），HMR 失败时恢复最后一棵可用树。
+- **崩溃与 fork 要可重建**：把"历史"外置成不可变日志，模型上下文是日志的纯函数，才能做到确定性回放、会话分叉、格式代际迁移而不覆盖旧数据。
+- **安全要分层**：不可信"路径"用 fs-sandbox 策略围栏（受信代码做规范化→包含判定），不可信"代码"用 sandbox-local 内核隔离（bwrap/Landlock/Seatbelt），两者 fail-closed。
+
+代价也真实：静态代码 ≠ 实际系统（必须 dump 配置树排障）、动态依赖放大因果链、可逆不等于事务（外部副作用无法回滚）、vendor Cordis 带来元框架维护成本。更完整的反直觉点与纠偏在各分册。
+
+## Subsystem Deep Dives
+
+内核运行时与插件模型的逐字源码拆解见 [DSH Cordis](/docs/CS/AI/LLM/Agent/Product/DSH/Cordis.md)：根 Context 与 Proxy、Fiber 状态机与 effect 逆序回滚、registry/reflect 的 provide/inject、事件五模式、isolate/realm 空间隔离、Loader 与 HMR 失败恢复。启动配置与前端接入见 [DSH Boot & Frontends](/docs/CS/AI/LLM/Agent/Product/DSH/BootAndFrontends.md)：profile/bundle/patch 分层、Web host 的 remote 事件流、SDK JSON-RPC 与 ACP、Desktop 的 Electron→host→Web 链路。
+
+主循环与工具管线的独立深挖见 [DSH Agent Loop](/docs/CS/AI/LLM/Agent/Product/DSH/AgentLoop.md)（turn/step 状态机、pre-step 门禁、取消传播、工具收口）与 [DSH Tools & Capability Seams](/docs/CS/AI/LLM/Agent/Product/DSH/Tools.md)（注册→schema 注入→pre/post-execute→审批→有序提交，以及 executor/fs/subagent 三角色 seam）。会话层的事件溯源见 [DSH Session & Persistence](/docs/CS/AI/LLM/Agent/Product/DSH/SessionPersistence.md)。
+
+模型侧见 [DSH LLM Adapter & Context](/docs/CS/AI/LLM/Agent/Product/DSH/LlmAdapter.md)：两段式 prepareCall、adapter 注册与路由、流式协议、system prompt 分节装配与前缀缓存；记忆与知识的组织见 [DSH Context / Memory](/docs/CS/AI/LLM/Agent/Product/DSH/Context.md)。执行与安全面见 [DSH Subprocess](/docs/CS/AI/LLM/Agent/Product/DSH/Subprocess.md)（进程树收割、pid 复用栅栏、PTY、spill）与 [DSH Permission & Sandbox](/docs/CS/AI/LLM/Agent/Product/DSH/Permission.md)（allowed-once、fail-closed、两层沙箱边界）。多 Agent 编排见 [DSH Subagent & Team](/docs/CS/AI/LLM/Agent/Product/DSH/SubagentTeam.md)：provider seam、fork/spawn 差异、共享任务板、preset realm、goal 续跑。插件开发工作流见 [DSH Plugin](/docs/CS/AI/LLM/Agent/Product/DSH/Plugin.md)。
 
 ## Links
 
-- [DeepSeek](/docs/CS/AI/LLM/Model/DeepSeek.md) / [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md)
-- [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) / [MCP](/docs/CS/AI/LLM/Protocol/MCP.md) / [Skill](/docs/CS/AI/LLM/Agent/Theory/Skill.md)
-- [Compaction](/docs/CS/AI/LLM/Agent/Theory/Compaction.md) — 上下文压缩的通用机制与各家实现对比
-- [Pi](/docs/CS/AI/LLM/Agent/Product/Pi/Pi.md) — 另一种 Agent Loop 结束判断（AND 聚合）的实现
-- [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw/OpenClaw.md) — 另一种"本地优先 + 多 agent 路由"的 agent 网关
-- [AgentScope](/docs/CS/AI/LLM/Agent/Product/AgentScope/AgentScope.md) — 通用 Python Agent 框架
-- [AgentScopeJava](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/AgentScopeJava.md) — 同族不同语言的 Java 版 Agent 框架（Session Log 持久化、Workspace/沙箱、Skill 市场）
-- [TypeScript](/docs/CS/TypeScript/TypeScript.md) / [TypeScript 类型系统](/docs/CS/TypeScript/TypeSystem.md)
+- [DSH Cordis 微内核](/docs/CS/AI/LLM/Agent/Product/DSH/Cordis.md)
+- [DSH Agent Loop](/docs/CS/AI/LLM/Agent/Product/DSH/AgentLoop.md)
+- [DSH Session & Persistence](/docs/CS/AI/LLM/Agent/Product/DSH/SessionPersistence.md)
+- [DSH Tools & Capability Seams](/docs/CS/AI/LLM/Agent/Product/DSH/Tools.md)
+- [DSH Boot & Frontends](/docs/CS/AI/LLM/Agent/Product/DSH/BootAndFrontends.md)
+- [Agent 理论](/docs/CS/AI/LLM/Agent/Theory/Agent.md)
 
 ## References
 
-### Official Docs
-
-- [Cordis 框架教程](https://deepseek-harness.github.io/deepseek-harness/develop/cordis-tutorial/)
-- [Cordis](https://github.com/cordiverse/cordis) / [时空可组合性论文](https://github.com/cordiverse/paper)
-- 官方子系统文档（与源码同步生成）：[approval](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/subsystems/approval.md) / [sandbox](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/subsystems/sandbox.md) / [filesystem](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/subsystems/filesystem.md) / [tools](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/subsystems/tools.md) / [shell](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/subsystems/shell.md) / [permission-presets](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/subsystems/permission-presets.md)
-
-### Community Deep Analysis (2026-08 ~ 2026-09)
-
-源码深读系列，基于 DeepSeek Harness 源码（MIT，`0.1.1-rc.1`）与官方 Agent Notes 整理：
-
-- [DSH：DeepSeek Harness 架构解析](https://mp.weixin.qq.com/s/Kf87hcNdSmY4ODWI4UZ8cg)
-- [为什么 DSH 把一切都做成插件？Cordis 又是什么？](https://mp.weixin.qq.com/s/EDx6e1AEKalz6dEXdyWFSg)
-- [DeepSeek Harness 底层原理图解（时序图 + 流程图）](https://mp.weixin.qq.com/s/1NWC0Qk-bDkvr8QIVPr1Zg)
-- [DSH 和 Pi 的 Agent Loop 循环结束判断架构细节解析](https://mp.weixin.qq.com/s/7KJgpnKQ0VVHe-oMnS2L5Q)
-- [DSH 的 Cordis 插件架构](https://mp.weixin.qq.com/s/XFWvHB8ke_LjcSZ06IajsA)
-- [DSH 的上下文管理、记忆和知识库剖析](https://mp.weixin.qq.com/s/RG5oQ6rpNDNn7Fwo9GoqIA)
-- [DSH 的宝藏之一：Session 持久化的设计](https://mp.weixin.qq.com/s/uH3vuY9nNCmp-q4yUtRRYA)
-- [源码深读 04：起一个子进程只要十行，送走它用了五百行（subprocess-local）](https://mp.weixin.qq.com/s/mmprMkOaTMP2IBTeH6uQuw)
+1. [deepseek-ai/deepseek-harness（v0.2.2-rc.3）](https://github.com/deepseek-ai/deepseek-harness/tree/v0.2.2-rc.3)
+2. [架构文档 docs/architecture.md](https://github.com/deepseek-ai/deepseek-harness/blob/v0.2.2-rc.3/docs/architecture.md)
+3. [Cordis 框架](https://github.com/cordiverse/cordis) / [时空可组合性论文](https://arxiv.org/abs/2608.25512)
+4. [DSH 官方文档站](https://deepseek-harness.github.io/deepseek-harness/)
+5. [DSH：DeepSeek Harness 架构解析](https://mp.weixin.qq.com/s/Kf87hcNdSmY4ODWI4UZ8cg)

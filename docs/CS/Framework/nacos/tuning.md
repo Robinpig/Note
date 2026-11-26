@@ -2,121 +2,95 @@
 
 ## Introduction
 
-生产环境里 Nacos 最容易被打垮的不是功能，而是**不合理的使用方式**：高频读、热点写、单 client 重试、长连接耗尽。本页把 Nacos.md 内联的限流 / 黑名单 / 长连接 / 端口冲突等内容抽出来，集中讲生产面调优。限流主要在 **Nacos 前层的 Nginx** 做（Nacos 自身没有内置细粒度 QPS 限流），黑名单同理。
+生产环境里 Nacos 最容易被打垮的不是功能，而是**不合理的使用方式**：高频读、热点写、单 client 重试、长连接耗尽。本页集中讲生产面调优。
 
-> [!NOTE]
-> 本页以 **3.2.4** 为准做了核对：gRPC 原生端口 9848（client）/ 9849（server 间）、Raft 7848、HTTP 8848 未变；3.x 默认鉴权加强（3.3+ Docker 镜像默认开启 Client API 鉴权），运维接入注意 token，见 [Security](/docs/CS/Framework/nacos/security.md)。
+> 版本基线：Nacos 3.2.4（commit 2c587c0）。端口 8848 / 9848 / 9849 / 7848 未变；3.x 默认鉴权加强（3.3+ Docker 镜像默认开启 Client API 鉴权），接入注意 token，见 [Security](/docs/CS/Framework/nacos/security.md)。
 
-### Rate Limiting
+反直觉点：
 
+- **Nacos 自身没有内置细粒度 QPS 限流**：限流与黑名单都在前置 Nginx 做，配在 Nacos 上基本无效。
+- 写操作代价比读大得多：同一个配置高频写会触发 MySQL **行锁排队**，最终拖垮整个实例，所以「限制发布配置」比「限制读配置」更关键。
+- 长连接上限是**运维经验值**（8C16G 约 9000），不是源码常量；不要当成硬编码阈值。
 
+## Rate Limiting
 
-Tomcat限流 maxConnection
+Nacos 每个接口的代价不同：写 > 读，SDK 调用（高频）> 运维操作（低频）。生产要区别对待，防止错用方打垮服务。
 
+**限制单个接口的 QPS**：`get config` 是低频操作——正常使用只在启动和变更推送时拉取，频繁获取说明 client 错用（如数据平台 failover 重试）。`publish config` 更要限——高频写同一 dataId 会打满 MySQL 行锁。
 
+```nginx
+http {
+    limit_req_zone $binary_remote_addr zone=perclient:10m rate=10r/s;
+    limit_conn_zone $binary_remote_addr zone=perclient_conn:10m;
 
-Nginx限流
+    server {
+        # 单个 client 的所有请求限制在 500 QPS 以内，防重试风暴
+        location /nacos/v1/cs/configs {
+            limit_req zone=perclient burst=20 nodelay;
+        }
 
-
-
-
-
-限制qps
-
-
-
-Nacos 每个接口执行的代价不尽相同， 般来说写操作代价比读操作大，与此同时还有高频操作和低频操作之分，SDK 调用的接口 般来说是高频接口，容易出现问题，所以在生产环境需要将这些接口区别对待，根据服务自身的实际情况采取合理的限流策略，以防错用方打垮 Nacos 服务。
-
-
-
-限制单个接口的请求 QPS
-
-limit get config 对读操作进行限流，正常使用 Nacos 获取动态配置 般就启动和运行时修改配置推送到 client，获取配置相对来说是低频操作，如果频繁获取配置肯定是 client 有错用或者应用不正常（比如数据平台任务 failover 重试任务）。
-
-
-
-limit publish config 对写操作进行限流，可以有效防止热点写问题。对同 个数据的高频写会触发 mysql 的行锁，从而导致 mysql 的多线程任务因等待行锁排队，最终导致 mysql 所有操作都超时服务不可用。这里通过 nginx lua 模块获取 post 请求的参数，设置 limit key 。
-
-
-
-
-
-限制单机访问 QPS
-
-perclient 对单个 client 的所有请求限制低于 500QPS，可以有效防止单台 client 的重试攻击。
-
-
-
-
-
-
-
-限制 Nacos 服务 QPS
-
-perserver 限制整个 Nacos 服务的 QPS，Nacos 的服务部署在 nginx 之后，nginx 可以保证到达
-
-Nacos 的流量不会打垮 Nacos。
-
-
-
-限制并发连接数
-
-
-
-/nacos/v1/cs/configs/listener 接口在 2.x 是长连接通道；3.x 主通道已改为 gRPC（9848）长连接，旧的 HTTP 长轮询监听已废弃。长连接， 般来说， 个 client 个长连接就可以满足生产需求。limit conn client 限制 client 的连接数不超过 10 个，limit conn server限制 Nacos 单机（8 核 16 G 内存）支撑最多 9000 个长连接，最多可以同时服务 9000 个应用节点。
-
-
-
-黑名单
-
-1、 P 黑名单
-
-当生产环境发现有错用的 client 影响到 Nacos 服务，可以使用 nginx 黑名单限制 client 的访问。
-
-
-
-读写黑名单分离
-
-有时候通过 P 维度直接限制 client 访问所有 Nacos 接口粒度过大，会导致应用服务不可用，可以将读操作和写操作分开，禁止 client 写 Nacos，依然允许其进行读。
-
-```shell
-# 1 limit read, 0 no limit
-map "$remote addr" $limit read {
-#10.2.24.252 1;
-default 0;
-}
-# 1 limit write, 0 no limit
-map "$remote addr" $limit write {
-#10.2.24.252 1;
-default 0;
-}
-location /some url to write {
-if ($limit write = 1) {
-return 403;
-}
+        # 写操作单独收紧，并用 lua 取 POST 参数做 limit key
+        location /nacos/v1/cs/configs/publish {
+            access_by_lua_block {
+                ngx.var.limit_key = ngx.var.remote_addr .. ":"
+                    .. (ngx.var.arg_dataId or "")
+            }
+            limit_req zone=perclient burst=5 nodelay;
+        }
+    }
 }
 ```
 
+**限制 Nacos 服务总 QPS**：Nacos 部署在 Nginx 之后，由 Nginx 兜住进入 Nacos 的流量。
 
+**限制并发连接数**：2.x 起配置监听改走 gRPC（9848）长连接，v1 的 `/cs/configs/listener` HTTP 长轮询在 3.x 已废弃。一般一个 client 一条长连接就够生产用：
 
-应用黑名单
+- `limit_conn client`：单 client 连接数 ≤ 10。
+- `limit_conn server`：单机（8 核 16G）最多约 9000 个长连接（经验值），即可同时服务约 9000 个应用节点。
 
-P 黑名单功能是 nginx 提供的基础能力，能够限制某些 P 的访问，但是 般 个应用会有很多台机器，当 个应用出问题的时候，会有很多 P 访问都有问题，通过 P 的维度来限制访问达不到预期，需要有应用的维度来限制。
+## Blacklist
 
-namespace（命名空间）是 个可以区分不同应用的维度，不同的应用 般会使用不同的 namespace，这样可以在 namespace 维度对服务的访问进行限制。
+**IP 黑名单**：发现错用的 client 影响服务时，用 Nginx 直接限制其访问。按读写分离更精细——只禁写、仍允许读，避免整个应用不可用：
 
+```nginx
+# 1 限制，0 不限制
+map "$remote_addr" $limit_read {
+    #10.2.24.252 1;
+    default 0;
+}
+map "$remote_addr" $limit_write {
+    #10.2.24.252 1;
+    default 0;
+}
 
+server {
+    location /nacos/v1/cs/configs/publish {
+        if ($limit_write = 1) {
+            return 403;
+        }
+    }
+}
+```
 
+**应用黑名单**：一个应用通常有多台机器，按 IP 粒度不够。namespace 是区分不同应用的天然维度，可在 namespace 维度做访问限制；配合鉴权插件的权限模型，能直接对应用身份禁用写操作。
 
+## Long Connections and Capacity
 
-Windows下阿里云盘的SyncAppServer.exe占用了端口9848导致启动失败
+- 每个 client 保持**一条** gRPC 长连接即可满足生产，多余连接纯属浪费。
+- 单机容量按 8C16G ≈ 9000 条连接规划（经验值，需用真实压测校准）；接近上限时优先扩容节点，而非放泛滥连。
+- 监控 `nacos_monitor{module="core",name="longConnection"}` 与 `grpc_server_executor` 的 active / queued，提前预警（见 [Monitoring](/docs/CS/Framework/nacos/monitoring.md)）。
+- 节点内存涨 / GC 频繁 / OOM 时，先查连接数，再查配置与服务数据量是否超出单机容量。
+
+## Port Conflict on Windows
+
+Windows 上阿里云盘的 `SyncAppServer.exe` 会占用 9848，导致 Nacos 启动失败。用 `netstat -ano | findstr 9848` 确认后释放端口或调整 `server.port`（偏移端口随之联动）。完整排查见 [Troubleshooting](/docs/CS/Framework/nacos/troubleshooting.md)。
 
 ## Links
 
 - [Nacos](/docs/CS/Framework/nacos/Nacos.md)
-- [Security（鉴权与 RBAC）](/docs/CS/Framework/nacos/security.md)
-- [Troubleshooting（故障排查）](/docs/CS/Framework/nacos/troubleshooting.md)
-- [etcd 横向对照](/docs/CS/Framework/etcd/compare.md)
+- [Security](/docs/CS/Framework/nacos/security.md)
+- [Monitoring](/docs/CS/Framework/nacos/monitoring.md)
+- [Troubleshooting](/docs/CS/Framework/nacos/troubleshooting.md)
 
 ## References
 

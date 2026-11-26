@@ -1,4 +1,8 @@
+# Redis Hash: Source Deep Dive
+
 ## Introduction
+
+> 版本基线：Redis 8.10.2（commit 498ecd0d）。默认值与编码均以该 tag 为准；7.0 前的 dict 布局在下文中标注为历史。
 
 对于 Redis 键值数据库来说，Hash 表既是键值对中的一种值类型，
 同时，Redis 也使用一个全局 Hash 表来保存所有的键值对，从而既满足应用存取 Hash 结构数据需求，又能提供快速查询功能
@@ -38,9 +42,9 @@ Redis 准备了两个哈希表，用于 rehash 时交替保存数据
 ## Structures
 
 
-7.0之前：dict内部包含了两个dictht
+**历史（7.0 之前）**：dict 内部包含两个 dictht。
 
-7.0 变更
+7.0 起（含 8.10.2）变更为：
 - dictht ht[2]用dictEntry **ht_table[2]代替
 - 原来两个 dictht 的 used 用 unsigned long ht_used[2]代替
 - 原来两个 dictht 的 size 用 signed char ht_size_exp[2]代替，且由8个字节变为1个字节
@@ -674,4 +678,6 @@ However because `SCAN` has very little state associated (just the cursor) it has
 
 ## References
 
-1. [Redis Internal Data Structure : Dictionary](https://blog.wjin.org/posts/redis-internal-data-structure-dictionary.html)
+- <https://github.com/redis/redis/blob/8.10.2/src/dict.c>
+- <https://github.com/redis/redis/blob/8.10.2/src/t_hash.c>
+- [Redis Internal Data Structure : Dictionary](https://blog.wjin.org/posts/redis-internal-data-structure-dictionary.html)

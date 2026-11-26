@@ -17,6 +17,9 @@
 
 演进脉络很清晰：Session → Per-Job 解决资源隔离，Per-Job → Application 解决 **Client 成为瓶颈**的问题（大量作业时 JobGraph 生成和依赖上传都压在提交机上）。Application 模式由 FLIP-85 引入，是容器化环境的自然选择。
 
+> [!NOTE]
+> 2.3 起（FLIP-549 / FLIP-560）把 **Application** 提升为一等公民：集群–应用–作业**三级模型**取代旧的集群–作业二级模型，Web UI 新增 Applications 页签、作业页回链所属应用。这让 Application 模式从一个「提交方式」变成可观测、可治理的运行时实体。
+
 ```shell
 # Application 模式（推荐）
 ./bin/flink run-application -t yarn-application ./MyJob.jar

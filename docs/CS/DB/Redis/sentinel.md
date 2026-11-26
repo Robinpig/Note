@@ -1,7 +1,7 @@
 ## Introduction
 
 > [!IMPORTANT]
-> 版本基线 **Redis 8.10.2**，完整版本表与易踩默认值见 [Redis 版本基线](/docs/CS/DB/Redis/Redis.md?id=version-baseline)。
+> 版本基线：Redis 8.10.2（commit 498ecd0d）。完整版本表与易踩默认值见 [Redis 版本基线](/docs/CS/DB/Redis/Redis.md?id=version-baseline)。
 
 Sentinels by default run **listening for connections to TCP port 26379**, so for Sentinels to work, port 26379 of your servers **must be open** to receive connections from the IP addresses of the other Sentinel instances.
 Otherwise Sentinels can't talk and can't agree about what to do, so failover will never be performed.
@@ -15,17 +15,16 @@ down-after-milliseconds
 1. If the replica priority is set to 0, the replica is never promoted to master.
 2. Replicas with a *lower* priority number are preferred by Sentinel.
 
-```
-slave-priority
-```
-
-max
+选主比较顺序（相同优先级时）：复制偏移量越大越优先 → runid（ID）字典序越小越优先。对应的两个字段要分清「配置项名」与「INFO 字段名」——8.10.2 里前者已改名，后者仍是老名字：
 
 ```
-slave_repl_offset
+replica-priority
 ```
 
-min id
+> [!NOTE]
+> `config.c` 原文是 `createIntConfig("replica-priority", "slave-priority", ...)`：`replica-priority`（默认 100）是正式名，`slave-priority` 只是保留的 **deprecated 别名**，旧资料里的写法现在会收到弃用告警。
+>
+> 但 `slave_repl_offset` **不是**弃用名——8.10.2 `server.c` 的 INFO replication 段原文输出仍是 `slave_repl_offset:%lld\r\n`（另加 `slave_read_repl_offset`），源码里并不存在 `replica_repl_offset`。sentinel.c 读取 INFO 时匹配的也是 `"slave_repl_offset:"`。所以这里保留 `slave_repl_offset`。
 
 `__sentinel__:hello`
 
@@ -68,6 +67,7 @@ struct sentinelState {
                            Key is the instance name, value is the
                            sentinelRedisInstance structure pointer. */
     int tilt;           /* Are we in TILT mode? */
+    int total_tilt;   /* Number of tilt. */
     int running_scripts;    /* Number of scripts in execution right now. */
     mstime_t tilt_start_time;       /* When TITL started. */
     mstime_t previous_time;         /* Last time we ran the time handler. */
@@ -106,6 +106,8 @@ typedef struct sentinelRedisInstance {
     mstime_t s_down_since_time; /* Subjectively down since time. */
     mstime_t o_down_since_time; /* Objectively down since time. */
     mstime_t down_after_period; /* Consider it down after that period. */
+    mstime_t master_reboot_down_after_period; /* Consider master down after that period. */
+    mstime_t master_reboot_since_time; /* master reboot time since time. */
     mstime_t info_refresh;  /* Time at which we received INFO output from it. */
     dict *renamed_commands;     /* Commands renamed in this instance:
                                    Sentinel will use the alternative commands
@@ -437,6 +439,44 @@ char *sentinelVoteLeader(sentinelRedisInstance *master, uint64_t req_epoch, char
 4. 多个 sentinel 根据一定的逻辑，选举出一个 sentinel 作为 leader，由它去进行故障转移，将原来连接已客观下线 master 最优的一个 slave 提升为新 master 角色。旧 master 如果重新激活，它将被降级为 slave
 
 ### State Machine
+
+从主观下线到 failover 完成的完整状态流（前半段是 `sentinelHandleRedisInstance` 的判定，后半段才是 `sentinelFailoverStateMachine` 驱动的状态机）：
+
+```dot
+digraph SentinelFailover {
+  rankdir=TB;
+  node [shape=box, style=rounded];
+
+  subgraph cluster_detect {
+    label="故障判定 / Detection";
+    sdown [label="S_DOWN\n主观下线"];
+    odown [label="O_DOWN\n客观下线 (quorum)"];
+    vote [label="选举 Leader\n多数派投票"];
+  }
+
+  subgraph cluster_fsm {
+    label="Failover 状态机 / sentinelFailoverStateMachine";
+    wait [label="WAIT_START\n等 +elected-leader"];
+    select [label="SELECT_SLAVE\npriority → repl_offset → runid"];
+    noone [label="SEND_SLAVEOF_NOONE\nSLAVEOF NO ONE"];
+    promo [label="WAIT_PROMOTION\n等新主角色生效"];
+    reconf [label="RECONF_SLAVES\n逐个重定向其余副本"];
+    update [label="UPDATE_CONFIG\n切换监控到新主"];
+  }
+
+  sdown -> odown [label="quorum 达成"];
+  odown -> vote [label="is-master-down-by-addr"];
+  vote -> wait [label="+elected-leader"];
+  wait -> select;
+  select -> noone;
+  noone -> promo;
+  promo -> reconf;
+  reconf -> update;
+  update -> sdown [label="继续监控新主", style=dashed];
+}
+```
+
+状态机的分发入口如下（`case` 顺序即上面图的推进顺序）：
 
 ```c
 

@@ -4,6 +4,43 @@ Kubernetes 系统对 [Etcd](/docs/CS/Framework/etcd/etcd.md) 存储进行了大�
 
 etcd 是 K8s 唯一的有状态依赖：除短暂缓存外，集群的所有状态（Pod、Service、Secret、CRD……）都保存在 etcd 中。apiserver 是唯一与 etcd 通信的组件，其他组件（scheduler、controller-manager、kubelet）都只通过 apiserver 的 REST/watch API 读写集群状态——这让 etcd 的读写模式非常规整：**读多写少、按 key 前缀（`/registry/`）组织、强一致读 + 大量 watch**。
 
+## The Big Picture: One Key-Value Store, Four Layers
+
+从下到上大致分为四层：
+
+```dot
+digraph etcd_stack {
+  rankdir=LR;
+  node [shape=box, style=filled, fillcolor="#eef3fb", color="#5b7bb5", fontname="Helvetica"];
+  edge [color="#8a9bb5"];
+
+  subgraph cluster_apiserver {
+    label="apiserver 进程内"; fontsize=11;
+    rest [label="REST 资源 + Watch\n(registry 层: Scheme/GVK 映射)"];
+    delegator [label="CacheDelegator\n读分流: 缓存 or 透传", fillcolor="#fdeee8", color="#c8763f"];
+    cacher [label="Cacher + watch cache\n(内存 btree, 每 group-resource 一个)"];
+    store [label="etcd3 store\nkey 编码 / lease / transformer"];
+  }
+
+  etcd [label="etcd\nMVCC revision = resourceVersion", shape=ellipse, fillcolor="#e8f4ec", color="#5b9b6f"];
+
+  rest -> delegator;
+  delegator -> cacher [label="Get/GetList (部分)", style=dashed];
+  delegator -> store [label="写 全部透传\nGet/GetList (部分)"];
+  cacher -> store [label="1 次全量 List\n+ 1 条持续 Watch"];
+  store -> etcd [label="CAS 事务\n(OptimisticPut/Delete)"];
+}
+```
+
+三条关键流量走向：**写**永远透传到 etcd3 store（CAS 事务）；**读**按 CacheDelegator 的判定分流到内存 watch cache 或透传；**watch cache 自身**与 etcd 之间只有一条持续 Watch 和一次全量 List。整篇文章就是在展开这张图的四个盒子。
+
+## Why This Shape: 两个根本约束
+
+K8s 的 etcd 封装形状由两个事实决定：
+
+1. **apiserver 是无状态多副本**，没有任何进程内互斥可用。所有并发控制必须下推到 etcd 本身——这就是写路径全部收敛到 CAS 事务（`OptimisticPut`/`OptimisticDelete`，以 `ModRevision` 为预期条件）的根本原因，详见 [apiserver 的乐观提交](/docs/CS/Container/k8s/apiserver.md)。
+2. **etcd 的吞吐远低于 apiserver 的需求**。读大头是 List/Watch，如果每次都打穿到 etcd，集群规模一大 etcd 先死——所以每个 group-resource 建一个进程内 Cacher，N 个客户端的 watch 收敛成 1 条 etcd watch，读放大由 apiserver 内存承担。
+
 ## Storage Tiering
 
 从下到上大致分为四层：
@@ -32,10 +69,10 @@ etcd 是 K8s 唯一的有状态依赖：除短暂缓存外，集群的所有状�
 
 ### 构建入口
 
-构建链从 `NewStorageFactoryConfigEffectiveVersion`（`pkg/kubeapiserver/default_storage_factory_builder.go:70`）开始：
+构建链从 `NewStorageFactoryConfigEffectiveVersion`（`pkg/kubeapiserver/default_storage_factory_builder.go`）开始：
 
 ```go
-// pkg/kubeapiserver/default_storage_factory_builder.go:95
+// pkg/kubeapiserver/default_storage_factory_builder.go
 return &StorageFactoryConfig{
     Serializer:                legacyscheme.Codecs,
     DefaultResourceEncoding:   serverstorage.NewDefaultResourceEncodingConfigForEffectiveVersion(...),
@@ -43,7 +80,7 @@ return &StorageFactoryConfig{
 }
 ```
 
-然后 `.Complete(etcdOptions).New()` → `DefaultStorageFactory.NewConfig(groupResource, example)`（`storage_factory.go:229`），内部做五件事：
+然后 `.Complete(etcdOptions).New()` → `DefaultStorageFactory.NewConfig(groupResource, example)`（`storage_factory.go`），内部做五件事：
 
 ```
 ① getStorageGroupResource(groupResource)   — 找 cohabitating 伙伴（extensions/networking 共用 ingress）
@@ -57,7 +94,7 @@ return &StorageFactoryConfig{
 
 ### Cohabitating Resources
 
-一个经典坑：为什么 apps/extensions 的 Deployment 数据互相可见？答案在 `AddCohabitatingResources`（`default_storage_factory_builder.go:141`）：
+一个经典坑：为什么 apps/extensions 的 Deployment 数据互相可见？答案在 `AddCohabitatingResources`（`default_storage_factory_builder.go`）：
 
 ```go
 storageFactory.AddCohabitatingResources(
@@ -71,7 +108,7 @@ storageFactory.AddCohabitatingResources(
 
 ### Special Resource Prefixes
 
-`SpecialDefaultResourcePrefixes`（`default_storage_factory_builder.go:46`）是另一组特殊映射：
+`SpecialDefaultResourcePrefixes`（`default_storage_factory_builder.go`）是另一组特殊映射：
 
 ```go
 {Group: "", Resource: "nodes"}:          "minions"
@@ -83,12 +120,12 @@ storageFactory.AddCohabitatingResources(
 
 ## etcd3 Store 源码：从 Object 到 Transaction
 
-DefaultStorageFactory 产出的 `ConfigForResource` 最终被 `newETCD3Storage`（`staging/.../storagebackend/factory/etcd3.go:455`）消费，构造真正的 `etcd3.store`。这层封装是 K8s 到 etcd 的最后一跳。
+DefaultStorageFactory 产出的 `ConfigForResource` 最终被 `newETCD3Storage`（`staging/.../storagebackend/factory/etcd3.go`）消费，构造真正的 `etcd3.store`。这层封装是 K8s 到 etcd 的最后一跳。
 
 ### Store 组装
 
 ```go
-// storagebackend/factory/etcd3.go:455
+// staging/src/k8s.io/apiserver/pkg/storage/storagebackend/factory/etcd3.go
 func newETCD3Storage(c storagebackend.ConfigForResource, newFunc, newListFunc func() runtime.Object, resourcePrefix string) (storage.Interface, DestroyFunc, error) {
     client, err := newETCD3Client(c.Transport)       // etcd clientv3 + kubernetes-mode 扩展
     client.KV = etcd3.NewETCDLatencyTracker(client.KV)  // 加延迟指标
@@ -110,7 +147,7 @@ func newETCD3Storage(c storagebackend.ConfigForResource, newFunc, newListFunc fu
 
 ### etcd Client：Kubernetes-mode 扩展
 
-v1.37.2 依赖 etcd v3.6，client 是标准 `clientv3.New(cfg)` 包了一层 `kubernetes.Client`（`vendor/go.etcd.io/etcd/client/v3/kubernetes/client.go:28`）。它只扩了 6 个方法：
+v1.37.2 依赖 etcd client **v3.7.0**（go.mod 中 api/v3、client/pkg/v3、client/v3 三件均 v3.7.0），client 是标准 `clientv3.New(cfg)` 包了一层 `kubernetes.Client`（`vendor/go.etcd.io/etcd/client/v3/kubernetes/client.go`）。它只扩了 6 个方法：
 
 ```
 OptimisticPut(ctx, key, value, expectedRevision, PutOptions)
@@ -118,37 +155,41 @@ OptimisticDelete(ctx, key, expectedRevision, DeleteOptions)
 Get / List / Count
 ```
 
-`OptimisticPut`（`kubernetes/client.go:83`）是整条封装链的核心：
+`OptimisticPut`（`kubernetes/client.go`）是整条封装链的核心：
 
 ```go
-func (k Client) OptimisticPut(ctx context.Context, key string, value []byte,
-    expectedRevision int64, opts PutOptions) (resp PutResponse, err error) {
-    
-    txn := k.KV.Txn(ctx).If(
-        clientv3.Compare(clientv3.ModRevision(key), "=", expectedRevision),  // CAS 条件
-    ).Then(
-        clientv3.OpPut(key, string(value), clientv3.WithLease(opts.LeaseID)),
-    )
-    
-    if opts.GetOnFailure {
-        txn = txn.Else(clientv3.OpGet(key))   // 🔑 冲突时把当前值带回来
-    }
-    
-    txnResp, _ := txn.Commit()
-    resp.Succeeded = txnResp.Succeeded
-    resp.Revision = txnResp.Header.Revision
-    if opts.GetOnFailure && !txnResp.Succeeded {
-        resp.KV = kvFromTxnResponse(txnResp.Responses[0])  // 当前值随响应返回
-    }
-    return
+func (k Client) OptimisticPut(ctx context.Context, key string, value []byte, expectedRevision int64, opts PutOptions) (resp PutResponse, err error) {
+	txn := k.KV.Txn(ctx).If(
+		clientv3.Compare(clientv3.ModRevision(key), "=", expectedRevision),
+	).Then(
+		clientv3.OpPut(key, string(value), clientv3.WithLease(opts.LeaseID)),
+	)
+
+	if opts.GetOnFailure {
+		txn = txn.Else(clientv3.OpGet(key))
+	}
+
+	txnResp, err := txn.Commit()
+	if err != nil {
+		return resp, err
+	}
+	resp.Succeeded = txnResp.Succeeded
+	resp.Revision = txnResp.Header.Revision
+	if opts.GetOnFailure && !txnResp.Succeeded {
+		if len(txnResp.Responses) == 0 {
+			return resp, fmt.Errorf("invalid OptimisticPut response: %v", txnResp.Responses)
+		}
+		resp.KV = kvFromTxnResponse(txnResp.Responses[0])
+	}
+	return resp, nil
 }
 ```
 
-原来的手写事务是冲突后 apiserver 再发一次 Get，`GetOnFailure` 把这两步合并成一条——**省掉一次 GRT 和一次 etcd 往返**。
+事务的 `If` 分支把预期 revision 作为 CAS 条件；`GetOnFailure` 打开时，`Else` 分支放一个 `OpGet`——冲突发生时当前值随同一事务响应带回，调用方无需再发一次 Get。原来的手写事务是冲突后 apiserver 再发一次 Get，`GetOnFailure` 把这两步合并成一条——**省掉一次 Get 请求和一次 etcd 往返**，还消除了"事务失败与后续 Get 之间又有人写入"的窗口（Get 与失败的 Put 在同一事务里，读到的是同一时点的值）。
 
 ### Create 事务
 
-store.Create（`etcd3/store.go:284`）的完整调用链：
+store.Create（`etcd3/store.go`）的完整调用链：
 
 ```go
 // 1. 前置检查
@@ -183,7 +224,7 @@ s.decoder.Decode(data, out, txnResp.Revision)     // ← 直接把 etcd revision
 
 ### GuaranteedUpdate：Update / Patch / Delete 共用
 
-所有修改类操作最终都收敛到 GuaranteedUpdate（`etcd3/store.go:473`），这是 K8s etcd 封装里最精巧的一段——**乐观锁 + 无锁重试 + "值未变短路"优化**：
+所有修改类操作最终都收敛到 GuaranteedUpdate（`etcd3/store.go`），这是 K8s etcd 封装里最精巧的一段——**乐观锁 + 无锁重试 + "值未变短路"优化**：
 
 ```
 for {
@@ -204,7 +245,7 @@ for {
 
 ### Delete 路径
 
-Delete（`etcd3/store.go:352`）也复用 `OptimisticDelete`——和 OptimisticPut 对称：
+Delete（`etcd3/store.go`）也复用 `OptimisticDelete`——和 OptimisticPut 对称：
 
 ```go
 txn := k.KV.Txn(ctx).If(
@@ -245,7 +286,7 @@ Watch → 始终走 Cacher.Watch
 
 ### Cacher 自身的初始化
 
-每个 CacheDelegator 后面挂一个 Cacher（`cacher/cacher.go:264`），它初始化时：
+每个 CacheDelegator 后面挂一个 Cacher（`cacher/cacher.go`），它初始化时：
 
 1. 从 etcd 拉一次全量 List（默认分页 10000），填进内存的 btree；
 2. 在 etcd 上开一条持续 Watch，把增量事件塞进 `incoming chan watchCacheEvent`；
@@ -274,7 +315,7 @@ apiserver 会为每类资源维护一个 **watch cache**（`storage/cacher`）�
 key 不是随机生成的，由 `etcd3store.go` 两层前缀拼出：
 
 ```go
-// staging/src/k8s.io/apiserver/pkg/storage/etcd3/store.go:148
+// staging/src/k8s.io/apiserver/pkg/storage/etcd3/store.go
 func New(c *kubernetes.Client, compactor Compactor, codec runtime.Codec,
 	newFunc, newListFunc func() runtime.Object, prefix, resourcePrefix string, ...) (*store, error) {
 	// no-op for default prefix of '/registry'.
@@ -285,13 +326,13 @@ func New(c *kubernetes.Client, compactor Compactor, codec runtime.Codec,
 
 - `prefix` 是全局前缀，由 `--etcd-prefix` 控制（默认 `/registry`）；
 - `resourcePrefix` 是资源类型前缀，例如 `pods`、`secrets`；
-- 落库时 `prepareKey`（`:1116`）把三者拼成 `/registry/pods/default/my-pod`。
+- 落库时 `prepareKey` 把三者拼成 `/registry/pods/default/my-pod`。
 
 于是 etcd 的一个 `WithPrefix()` range 就等价于"列出某类资源"，namespace 只是 key 路径中的一段——**K8s 的 namespace 隔离在存储层就是前缀隔离**，没有独立的表或租户概念。这也解释了为什么按 namespace 列出是高效操作，而按 label 列出只能全量拉回再在 apiserver 侧过滤。
 
 ### Storage Media Type
 
-`--storage-media-type` 的**代码默认值是 `application/json`**（`staging/src/k8s.io/apiserver/pkg/server/options/etcd.go:81`），但落到具体某类资源用什么 codec，取决于该资源 store 构造时传入的 codec，而不是这个 flag 单独决定。这就是为什么直接 `etcdctl get` 常常看到二进制而非 JSON——内建资源用的是 protobuf 编解码。
+`--storage-media-type` 的**代码默认值是 `application/json`**（`staging/src/k8s.io/apiserver/pkg/server/options/etcd.go`），但落到具体某类资源用什么 codec，取决于该资源 store 构造时传入的 codec，而不是这个 flag 单独决定。这就是为什么直接 `etcdctl get` 常常看到二进制而非 JSON——内建资源用的是 protobuf 编解码。
 
 判断某类资源实际存成什么，只能看该资源的 store 构造，不能只看 flag。
 
@@ -300,7 +341,7 @@ func New(c *kubernetes.Client, compactor Compactor, codec runtime.Codec,
 > [!WARNING]
 > **默认不加密。** 静态加密必须显式提供 `EncryptionConfiguration` 并给资源指定 provider（默认 provider 是 identity，即原样存储）。etcd 备份或磁盘泄露时明文可读，这在多数发行版里都是需要主动加固的项。
 
-envelope（信封）加密的格式很紧凑（`storage/value/encrypt/envelope/envelope.go:81`）：
+envelope（信封）加密的格式很紧凑（`storage/value/encrypt/envelope/envelope.go`）：
 
 ```
 [ uint16 加密后 DEK 的长度 ][ 加密后的 DEK ][ 用该 DEK 加密的数据 ]
@@ -309,7 +350,7 @@ envelope（信封）加密的格式很紧凑（`storage/value/encrypt/envelope/e
 三个实现要点：
 
 1. **每条数据一个 DEK**：`TransformToStorage` 每次都 `generateKey(32)`（256 位）新生成，用 KEK（KMS 或本地密钥）加密后前置在密文里；
-2. **DEK 不是每条都去问 KMS**：已解密的 DEK 放在 LRU 缓存里（`cacheSize > 0` 时，`envelope.go:71`），读多写少的场景下 KMS 调用量远小于请求量；
+2. **DEK 不是每条都去问 KMS**：已解密的 DEK 放在 LRU 缓存里（`cacheSize > 0` 时），读多写少的场景下 KMS 调用量远小于请求量；
 3. **长度前缀用 uint16 而不是 uint8**，因为 256 位密钥的长度放不进单字节（源码注释明确写了这个原因）。
 
 密钥轮换的实际效果是：新写入用新 KEK，旧数据仍用旧 KEK 解密，因此**必须保留旧密钥直到所有数据被重写**，通常需要跑一次全量 rewrite。
@@ -324,26 +365,43 @@ etcd 保留每个 key 的历史版本，revision 单调增长；`compact` 把某
                     → 客户端拿着过旧 RV 来 watch → 410 Gone，只能重新 List
 ```
 
-apiserver 侧由 `--etcd-compaction-interval` 控制压缩节奏（0 表示禁用；`etcd.go:193`）。压缩与 watch cache 的滑动窗口是两件事：compact 决定 etcd 里还能回溯多远，watch cache 决定 apiserver 内存里还能回溯多远——**客户端先撞到哪个，就先报哪个的错**。区分见 [watch cache 读路径底座](/docs/CS/Container/k8s/WatchCache.md)。
+apiserver 侧由 `--etcd-compaction-interval` 控制压缩节奏，默认值 `DefaultCompactInterval = 5 * time.Minute`（`staging/src/k8s.io/apiserver/pkg/storage/storagebackend/config.go`），0 表示禁用。压缩与 watch cache 的滑动窗口是两件事：compact 决定 etcd 里还能回溯多远，watch cache 决定 apiserver 内存里还能回溯多远——**客户端先撞到哪个，就先报哪个的错**。区分见 [watch cache 读路径底座](/docs/CS/Container/k8s/WatchCache.md)。
 
 ## Lease and TTL
 
-etcd 的 lease 在 K8s 里用得非常克制：`store.Create` 只在 `ttl != 0` 时才申请（`etcd3store.go:301`），绝大多数资源 ttl 为 0，即永不自动过期。
+etcd 的 lease 在 K8s 里用得非常克制：`store.Create` 只在 `ttl != 0` 时才申请，绝大多数资源 ttl 为 0，即永不自动过期。
 
-真正依赖它的是 Event——`lease_manager.go:53` 处的注释直接写着"since all the events have the same ttl"。问题是每个 Event 都 Grant 一次 lease 会打爆 etcd，所以有个复用机制（`lease_manager.go:90`）：
+真正依赖它的是 Event——`lease_manager.go` 处的注释直接写着"since all the events have the same ttl"：
 
 ```go
-reuseDurationSeconds := l.getReuseDurationSecondsLocked(ttl)   // min(ttl*5%, 60s)
-valid      := now.Add(ttl).Before(l.prevLeaseExpirationTime)
-sufficient := now.Add(ttl + reuseDurationSeconds).After(l.prevLeaseExpirationTime)
-if valid && sufficient && l.leaseAttachedObjectCount <= l.leaseMaxAttachedObjectCount {
-	return l.prevLeaseID, nil    // 复用上一个 lease
-}
-ttl += reuseDurationSeconds
-lcr, err := l.client.Lease.Grant(ctx, ttl)
+// GetLease returns a lease based on requested ttl: if the cached previous
+// lease can be reused, reuse it; otherwise request a new one from etcd.
+func (l *leaseManager) GetLease(ctx context.Context, ttl int64) (clientv3.LeaseID, error) {
+	now := time.Now()
+	l.leaseMu.Lock()
+	defer l.leaseMu.Unlock()
+	// check if previous lease can be reused
+	reuseDurationSeconds := l.getReuseDurationSecondsLocked(ttl)
+	valid := now.Add(time.Duration(ttl) * time.Second).Before(l.prevLeaseExpirationTime)
+	sufficient := now.Add(time.Duration(ttl+reuseDurationSeconds) * time.Second).After(l.prevLeaseExpirationTime)
+
+	// We count all operations that happened in the same lease, regardless of success or failure.
+	// Currently each GetLease call only attach 1 object
+	l.leaseAttachedObjectCount++
+
+	if valid && sufficient && l.leaseAttachedObjectCount <= l.leaseMaxAttachedObjectCount {
+		return l.prevLeaseID, nil
+	}
+
+	// request a lease with a little extra ttl from etcd
+	ttl += reuseDurationSeconds
+	lcr, err := l.client.Lease.Grant(ctx, ttl)
+	if err != nil {
+		return clientv3.LeaseID(0), err
+	}
 ```
 
-即：复用窗口取 `min(ttl*5%, 60s)`（`defaultLeaseReuseDurationSeconds = 60`，`:29`），Grant 时额外多申请一段，且单个 lease 上挂载的对象数有上限。这样同一时刻产生的一批 Event 共享一个 lease，过期时间略晚于各自 ttl。
+复用窗口取 `min(ttl*5%, 60s)`（`defaultLeaseReuseDurationSeconds = 60`），Grant 时额外多申请一段，且单个 lease 上挂载的对象数有上限。这样同一时刻产生的一批 Event 共享一个 lease，过期时间略晚于各自 ttl。
 
 > [!NOTE]
 > 注意区分两个"ttl"：这里是**etcd lease 的 TTL**，用于让 Event 自动消失；`Lease` 这个 K8s 资源（`coordination.k8s.io`）是节点心跳与 leader election 用的，两者完全不同。
@@ -363,7 +421,7 @@ APIService / CRD 的 `status.storageVersions` 记录各 apiserver 实例实际�
 
 ## Transformer: Identity + Encryption 链
 
-Store 的 `transformer` 字段是 apiserver 到 etcd 之间的**最后一层变换**——在编码之后、写入之前做加密，在读取之后、解码之前做解密。接口极简（`value/transformer.go:59`）：
+Store 的 `transformer` 字段是 apiserver 到 etcd 之间的**最后一层变换**——在编码之后、写入之前做加密，在读取之后、解码之前做解密。接口极简（`storage/value/transformer.go`）：
 
 ```go
 type Transformer interface {
@@ -376,7 +434,7 @@ type Transformer interface {
 
 ### 默认：Identity + EncryptCheckTransformer
 
-当 `StorageFactoryConfig` 没有显式提供 encryption transformer 时，`newETCD3Storage` 用 `identity.NewEncryptCheckTransformer()`（`etcd3.go:472`）。它做两件事：
+当 `StorageFactoryConfig` 没有显式提供 encryption transformer 时，`newETCD3Storage` 用 `identity.NewEncryptCheckTransformer()`（`factory/etcd3.go`）。它做两件事：
 
 1. **TransformToStorage**：原样返回 data，不加密；
 2. **TransformFromStorage**：原样返回，但对有 `k8s:enc:` 前缀的数据**报错**——这意味着集群之前加密过但现在没配置加密，不能静默解密失败。
@@ -386,7 +444,7 @@ type Transformer interface {
 
 ### EncryptionConfiguration：按资源指定 Provider
 
-用户通过 `--encryption-provider-config=encryption.conf` 提供 YAML，apiserver 启动时把它解析成 **`prefixTransformers`**（`value/transformer.go:81`）——这是一组按 **key prefix 匹配**的 transformer 链：
+用户通过 `--encryption-provider-config=encryption.conf` 提供 YAML，apiserver 启动时把它解析成 **`prefixTransformers`**（`value/transformer.go`）——这是一组按 **key prefix 匹配**的 transformer 链：
 
 ```go
 type PrefixTransformer struct {
@@ -395,28 +453,65 @@ type PrefixTransformer struct {
 }
 ```
 
-`prefixTransformers.TransformFromStorage`（`transformer.go:105`）按 prefix 匹配顺序尝试：
+`prefixTransformers.TransformFromStorage` 按 prefix 匹配顺序尝试，核心段落如下（`value/transformer.go`）：
 
 ```go
-for i, transformer := range t.transformers {
-    if bytes.HasPrefix(data, transformer.Prefix) {
-        result, stale, err := transformer.Transformer.TransformFromStorage(ctx, data[len(transformer.Prefix):], dataCtx)
-        // 密钥轮换场景：匹配到的 transformer 不是列表第一个 → stale = true
-        return result, stale || i != 0, err
-    }
+func (t *prefixTransformers) TransformFromStorage(ctx context.Context, data []byte, dataCtx Context) ([]byte, bool, error) {
+	start := time.Now()
+	var errs []error
+	resource := getResourceFromContext(ctx)
+	for i, transformer := range t.transformers {
+		if bytes.HasPrefix(data, transformer.Prefix) {
+			result, stale, err := transformer.Transformer.TransformFromStorage(ctx, data[len(transformer.Prefix):], dataCtx)
+			// To migrate away from encryption, user can specify an identity transformer higher up
+			// (in the config file) than the encryption transformer. In that scenario, the identity transformer needs to
+			// identify (during reads from disk) whether the data being read is encrypted or not. If the data is encrypted,
+			// it shall throw an error, but that error should not prevent the next subsequent transformer from being tried.
+			if len(transformer.Prefix) == 0 && err != nil {
+				continue
+			}
+			// ...
+			// It is valid to have overlapping prefixes when the same encryption provider
+			// is specified multiple times but with different keys (the first provider is
+			// being rotated to and some later provider is being rotated away from).
+			// Thus we never short-circuit on a prefix match that results in an error.
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+
+			return result, stale || i != 0, err
+		}
+	}
+	if err := errors.Reduce(errors.NewAggregate(errs)); err != nil {
+		logTransformErr(ctx, err, "failed to decrypt data")
+		return nil, false, err
+	}
+	RecordTransformation(resource, "from_storage", "unknown", time.Since(start), t.err)
+	return nil, false, t.err
 }
 ```
 
-关键点：**从存储中读取时匹配到的 transformer 不是列表第一个，`stale` 就标记为 true**——apiserver 会把这个 stale 信号带到 GuaranteedUpdate，一旦后续触发写操作，就自动把对象用当前（第一个）provider 加密后写回。这就是"密钥轮换靠自然流量完成，不需要停机 rewrite"的实现机制。
+两个关键点：**从存储中读取时匹配到的 transformer 不是列表第一个，`stale` 就标记为 true**（`stale || i != 0`）——apiserver 会把这个 stale 信号带到 GuaranteedUpdate，一旦后续触发写操作，就自动把对象用当前（第一个）provider 加密后写回，这就是"密钥轮换靠自然流量完成，不需要停机 rewrite"的实现机制；**prefix 匹配错误不短路**——同一 provider 配多个 key 轮换时新旧密文共用同一 prefix，第一个解密失败必须让后续 transformer 继续尝试（源码注释原话：`we never short-circuit on a prefix match that results in an error`）。
 
-`TransformToStorage`（`transformer.go:172`）始终用**列表第一个 transformer**，并在数据前加上它的 prefix：
+`TransformToStorage`（`transformer.go`）始终用**列表第一个 transformer**，并在数据前加上它的 prefix：
 
 ```go
-transformer := t.transformers[0]                  // 写入始终用第一个
-result, _ := transformer.Transformer.TransformToStorage(ctx, data, dataCtx)
-prefixedData := transformer.Prefix
-prefixedData = append(prefixedData, result...)     // 前缀 + 加密后数据
-return prefixedData, nil
+func (t *prefixTransformers) TransformToStorage(ctx context.Context, data []byte, dataCtx Context) ([]byte, error) {
+	start := time.Now()
+	transformer := t.transformers[0]
+	resource := getResourceFromContext(ctx)
+	result, err := transformer.Transformer.TransformToStorage(ctx, data, dataCtx)
+	RecordTransformation(resource, "to_storage", string(transformer.Prefix), time.Since(start), err)
+	if err != nil {
+		logTransformErr(ctx, err, "failed to encrypt data")
+		return nil, err
+	}
+	prefixedData := make([]byte, len(transformer.Prefix), len(result)+len(transformer.Prefix))
+	copy(prefixedData, transformer.Prefix)
+	prefixedData = append(prefixedData, result...)
+	return prefixedData, nil
+}
 ```
 
 ### EncryptionConfiguration 到 prefixTransformers 的组装链

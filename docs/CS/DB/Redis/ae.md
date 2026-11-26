@@ -20,6 +20,50 @@
 
 由于种种[原因](http://groups.google.com/group/redis-db/browse_thread/thread/b52814e9ef15b8d0/)，Redis 用的是自己的事件库。
 
+> [!NOTE]
+> 边界：**本页只讲事件分发**——`ae.c` 如何把就绪的 fd 与到期的时间事件派发给回调；**I/O 线程与 bio 后台线程在 [io](/docs/CS/DB/Redis/io.md)**。一句话记法：`ae` 决定"什么时候调用谁"，`io` 决定"谁真的去读写与释放"。
+
+事件循环的分层调用链如下（各层的真源码片段见本页 processEvents / beforeSleep / afterSleep / epoll 各节）：
+
+```dot
+digraph AELoop {
+  rankdir=TB;
+  node [shape=box, style=rounded];
+
+  subgraph cluster_driver {
+    label="驱动层 / ae.c";
+    main [label="aeMain()\nwhile (!stop)"];
+    proc [label="aeProcessEvents()\nALL_EVENTS | BEFORE_SLEEP | AFTER_SLEEP"];
+  }
+
+  subgraph cluster_hooks {
+    label="钩子层 / server.c 回调";
+    before [label="beforeSleep()\n过期清理 / AOF buffer 落盘 / 刷回复"];
+    after [label="afterSleep()"];
+  }
+
+  subgraph cluster_poll {
+    label="多路复用层 / ae_epoll.c 等";
+    timer [label="aeSearchNearestTimer()\n计算阻塞时长 tvp"];
+    poll [label="aeApiPoll()\nepoll_wait / kqueue / select / evport"];
+  }
+
+  subgraph cluster_dispatch {
+    label="派发层 / 回调";
+    file [label="文件事件\nacceptHandler / readQueryFromClient / writeToClient"];
+    time [label="时间事件\nprocessTimeEvents() → serverCron()"];
+  }
+
+  main -> proc;
+  proc -> before [label="① 阻塞前"];
+  proc -> timer [label="② 找最近定时器"];
+  timer -> poll [label="③ 阻塞等待"];
+  proc -> after [label="④ 阻塞后"];
+  poll -> file [label="⑤ 就绪 fd"];
+  proc -> time [label="⑥ 到期"];
+}
+```
+
 `Redis` 需要对事件做整体抽象，于是定义了 `aeEventLoop` 结构。
 
 定义在 `redis.c` 里的 `initServer` 负责初始化 [redisServer 结构](/docs/CS/DB/Redis/server.md?id=server) 的众多字段，其中一个字段就是事件循环 `el`：

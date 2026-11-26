@@ -49,7 +49,7 @@ On the other hand, pivot_root() does not change the caller's current working dir
 对于每一种 namespace，Linux在启动时都有一套默认值，定义在 kernel/nsproxy.c 中。
 
 
-Linux启动有个 INIT_TASK 0号进程，也叫idle进程，固定使用这个默认的 init_nsproxy。
+Linux启动有个 INIT_TASK 0号进程，也叫 idle 进程，固定使用这个默认的 init_nsproxy。
 
 
 
@@ -70,7 +70,7 @@ Linux启动有个 INIT_TASK 0号进程，也叫idle进程，固定使用这个�
 
 `docker exec` / `kubectl exec` / `nsenter` 的底层都是 setns(2)：打开目标进程的 `/proc/PID/ns/xxx` 拿到 namespace 句柄，再 setns 把当前线程"搬"进去。
 
-这也是 [Pod 的 pause 容器](/docs/CS/Container/k8s/Pod.md?id=pause-container)的实现机制：pause 先创建并持有 Network/IPC/UTS namespace，业务容器逐项 setns join 进来——因此业务容器崩溃重建不影响 Pod IP，只有 pause 重建才会。
+这也是 [Pod 的 pause 容器](/docs/CS/Container/k8s/Pod.md?id=sandbox-and-the-pause-container)的实现机制：pause 先创建并持有 Network/IPC/UTS namespace，业务容器逐项 setns join 进来——因此业务容器崩溃重建不影响 Pod IP，只有 pause 重建才会。
 
 观察：`ls -l /proc/$$/ns/`，两个进程某项 namespace 的链接数与 inode 号相同即共享之。
 

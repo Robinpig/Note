@@ -58,6 +58,10 @@ AI
 
 图灵对计算本身的形式化（图灵机、Church-Turing 论题、停机问题）见 [Computability](/docs/CS/Algorithms/Computability.md)。
 
+## Agent 工具：Codex
+
+当 LLM 从「对话」走向「在本地替你干活」，形态就不再是聊天框，而是一个**受沙箱约束、能闭环调用工具的编码 Agent**。这类工具把模型请求、工具执行、文件系统操作收进一个本机进程里，对外提供交互式终端与常驻服务两种接入方式。Codex（OpenAI）是其中的代表实现：它以一个 Rust 引擎库 `codex-core` 为核心，配交互式 TUI 与常驻 app-server 两个前端，发布时再用一个 JS 壳按平台拉起原生二进制。其分层结构与启动链路见 [Codex](/docs/CS/AI/Codex/Codex.md) 的 Architecture 章节（源码级拆解）。
+
 ## Links
 
 - [OS](/docs/CS/OS/OS.md)

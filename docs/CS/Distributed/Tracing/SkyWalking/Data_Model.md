@@ -47,7 +47,7 @@
 
 - [SkyWalking](/docs/CS/Distributed/Tracing/SkyWalking.md) — 对象层级（Service/Instance/Endpoint）
 - [SkyWalking Transport](/docs/CS/Distributed/Tracing/SkyWalking/Transport.md) — sw8 传播头字段
-- [SkyWalking Internals](/docs/CS/Distributed/Tracing/SkyWalking/Internals.md) — span 栈与 Segment 装配、TraceSegmentRef 跨进程关联
+- [SkyWalking Agent 机理](/docs/CS/Distributed/Tracing/SkyWalking/Agent.md) — span 栈与 Segment 装配、TraceSegmentRef 跨进程关联
 - [Tracing](/docs/CS/Distributed/Tracing/Tracing.md) — OpenTracing 数据模型对照
 - [Zipkin Data Model](/docs/CS/Distributed/Tracing/Zipkin/Data_Model.md) — Zipkin 的 Span/Annotation 模型
 

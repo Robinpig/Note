@@ -1,4 +1,4 @@
-> 版本基线：核实于 2026-10-06。源码 `spawn.ts` 有 543 行，真正把进程拉起来的 spawn 调用只有 12 行，剩下五百多行在回答同一个问题：**怎么让这个进程死干净**。
+> 版本基线：v0.2.2-rc.3（`E:/Projects/deepseek-harness-dsh-v0.2.2-rc.3`）。源码里真正把进程拉起来的 spawn 调用只有十来行，剩下五百多行在回答同一个问题：**怎么让这个进程死干净**。
 
 ## Introduction
 
@@ -51,6 +51,35 @@ export function taskkillProcessTree(pid: number): void {
 注释里"结果故意不检查"是重点：**终止逻辑必须幂等**，第二次杀一棵死树不能抛异常，否则收尾代码会自己把自己绊倒。
 
 ## pid Reuse: First Confirmation Is a Permanent Boundary
+
+发信号的核心就是那个负号——`process.kill(-pid, sig)` 发给整个进程组，组消失时吞掉异常并回退直子（`packages/subprocess/subprocess-local/src/spawn.ts`）：
+
+```ts
+export function killGroup(pid: number | undefined, sig: NodeJS.Signals): void {
+  if (pid === undefined) return
+  try {
+    process.kill(-pid, sig)
+  } catch {
+    // Swallow: see contract above.
+  }
+}
+```
+
+进程表扫描把"组内全僵尸"与"真空"区分成三态（`packages/subprocess/subprocess-local/src/process-inspector.ts`）：
+
+```ts
+  let matched = false
+  for (const entry of entries) {
+    if (!/^\d+$/.test(entry)) continue
+    const stat = readLinuxStat(internals, Number(entry))
+    if (stat?.pgrp !== processGroupId) continue
+    matched = true
+    if (!quiescent(stat.state)) return stat.pid
+  }
+  return matched ? false : undefined
+```
+
+而信号前的身份栅栏必须**当场重读**——早先的观察保留了原 PID-to-start-time 配对，回收 pid 仍会匹配，故 `signalProcess()` 在发信号瞬间重新 `isAlive(identity)` 才动手。
 
 发完 TERM 怎么知道树死了？POSIX 惯例是 `process.kill(-pid, 0)` 探活（0 号信号只做存在性检查），DSH 用 **15ms 一次的轮询**做这件事。
 
@@ -212,8 +241,11 @@ Windows 侧则用 koffi 绑 Toolhelp32 快照枚举 + `GetProcessTimes` 取创�
 - [DSH 主入口](/docs/CS/AI/LLM/Agent/Product/DSH/DSH.md)
 - [DSH 工具层（bash 执行器消费方）](/docs/CS/AI/LLM/Agent/Product/DSH/Tools.md)
 - [DSH Permission（sandbox-local 内核边界）](/docs/CS/AI/LLM/Agent/Product/DSH/Permission.md)
+- [DSH Agent Loop](/docs/CS/AI/LLM/Agent/Product/DSH/AgentLoop.md)
+- [DSH Session & Persistence](/docs/CS/AI/LLM/Agent/Product/DSH/SessionPersistence.md)
 
 ## References
 
-- [源码深读 04：起一个子进程只要十行，送走它用了五百行（subprocess-local）](https://mp.weixin.qq.com/s/mmprMkOaTMP2IBTeH6uQuw)
-- 官方子系统文档：[shell](https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/subsystems/shell.md)
+1. [deepseek-ai/deepseek-harness（v0.2.2-rc.3）subprocess-local](https://github.com/deepseek-ai/deepseek-harness/tree/v0.2.2-rc.3/packages/subprocess/subprocess-local)
+2. [源码深读 04：起一个子进程只要十行，送走它用了五百行（subprocess-local）](https://mp.weixin.qq.com/s/mmprMkOaTMP2IBTeH6uQuw)
+3. [subsystems/shell.md](https://github.com/deepseek-ai/deepseek-harness/blob/v0.2.2-rc.3/docs/subsystems/shell.md)

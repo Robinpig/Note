@@ -17,6 +17,8 @@ Consul 集群由 **server**（参与 Raft）与 **client**（轻量转发代理�
 | `-retry-join-wan=<addr>` | 跨 DC 加入 WAN 池 |
 | `-datacenter=<dc>` | 数据中心名，默认 `dc1` |
 
+`bootstrap_expect` 的自动引导实现在 serf 事件处理里（`agent/consul/server_serf.go` 的 `maybeBootstrap`）：每有 server 加入 LAN 就统计 voter 数，达标后调 `raft.BootstrapCluster`。Quorum 全部丢失后的恢复走 `peers.json`：`setupRaft` 启动时检测该文件，`raft.ReadConfigJSON` 强制重置集群配置（`consul operator raft remove-peer` 的底层）。
+
 > [!WARNING]
 > 每个 DC 最多一个 `-bootstrap` 节点；集群引导后不应再带 `-bootstrap`（多个自选举会脑裂）。现代做法用 `-bootstrap-expect` 自动引导，避免手动 bootstrap。
 
@@ -38,9 +40,9 @@ Consul 集群由 **server**（参与 Raft）与 **client**（轻量转发代理�
 
 ## Rolling Upgrade
 
-- 走 **Autopilot**（见 [Raft](/docs/CS/Framework/consul/raft.md)）：先升 follower，再升 leader（Autopilot 自动稳选）；
+- 走 **Autopilot**（见 [Raft](/docs/CS/Framework/consul/raft.md)）：先升 follower，再升 leader（Autopilot 自动稳选；2.x 中 Autopilot 核心循环外置为 `hashicorp/raft-autopilot` 库，行为不变）；
 - `raft_protocol` 按官方升级指南逐级升，勿跨多版本跳；
-- 跨 **1.x → 2.0** 重点评估 BSL 许可变化与配置兼容性（2.0.0 把默认 HTTP 读超时提到 15 分钟、go 升到 1.26）；
+- 跨 **1.x → 2.0** 重点评估 BSL 许可变化与配置兼容性（2.0.0 把默认 HTTP 读超时提到 15 分钟、go 升到 1.26）；2.x 的 WAL 日志后端对旧 `raft.db` 数据目录自动回退 BoltDB，升级无迁移成本，但新部署建议直接 WAL；
 - Enterprise 有自动升级迁移（`UpgradeVersionTag` / `DisableUpgradeMigration`）。
 
 ## ACL Replication and Multi-Tenancy
@@ -63,8 +65,7 @@ Consul 的 client/server 分离 + 自动引导 + Autopilot，运维面比 etcd �
 
 ## Links
 
-- [Consul（架构与启动流程）](/docs/CS/Framework/consul/Consul.md)
-- [架构深潜](/docs/CS/Framework/consul/architecture.md)
+- [Consul（枢纽与架构）](/docs/CS/Framework/consul/Consul.md)
 - [配置参考](/docs/CS/Framework/consul/config.md)
 - [版本与许可](/docs/CS/Framework/consul/license.md)
 - [Raft（共识）](/docs/CS/Framework/consul/raft.md)

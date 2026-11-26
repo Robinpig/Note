@@ -1,5 +1,7 @@
 ## Introduction
 
+> 版本基线：Redis 8.10.2（commit 498ecd0d）。
+
 Based on Apache Commons-pool2
 ```
 GenericObjectPoolConfig jedisPoolConfig = new GenericObjectPoolConfig();
