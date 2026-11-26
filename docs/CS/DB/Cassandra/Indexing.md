@@ -1,81 +1,172 @@
 ## Introduction
 
-Cassandra 的主访问路径是靠 **partition key** 直接定位。当查询条件落在非主键列（或 clustering 前缀缺失）时，就需要**二级索引**。但 Cassandra 的索引实现与传统关系型数据库截然不同，理解其代价模型才能用对、不踩坑。
+Cassandra 的主访问路径靠 **partition key** 直接定位。当查询条件落在非主键列，或 clustering 前缀不完整时，二级索引可以提供候选 row，但不会把 Cassandra 变成全局索引数据库。理解索引的本地性、fan-out、一致性和写放大，才能判断该建索引、改主键，还是外挂检索系统。
 
-> 基线：Cassandra 5.0。SAI（Storage-Attached Index, CEP-7）是 5.0 的官方推荐索引；SASI 已被取代；经典本地二级索引仍可用但受限。
+> 基线：Cassandra 5.0.9。SAI 是 5.0 的主推新实现；SASI 仍存在，但 experimental 且默认关闭。ANN 向量索引同样 experimental。
 
-## Local Secondary Index (经典)
+## Secondary Index Model
 
-- 二级索引在**每个节点本地**为「被索引列值 → 本节点持有的 row」建倒排，是**本地索引**而非全局索引。
-- 查询时 coordinator 必须把请求**广播到所有持有该列潜在副本的节点**再汇总——**读放大随节点数线性增长**，节点越多越慢。
-- 适合：基数适中、且查询能先约束到某个 partition（`WHERE partition_key = ? AND indexed_col = ?`）的列。
-- 不适合：高基数列（如 user_id）、无 partition 约束的全表索引扫描。
+| 实现 | 索引生命周期 | 主要能力 | 5.0.9 状态 |
+| --- | --- | --- | --- |
+| 经典 local secondary index | 本地隐藏表 / 节点内索引 | 等值、有限范围 | 可用，标准配置的默认实现 |
+| SASI | SSTable-attached | 等值、范围、`LIKE` 前缀/包含/后缀 | experimental，默认关闭 |
+| SAI | memtable + per-SSTable 组件 | 标量等值/范围、集合包含、向量 ANN | 5.0 主推；ANN experimental |
 
-## SASI (SSTable-Attached Secondary Index, 3.x)
+所有实现都要面对同一个分布式事实：**索引不是一张全局 B+Tree**。coordinator 通常要向相关 token range 的 replica 发查询，再汇总候选；没有 partition 约束时，fan-out 会随 ring 规模增长。
 
-- 3.x 时代为支持 `LIKE`、范围、文本检索而引入，挂在 SSTable 上。
-- 问题：`CONTAINS`/范围查询易扫大量数据、内存与 compaction 开销大、长期不稳定。**5.0 起被 SAI 取代，不应在新集群使用。**
+## Local Secondary Index
 
-## SAI (Storage-Attached Index, 5.0, CEP-7)
+经典索引在**每个节点本地**保存“被索引值 → 本节点 row”的映射。查询计划把索引限制转成普通读请求，coordinator 仍需覆盖可能包含匹配值的 replica。
 
-- 5.0 的**官方推荐索引**，把索引与 SSTable 生命周期绑定、与存储层协同，性能和资源效率显著优于 SASI 与经典本地索引。
-- 同时支持**标量索引**与 **Vector（向量）索引**（为 AI/相似度检索而生，配合 5.0 的 `VECTOR` 类型与 `ANN` 近似最近邻查询）。
-- 仍遵循 Cassandra「索引不保证全局强一致、写入有额外开销」的基调，但运维友好度与查询能力大幅提升。
-- 创建示例：
+- 有 partition key 约束时，可以先把搜索限制在少量 replica，再在本地索引过滤。
+- 无 partition key 约束时，需要覆盖所有 token range；节点越多、网络越慢，尾延迟越高。
+- 索引与 base data 是两条写路径，更新可见性和 repair 需要分别考虑。
+- 它适合基数适中、访问频率高且能带 partition 约束的列；不适合把所有 ad-hoc 查询都寄希望于本地索引。
+
+## SASI
+
+SASI 从 3.x 引入，把索引结构挂在 SSTable 上。5.0.9 并未删除它，但 `cassandra.yaml:1992` 的 `sasi_indexes_enabled` 默认为 `false`，并明确标注 experimental。
+
+```sql
+CREATE CUSTOM INDEX ON myks.users (name)
+  USING 'org.apache.cassandra.index.sasi.SASIIndex'
+  WITH OPTIONS = {
+    'mode': 'PREFIX',
+    'analyzer_class': 'org.apache.cassandra.index.sasi.analyzer.NonTokenizingAnalyzer',
+    'case_sensitive': 'false'
+  };
+```
+
+- `mode` 支持 `PREFIX`、`CONTAINS`、`SPARSE`；`PREFIX` 是默认模式。
+- `NonTokenizingAnalyzer` 不对文本分词，只保留用于匹配的规范化 term。
+- SASI 支持 `LIKE` 的前缀、包含和后缀搜索，这是它与 SAI 当前能力的重要差异。
+- 范围和大结果集仍可能扫描大量 posting；内存、compaction 与查询开销没有因为“挂在 SSTable 上”而消失。
+
+新集群不应把 SASI 当作默认生产索引，但“5.0 已删除/取代 SASI”也是错误说法。
+
+## SAI
+
+SAI（Storage-Attached Index，CEP-7）把索引组件与 SSTable 生命周期绑定，同时在 memtable 阶段维护内存索引。写入、flush、compaction 和删除都进入同一套索引维护路径。
+
+### Scalar and Collection Queries
+
+`Expression.IndexOperator` 的逻辑算子是：
+
+```java
+public enum IndexOperator
+{
+    EQ, RANGE, CONTAINS_KEY, CONTAINS_VALUE, ANN;
+}
+```
+
+- `EQ`：标量等值。
+- `RANGE`：数值、时间、UUID 等有序类型的范围。
+- `CONTAINS_KEY` / `CONTAINS_VALUE`：map key/value 与集合元素匹配；CQL 中体现为 `CONTAINS` / `CONTAINS KEY`。
+- `ANN`：向量近似最近邻，见下文。
+
+5.0.9 的 SAI **不支持 `LIKE`**，但官方明确支持索引列的 `AND`/`OR` 与 `IN`（数值、文本类型）；`StatementRestrictions` 仍拒绝“主键 `IN` + 索引列限制”的组合。默认 `NonTokenizingAnalyzer` 不把文本拆成倒排词项，因此 SAI 也不是 Elasticsearch 式的分词全文索引。文本选项 `case_sensitive`、`normalize` 和 `ascii` 只改变 term 的规范化方式，不新增 `LIKE` 语义。
+
+创建标量索引时应显式指定实现，避免依赖各 profile 的默认值：
 
 ```sql
 CREATE CUSTOM INDEX IF NOT EXISTS ON myks.users (email)
   USING 'StorageAttachedIndex';
-
-CREATE CUSTOM INDEX IF NOT EXISTS ON myks.docs (embedding)
-  USING 'StorageAttachedIndex' WITH OPTIONS = {'similarity': 'cosine'};
 ```
 
-### SAI Internals (CEP-7, 5.0)
+### SAI Internals
 
-SAI 把索引组件**贴在每张 SSTable 旁**、随 flush/compaction 一起构建与合并，索引与数据永远同步。核心类在 `org.apache.cassandra.index.sai`：
+SAI 的磁盘索引按 column、SSTable 和 segment 组织，核心类位于 `org.apache.cassandra.index.sai`：
 
-- **磁盘组件（per-SSTable）**：`disk.format.IndexComponent` 枚举列出全部组件——`TERMS_DATA`（TrieTermsDictionaryWriter 写 term 字典）、`POSTING_LISTS`（PostingsWriter 写倒排）、`BALANCED_TREE`（BlockBalancedTreeWriter 写 term→rowId 的平衡树）、`ROW_TO_TOKEN` / `ROW_TO_PARTITION` / `PARTITION_TO_SIZE`（rowId↔token/partition 映射）、`COMPRESSED_VECTORS`（Product Quantization 压缩向量，向量索引用）、`GROUP_META` / `GROUP_COMPLETION_MARKER` 等。
-- **内存索引**：flush 前更新驻留 JVM 对象的 memtable 索引（文本用内存倒排、向量用 `VectorMemoryIndex` 存 HNSW 图导航结构）；达到 flush 阈值时 SAI 直接把 memtable 索引落盘，**不再额外建内存表示**。
-- **读路径**：coordinator 的 SAI 协调器先挑**最选择性**的索引最小化过滤空间，各 SSTable 的索引组件并行查 posting，再用 rowId 在 base SSTable 取数据；compaction 时对输出 SSTable **重建**索引组件（而非拼接旧图）。
-- **标量 + 向量**：标量支持等值/范围/多列组合谓词；向量（`VECTOR` 类型 + `similarity_cosine/euclidean/dot_product`）经 `ORDER BY ... ANN OF` 做近似最近邻（底层 jvector 库的 HNSW/DiskANN 类图，CEP-30）。
-- **限制不变**：查询若不约束 partition key，仍要广播到整个 ring 的所有 token range（fan-out 没消除）；SAI 降低的是「每节点索引查找成本」，不是把 Cassandra 变成关系型 ad-hoc 查询引擎。
+- **字符串 / 标量 term**：`TERMS_DATA` 使用 trie 保存压缩后的 term 字典；`POSTING_LISTS` 保存 term 到 rowId 的倒排；`BALANCED_TREE` 提供 term→rowId 的平衡树访问。
+- **数值范围**：范围索引使用 k-d tree / balanced tree 结构，减少等值点查退化为全 posting 扫描的成本。
+- **row 映射**：`ROW_TO_TOKEN` / `ROW_TO_PARTITION` / `PARTITION_TO_SIZE` 在 rowId、token、partition 和大小之间建立映射，供 candidate 回查 base SSTable。
+- **内存阶段**：flush 前由 memtable index 接收写入；标量索引维护内存倒排，向量索引维护图结构。flush 时构建对应 SSTable 的索引组件，compaction 时对输出 SSTable 重建，而不是无限拼接旧索引。
+- **读路径**：coordinator 选择可用的限制构造 SAI query plan，各 replica 在本地 SSTable 与 memtable 中查 candidate，再用 rowId 回表并按普通读路径合并、去重和过滤。
 
-### SASI vs SAI (源码对照)
+SAI 降低的是**每个节点内部查找 candidate 的成本**；无 partition 约束时仍需 fan-out。Guardrail `non_partition_restricted_index_query_enabled` 默认 `true`，允许这类查询；它是 enable flag，关闭时拒绝执行，但默认开启时不会自动告警。
 
-SASI（`index.sasi`）仍有 `OnDiskIndex(Builder)` / `IndexMemtable`（管理 `TrieMemIndex` / `SkipListMemIndex`）/ `TokenTree(Builder)`（B+ 树变体）/ `QueryPlan`（含 `RangeUnionIterator` / `RangeIntersectionIterator`）。它**在 5.0 仍可用但已被 SAI 取代**，且 `cassandra_latest.yaml` 让 `CREATE INDEX` 默认走 SAI。新集群应直接用 SAI。
+### Vector Search and ANN
+
+5.0 的 `VECTOR` 类型与 SAI ANN 由 CEP-30 引入。内存端使用 jvector 的 `GraphIndexBuilder` 构建 HNSW 风格图；磁盘端 `DiskAnn` 使用 jvector 的 `OnDiskGraphIndex` 与 Product Quantization 压缩向量。5.0 文档将其概括为“受 DiskANN 启发的磁盘图”，不要简单等同于原生 DiskANN 库。
+
+```sql
+CREATE TABLE myks.docs (
+  id        uuid PRIMARY KEY,
+  embedding vector<float, 3>
+);
+
+CREATE CUSTOM INDEX ON myks.docs (embedding)
+  USING 'StorageAttachedIndex'
+  WITH OPTIONS = {'similarity_function': 'COSINE'};
+
+SELECT id FROM myks.docs
+  ORDER BY embedding ANN OF [0.1, 0.2, 0.3]
+  LIMIT 10;
+```
+
+`similarity_function` 支持 `COSINE`、`EUCLIDEAN`、`DOT_PRODUCT`，默认 `COSINE`；选项名不是 `similarity`。
+
+ANN 在 5.0.9 有明确实验性限制：
+
+- 只支持 float element vector；一维 vector 不支持 cosine；多数据目录不支持 ANN。
+- CL 只支持 `ONE` / `LOCAL_ONE`，查询必须带 `LIMIT`，默认 top-k 上限为 1000。
+- 不支持 paging、`PER PARTITION LIMIT`、`GROUP BY`、聚合函数，以及未建 SAI 索引的列上的过滤。
+- ANN 返回近似结果，不支持 least-similar 搜索；频繁覆盖或删除 vector 列会降低查询效率。
+
+## Query Planning and Fan-out
+
+| 查询形态 | 候选范围 | 主要风险 |
+| --- | --- | --- |
+| `partition_key = ? AND indexed_col = ?` | 单个 partition 的 replica | 索引写放大、本地 posting 大小 |
+| `partition_key IN (...) AND indexed_col = ?` | **不支持该组合** | `StatementRestrictions` 拒绝主键 `IN` 与索引列限制 |
+| 仅 `indexed_col = ?` | 所有 token range | coordinator fan-out 与尾延迟 |
+| 多索引组合 | 每个 replica 上求交/并集 | 算力、内存与 query plan 选择 |
+| ANN + 非 SAI 索引列过滤 | **不支持** | `VECTOR_USAGE_WARNING` 明确排除该查询 |
+
+`ALLOW FILTERING` 只表示允许在读取后过滤，不表示一定扫描全集群；同样，使用 SAI 也不表示查询自动变成全局强一致索引。索引结果最终仍要回到 base data 和一致性路径。
 
 ## When (Not) to Use
 
 | 场景 | 建议 |
 | --- | --- |
 | 查询总能带 partition key | 直接主键访问，无需索引 |
-| 高基数列、需按值查 | 重新建模（把该列并入 partition key）或 SAI |
-| 全文/模糊/向量检索 | SAI（5.0+） |
-| 多列组合过滤 | 考虑 SAI 或多套去规范化表 |
-| 无 partition 约束的全表索引 | **避免**（读放大灾难） |
+| 高频等值/范围过滤且能限制 partition | SAI，或把访问路径建模进主键 |
+| 高基数列、无 partition 约束 | 优先反范式表；全局索引 fan-out 很难消失 |
+| 分词全文、模糊搜索 | 外挂 Elasticsearch/Solr；SAI 不支持 `LIKE` |
+| 确需 `LIKE` 前缀/包含/后缀 | 可评估 experimental SASI，但先确认生产风险 |
+| 多列组合过滤 | SAI 组合计划或多套去规范化表 |
+| 向量检索 | 仅在 5.0.9 ANN 限制可接受时使用 SAI ANN |
+| 无 partition 约束的全表索引 | 避免；通过 Guardrail 和建模限制 |
 
 ## Global Indexing Alternatives
 
-Cassandra 本身不提供「全局二级索引」这种零读放大方案。需要强索引语义时，常见做法是：
+Cassandra 不提供“零 fan-out 的全局二级索引”。需要更强检索语义时，常见做法是：
 
-- 在应用层维护**去规范化表**（同一份数据按不同主键存多份）；
-- 或把索引/检索需求外挂到 Elasticsearch / Solr（Cassandra 作系统 of record）。
+- 应用层维护**去规范化表**，按不同主键保存同一份逻辑数据；
+- 把检索需求外挂到 Elasticsearch / Solr / 专用向量库，Cassandra 作为 system of record；
+- 接受 CDC/双写的一致性窗口，并用 repair、对账或回填流程补偿。
 
 ## Source-Level Classes
 
-- **经典本地二级索引**：`index.SecondaryIndex` / `index.internal.InternalIndex`；索引是「每节点本地、被索引值 → 本节点 row」的倒排，广播读放大。
-- **SAI**：`index.sai` 包（见上）。
-- **选择语法**：`CREATE CUSTOM INDEX ... USING 'StorageAttachedIndex'`（SAI）或 `USING 'org.apache.cassandra.index.sasi.SASIIndex'`（SASI，遗留）。
+- **经典本地索引**：`index.SecondaryIndex` / `index.internal.InternalIndex`，节点内维护索引并与 base write 路径协作。
+- **SASI**：`index.sasi.{SASIIndex, OnDiskIndex, IndexMemtable, TokenTree}`；`PREFIX` / `CONTAINS` / `SPARSE` 由 analyzer 与 mode 决定。
+- **SAI 协调**：`index.sai.StorageAttachedIndex`、`StorageAttachedIndexQueryPlan`、`cql3.restrictions.SingleColumnRestriction`。
+- **SAI 磁盘**：`index.sai.disk.format.IndexComponent`、`disk.v1.{IndexWriterConfig, PerColumnIndexFiles}`、`disk.v1.vector.{OnHeapGraph, DiskAnn}`。
+- **向量内存索引**：`index.sai.memory.VectorMemoryIndex` 使用 `OnHeapGraph`；jvector 提供图构建、磁盘图和 Product Quantization。
+- **默认与保护**：`cassandra.yaml` 的 `default_secondary_index`、`non_partition_restricted_index_query_enabled`、`sai_sstable_indexes_per_query_*` 控制实现选择与查询保护。
 
 ## Links
 
 - [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md)
-- [Data Model](/docs/CS/DB/Cassandra/DataModel.md)
 - [CQL](/docs/CS/DB/Cassandra/CQL.md)
 - [Storage Engine](/docs/CS/DB/Cassandra/StorageEngine.md)
+- [Consistency](/docs/CS/DB/Cassandra/Consistency.md)
 
 ## References
 
-- [CEP-7 Storage-Attached Indexes](https://cassandra.apache.org/doc/latest/cassandra/architecture/sai.html)
-- [Cassandra Secondary Indexes (官方文档)](https://cassandra.apache.org/doc/latest/cassandra/architecture/indexing.html)
+- [Storage-Attached Indexing Overview](https://cassandra.apache.org/doc/5.0/cassandra/developing/cql/indexing/sai/sai-overview.html)
+- [Storage-Attached Indexing Concepts](https://cassandra.apache.org/doc/5.0/cassandra/developing/cql/indexing/sai/sai-concepts.html)
+- [Cassandra Indexing Concepts](https://cassandra.apache.org/doc/5.0/cassandra/developing/cql/indexing/indexing-concepts.html)
+- [Cassandra SASI](https://cassandra.apache.org/doc/5.0/cassandra/developing/cql/SASI.html)
+- [Cassandra Vector Search](https://cassandra.apache.org/doc/5.0/cassandra/vector-search/overview.html)
+- [Cassandra 5.0.9 Source](https://github.com/apache/cassandra/tree/cassandra-5.0.9)

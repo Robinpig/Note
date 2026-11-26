@@ -2,93 +2,148 @@
 
 Cassandra 的招牌是**可调一致性（Tunable Consistency）**：每条读写可独立指定一致性级别（CL），在「一致性强度」与「延迟/可用性」之间自由权衡。这是 Dynamo「AP 优先」与 BigTable「强一致」的折中体现。
 
-> 基线：Cassandra 5.0。跨分区轻量事务（LWT/Paxos）在本页；6.0 的 Accord 跨分区事务见文末。
+> 基线：Cassandra 5.0.9。普通读写提供可调一致性；`IF` 条件写走单 partition Paxos LWT。5.0.9 没有 Accord，也没有跨 partition ACID 事务。
 
 ## Consistency Levels
 
-| CL | 含义 | 典型用途 |
+| CL | 5.0.9 语义 | 典型用途 |
 | --- | --- | --- |
-| `ONE` / `TWO` / `THREE` | 只需 N 个 replica 响应 | 低延迟、可容忍暂时不一致 |
-| `QUORUM` | `⌊N/2⌋ + 1` 个 replica | 默认强一致折中 |
-| `LOCAL_QUORUM` | 仅本地 DC 的 `⌊N/2⌋+1` | 多 DC 场景避免跨 DC 延迟 |
-| `EACH_QUORUM` | 每个 DC 各自 quorum | 写需各 DC 都确认 |
-| `ALL` | 全部 replica | 最强一致、最脆（任一宕机即失败） |
-| `ANY` | 至少一个节点（含 hint） | 写不丢即可，读可能暂时拿不到 |
-| `SERIAL` / `LOCAL_SERIAL` | 走 Paxos 读/写（线性一致） | LWT 条件更新 |
-| `NODE_LOCAL` | 仅 coordinator 本地 | 内部/测试 |
+| `ONE` / `TWO` / `THREE` | 等待指定数量的 replica ack；写路径可把 pending replica 计入 | 低延迟、可容忍暂时不一致 |
+| `QUORUM` | 全部 full replica 的 `allReplicas / 2 + 1` | 单 DC 或全局 quorum 折中 |
+| `LOCAL_QUORUM` | coordinator 所在 DC 的 `allReplicas / 2 + 1` | 多 DC 低延迟本地一致 |
+| `EACH_QUORUM` | 每个 DC 分别达到 local quorum，写还需覆盖 pending 调整 | 写要求每个 DC 都确认 |
+| `ALL` | 等待复制因子要求的全部 replica | 最强可用性约束，任一不足即失败 |
+| `ANY` | 写可由本地存储的 hint 满足，不要求正常 replica ack | 极高写可用性；不是普通数据确认 |
+| `SERIAL` / `LOCAL_SERIAL` | Paxos consensus quorum，供 LWT 的 SERIAL 读/写 | 单 partition 条件更新 |
+| `NODE_LOCAL` | 仅 coordinator 本地，不用于普通跨副本语义 | 内部/测试 |
+
+`ConsistencyLevel.quorumFor`（`:91`）与 `localQuorumFor`（`:96`）直接给出公式；`EACH_QUORUM` 在写路径还会按 pending replica 调整每 DC 的等待数。`ANY` 由 `AnyWriteResponseHandler` 处理，hint 只说明写被某个协调节点接受，不能马上从 replica 读到。
 
 ## NRW Model
 
-设副本数 `N`、读份数 `R`、写份数 `W`：
+设静态 full replica 数为 `N`，成功读覆盖 `R` 个，成功写覆盖 `W` 个：
 
-- `W + R > N` ⇒ 读集合与写集合必相交 ⇒ **强一致**（读一定能看到最新写）。
-- `W + R ≤ N` ⇒ 可能读不到最新写 ⇒ **最终一致**。
+- `W + R > N` ⇒ 两个集合必相交 ⇒ 在**同一 DC/复制域、无 pending/transient 特殊规则、写确实成功**的前提下，读能看到该次写入的最新值。
+- `W + R ≤ N` ⇒ 读可能不覆盖写成功的 replica ⇒ 只能保证最终收敛。
 
-经典配置 `N=3, R=W=QUORUM`（quorum = 2）：容忍 1 节点故障仍强一致；若某 replica 暂不可用，quorum 仍能凑齐。
+经典配置 `N=3, R=W=QUORUM`（quorum = 2）：允许一个 replica 不可用仍可满足 quorum。但 NRW 不是无条件定理：
 
-**容错速查（RF=3）**：
+- `LOCAL_QUORUM` 只与同一 DC 的读写构成交集，不能据此推出跨 DC 可见性；
+- pending range 会临时扩大写等待集合，transient replica 又有独立的 full/transient 数据规则；
+- 失败写可能只落在少数 replica，`read_repair=BLOCKING` 的单调 quorum 读正是为处理这种情况；
+- quorum 一致不是 serializable：并发写仍可能产生可接受但不满足实时顺序的结果，严格 CAS 要用 LWT。
 
-| 配置 | 可容忍同时故障 | 备注 |
+## Read Repair and Speculative Retry
+
+这两个机制经常被混为一谈，实际上解决的问题不同：
+
+| 机制 | 触发 | 行为 |
 | --- | --- | --- |
-| `ONE/ONE` | 2（写），但读可能旧 | 可用性最高 |
-| `QUORUM/QUORUM` | 1 | 强一致常用 |
-| `ALL/ALL` | 0 | 最强一致、最脆 |
+| **Read repair** | 参与读的 replica 返回不同版本 | 用 LWW 结果修复落后 replica |
+| **Speculative retry** | 某个 replica 响应慢，可能超时 | 向额外 replica 发重复读，先到者帮助满足 CL |
+| **Hinted handoff** | 写目标 replica 不可达 | coordinator 暂存 hint，目标恢复后投递 |
 
-## Read Repair and Hinted Handoff
+4.0+ 的表参数 `read_repair` 只有 `BLOCKING`（默认）与 `NONE`，不是概率：
 
-即便用 `ONE` 读，Cassandra 也会在后台逐步收敛：
+- `BLOCKING`：读发现分歧时等待修复写达到 CL，提供 monotonic quorum reads；但修复只覆盖 `SELECT` 读到的粒度，可能破坏比写入更细的分区级原子可见性。
+- `NONE`：coordinator 仍合并响应，但不发送修复 mutation；保留分区级写原子可见性，不提供 monotonic quorum reads。
 
-- **Read Repair（前台）**：coordinator 读 quorum 时若发现副本间不一致，立即用最新时间戳（LWW）修复落后的 replica，并把修复结果返回。
-- **Read Repair（后台 / speculative）**：以 `read_repair_chance`（旧）或 4.0+ 的 `read_repair` 表参数控制的概率，在后台异步修复。
-- **Hinted Handoff**：某 replica 宕机时，coordinator 把发给它的写暂存为 **hint**，待其恢复后递送——避免临时故障造成永久不一致（hint 也有存活窗口与上限，超时则需走 [repair](/docs/CS/DB/Cassandra/Distributed.md)）。
+`speculative_retry` 默认是 `99p`（`TableParams.java:366`），与 `read_repair` 正交。`EACH_QUORUM` 或 `NeverSpeculativeRetryPolicy` 会禁用 speculative retry（`AbstractReadExecutor.java:202`），避免重复请求干扰每 DC 响应计数。
 
-## Anti-Entropy and Digest Reads
+## Digest Reads and Data Reconciliation
 
-- **Digest Read**：coordinator 向 replica 要的是「数据摘要（hash）」而非全量，仅在摘要不一致时才拉全量比对，省网络。
-- **Anti-Entropy Repair**：副本间长期分歧（hint 窗口外、磁盘静默错误）只能靠 `nodetool repair`（基于 Merkle 树比对）彻底对齐，是运维必做项。
+一次单分区读的初始请求被拆成三类（`AbstractReadExecutor.java:178`）：
 
-## Monotonic and Transient
+- 少量 full replica 返回**全量 data**；
+- 其余 full replica 返回 **digest**；
+- transient replica 返回 transient data，不能只发 digest。
 
-- **Monotonic Reads**：保证「读到新值后不会再读到旧值」，靠 client 端跟踪 `PREFIX` 或驱动保证。
-- **Transient Replication（4.0+）**：允许声明「仅在某些 replica 上临时存一份」（如 `rf: 3/1` 表示 3 全副本 + 1 瞬态），瞬态副本只服务 `ONE` 读、不参与 quorum，省存储换可用性。
+`DigestResolver.responsesMatch`（`:105`）比较 full replica 的摘要；一致时直接使用已有 data response，省掉额外网络传输。若 transient replica 的数据仍含未合并内容，即使 full replica 摘要一致，也要用 `DataResolver` 再 reconcile（`DigestResolver.java:77`）。digest 是传输优化，不是新的一致性级别。
+
+## Hinted Handoff
+
+hint 是 coordinator 为暂时不可达的目标 replica 暂存的 mutation，不是 replica 已经接受写入。5.0.9 默认：
+
+- `max_hint_window: 3h`；
+- hint 默认开启，超过窗口或每目标大小上限时拒绝；
+- transient replica 永不写 hint；
+- 自身、已退出 ring 的 endpoint、禁用 DC 等目标也不会写 hint。
+
+因此 `ANY` 或 `ONE` 成功不等于所有目标都有数据。hint 过期、节点永久离开、磁盘损坏等情况最终都要靠 anti-entropy repair 收敛。
+
+## Monotonic Reads
+
+`read_repair=BLOCKING` 让成功的 quorum 读在修复完成后返回，从而在 quorum 读序列中避免「先读到新值、后读到旧值」。它依赖 quorum 交集与修复语义，不是客户端缓存前缀，也不是跨任意 CL 的全局实时顺序保证。`read_repair=NONE` 或 transient replication 不提供这套保证。
+
+## Transient Replication
+
+`rf: 3/1` 表示**总共 3 个 replica，其中 1 个 transient**，不是 3 个 full 再加 1 个 transient。transient replica 只保存尚未 incremental repair 的数据，目标是降低存储成本，同时保留更大的复制组。
+
+该特性在 5.0.9 仍是实验性、默认关闭，要求 `read_repair=NONE`，且不支持 monotonic reads、LWT、logged batch、counter、MV keyspace 与 secondary index。详细放置与限制见 [Replication](/docs/CS/DB/Cassandra/Replication.md)。
 
 ## Lightweight Transactions (LWT / Paxos)
 
-需要「读-改-写」原子且冲突检测时，用 `IF` 条件 + `SERIAL` CL，走 **Paxos 两阶段**（prepare/promise → accept/propose），实现**行级线性一致 CAS**：
+需要单 partition 的线性一致 compare-and-set 时，用 `IF` 条件与 `SERIAL` / `LOCAL_SERIAL`：
 
 ```sql
 UPDATE accounts SET balance = balance - 100 WHERE id = ? IF balance >= 100;
 ```
 
-代价与限制：
+Paxos 通过 prepare/promise、propose/accept 与 commit/read 完成竞争仲裁，并把每 partition 的 ballot 与 proposal 状态持久化在 system keyspace。LWT 的原子范围是**一个 partition**，可以包含该分区内多行修改，但不是跨 partition 事务。
 
-- 每个 LWT 需 4 次 round-trip（远慢于普通写），**绝对不要高频使用**。
-- 仅保证**单行**原子；跨 partition 仍非事务。
-- 5.0 及以前 LWT 基于「每 partition 一个 Paxos 状态」的实现，竞争时会显著退化。
+### Paxos Variants and Round Trips
 
-## Accord (6.0, pre-GA)
+5.0.9 的 `paxos_variant` 默认仍是 `v1`，但 YAML 推荐升级到 `v2`：
 
-Cassandra 6.0 引入 **Accord（CEP-15）**——**leaderless、strict-serializable 的跨 partition 线性一致事务**，正常路径一次 WAN 往返，目标是以接近普通写的成本提供跨行 ACID。它**与 TCM 相互独立**，6.0-alpha 默认关闭、按表启用（`CREATE TABLE ... WITH transactional_mode = 'accord'`）。截至 2026 仍 pre-GA，生产应评估风险。
+| variant | 写 RT | 读 RT | 线性保证 |
+| --- | --- | --- | --- |
+| `v1`（默认） | 4 | 3 | 完整 legacy 语义 |
+| `v1_without_linearizable_reads_or_rejected_writes` | 4 | 2 | 牺牲 read/read 与被拒绝写的部分线性保证 |
+| `v2`（推荐） | 2 | 1 或 2 | 保留完整线性语义 |
+| `v2_without_linearizable_reads` | 2 | 1 | 牺牲 read/read 线性保证 |
+| `v2_without_linearizable_reads_or_rejected_writes` | 2 | 1 | 进一步牺牲被拒绝写语义 |
 
-## Source-Level Classes
+所以「每个 LWT 固定四轮往返」只适用于默认 `v1` 写。`v2` 在 prepare 已能提供 linearizable read 时可直接返回，否则提交一个 empty proposal 后再返回（`Paxos.java:858`）。
 
-- **CL 枚举**：`org.apache.cassandra.db.ConsistencyLevel`（含 `ONE/TWO/THREE/QUORUM/LOCAL_QUORUM/EACH_QUORUM/ALL/ANY/SERIAL/LOCAL_SERIAL/NODE_LOCAL`）。
-- **写 ack 收集**：`service.AbstractWriteResponseHandler` 抽象基类，具体有 `WriteResponseHandler`（ONE/TWO/THREE/ALL）、`DatacenterSyncWriteResponseHandler`（EACH_QUORUM）、`DatacenterAsyncWriteResponseHandler`、`AnyWriteResponseHandler`（ANY）。`await()` 在达到 CL 要求的 ack 数后放行。
-- **读响应 / digest 比对**：`service.AbstractReadResponseHandler` 与 `ReadCallback`（按 CL 选实现）；当部分 replica 回 digest 时由 `db.ReadResponse` / `DataResolver` 比对摘要、分歧再拉全量；`DigestResolver` 专用于「全部只回 digest」的场景。
-- **Read Repair**：表参数 `read_repair`（替代旧 `read_repair_chance` 概率）与 `speculative_retry`（`COORDINATOR` / `LOCAL_ONE` / `ALWAYS` / `<N>ms`，在慢 replica 时触发备用副本读）；实现见 `db.ReadCommand` 的 read-repair 路径与 `ReadRepairDiagnostics`。
-- **Hinted Handoff**：`hints.HintsService` / `Hint` / `HintWriteBuffer`；hint 写入受 `max_hint_window_in_ms`（默认 3h）限制，超时丢弃并需 repair 兜底。`nodetool truncatehints` 可清 hint。
-- **Repair / Merkle**：`repair.RepairRunnable` / `RepairSession` 驱动，逐 token range 用 `MerkleTree.RowHash` 比对；4.0+ 增量 repair 记录已修复边界。
-- **LWT / Paxos**：`service.paxos` 包——`PaxosState`（每 partition 持久化 Paxos 状态）、`Prepare` / `Propose` / `Commit` 三阶段消息（实际 4 轮往返）、`CASRequest`。Paxos 改进（CEP-14，4.1）降低了 prepare 风暴。LWT 仍**单 partition**。
-- **Accord（6.0, CEP-15）**：`service.accord` 实现 leaderless、strict-serializable、跨多 partition 的通用事务，正常路径一次 WAN 往返；6.0-alpha **默认关闭**、按表启用，不应用于生产。它**并不依赖 TCM**——两者是独立演进的 6.0 特性。
+### Cost and Failure Modes
+
+- 高竞争会不断产生更高 ballot、retry 与超时，吞吐显著退化；
+- LWT 比普通写有更多持久化状态与网络往返，不应作为普通更新路径；
+- `SERIAL` 只接受单 partition 查询；跨 partition 要拆成应用层协议或等待后续版本事务能力；
+- transient replication 不支持 LWT。
+
+## Consistency Failure Matrix
+
+| 现象 | 根因 | 处理 |
+| --- | --- | --- |
+| `UnavailableException` | 健康 replica 不足以满足 CL | 检查 RF、DC 分布、DOWN 节点与 CL |
+| `ReadTimeoutException` | replica 响应慢或 digest/data 不一致修复慢 | 看慢查询、tombstone、compaction、speculative retry |
+| 读到旧值后消失 | 失败写只落少数 replica，且 `read_repair=NONE` | 改 `BLOCKING` 或 repair，并重试写 |
+| `ANY` 成功但读不到 | 只写入 hint，目标尚未投递 | 等待 hint replay，超过窗口则 repair |
+| LWT 高延迟 | ballot 竞争、Paxos 状态热点、`v1` 往返 | 降低竞争、评估 `v2`、按 partition 拆热 key |
+
+## Source Map
+
+| 机制 | 5.0.9 源码落点 |
+| --- | --- |
+| quorum / local quorum / each quorum | `db/ConsistencyLevel.java:91-191` |
+| 写等待与 hint | `service/AbstractWriteResponseHandler.java:227`、`service/StorageProxy.java:2423` |
+| 读请求拆分 | `service/reads/AbstractReadExecutor.java:116-218` |
+| digest 与 transient reconcile | `service/reads/DigestResolver.java:65-139` |
+| 默认 retry / read repair | `schema/TableParams.java:354-376` |
+| read repair 语义 | `doc/modules/cassandra/pages/managing/operating/read_repair.adoc:23-71` |
+| Paxos variant | `conf/cassandra.yaml:1575-1602`、`service/paxos/Paxos.java:840-904` |
 
 ## Links
 
 - [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md)
-- [Replication](/docs/CS/DB/Cassandra/Replication.md)
 - [Distributed](/docs/CS/DB/Cassandra/Distributed.md)
-- [Architecture](/docs/CS/DB/Cassandra/Architecture.md)
+- [CQL](/docs/CS/DB/Cassandra/CQL.md)
+- [Storage Engine](/docs/CS/DB/Cassandra/StorageEngine.md)
 
 ## References
 
-- [Cassandra Consistency Levels (官方文档)](https://cassandra.apache.org/doc/latest/cassandra/cql/consistency.html)
-- [Accord Transactions (CEP)](https://cassandra.apache.org/doc/latest/cassandra/architecture/accord.html)
+- [Cassandra Consistency Levels](https://cassandra.apache.org/doc/5.0/cassandra/developing/cql/dml.html)
+- [Cassandra Read Repair](https://cassandra.apache.org/doc/5.0/cassandra/managing/operating/read_repair.html)
+- [Cassandra Transient Replication](https://cassandra.apache.org/doc/5.0/cassandra/managing/operating/transientreplication.html)
+- [Cassandra 5.0.9 Source](https://github.com/apache/cassandra/tree/cassandra-5.0.9)
